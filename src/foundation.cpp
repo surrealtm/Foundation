@@ -9,6 +9,11 @@ int main() {
 	int *data = (int *) arena.push(sizeof(int));
 	*data = 5;
 
+	int *more_data = (int *) arena.push(sizeof(int));
+	*more_data = 2;
+
+	int copy = *data;
+
 	arena.destroy();
-	return *data;
+	return copy;
 }

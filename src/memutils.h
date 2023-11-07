@@ -8,13 +8,13 @@
 #define ONE_BYTE     (1ULL)
 
 struct Memory_Arena {
-	void *base;
-	u64 reserved;
-	u64 committed;
-	u64 size;
-	u64 page_size;
-	u64 commit_size;
-
+	void *base      = null;
+	u64 commit_size = 0;
+	u64 page_size   = 0;
+	u64 committed   = 0;
+	u64 reserved    = 0;
+	u64 size        = 0;
+	
 	void create(u64 reserved, u64 requested_commit_size);
 	void destroy();
 

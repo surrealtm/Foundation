@@ -32,6 +32,12 @@ void os_write_to_console(const char *format, ...) {
 }
 
 
+u64 os_get_page_size() {
+	SYSTEM_INFO system_info;
+	GetSystemInfo(&system_info);
+	return system_info.dwPageSize;
+}
+
 void *os_reserve_memory(u64 reserved_size) {
 	assert(reserved_size != 0);
 
@@ -59,7 +65,7 @@ void os_free_memory(void *base, u64 reserved_size) {
 	}
 }
 
-void os_commit_memory(void *address, u64 commit_size) {
+bool os_commit_memory(void *address, u64 commit_size) {
 	assert(address != null);
 	assert(commit_size != 0);
 
@@ -70,6 +76,8 @@ void os_commit_memory(void *address, u64 commit_size) {
 		report_error("Failed to commit " PRIu64 " bytes of memory: %s.", commit_size, error);
 		win32_free_last_error_string(error);
 	}
+
+	return result != null;
 }
 
 void os_decommit_memory(void *address, u64 decommit_size) {
