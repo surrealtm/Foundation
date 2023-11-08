@@ -2,7 +2,6 @@
 #include "os_specific.h"
 
 #define WIN32_MEAN_AND_LEAN
-#include <stdio.h>
 #include <Windows.h>
 
 char *win32_last_error_to_string() {
@@ -38,6 +37,19 @@ u64 os_get_page_size() {
 	return system_info.dwPageSize;
 }
 
+u64 os_get_committed_region_size(void *base) {
+	MEMORY_BASIC_INFORMATION information;
+	SIZE_T result = VirtualQuery(base, &information, sizeof(information));
+	if(!result) {
+		char *error = win32_last_error_to_string();
+		report_error("Failed to query committed region size: %s.", error);
+		win32_free_last_error_string(error);
+		return 0;
+	}
+
+	return information.State == MEM_COMMIT ? information.RegionSize : 0;
+}
+
 void *os_reserve_memory(u64 reserved_size) {
 	assert(reserved_size != 0);
 
@@ -45,7 +57,7 @@ void *os_reserve_memory(u64 reserved_size) {
 
 	if(!base) {
 		char *error = win32_last_error_to_string();
-		report_error("Failed to reserve " PRIu64 " bytes of memory: %s.", reserved_size, error);
+		report_error("Failed to reserve %" PRIu64 " bytes of memory: %s.", reserved_size, error);
 		win32_free_last_error_string(error);
 	}
 
@@ -60,7 +72,7 @@ void os_free_memory(void *base, u64 reserved_size) {
 
 	if(!result) {
 		char *error = win32_last_error_to_string();
-		report_error("Failed to free " PRIu64 " bytes of memory: %s.", reserved_size, error);
+		report_error("Failed to free %" PRIu64 " bytes of memory: %s.", reserved_size, error);
 		win32_free_last_error_string(error);
 	}
 }
@@ -73,7 +85,7 @@ bool os_commit_memory(void *address, u64 commit_size) {
 
 	if(!result) {
 		char *error = win32_last_error_to_string();
-		report_error("Failed to commit " PRIu64 " bytes of memory: %s.", commit_size, error);
+		report_error("Failed to commit %" PRIu64 " bytes of memory: %s.", commit_size, error);
 		win32_free_last_error_string(error);
 	}
 
@@ -88,7 +100,7 @@ void os_decommit_memory(void *address, u64 decommit_size) {
 
 	if(!result) {
 		char *error = win32_last_error_to_string();
-		report_error("Failed to decommit " PRIu64 " bytes of memory: %s.", decommit_size, error);
+		report_error("Failed to decommit %" PRIu64 " bytes of memory: %s.", decommit_size, error);
 		win32_free_last_error_string(error);
 	}
 }

@@ -21,7 +21,7 @@ void Memory_Arena::create(u64 reserved, u64 requested_commit_size) {
 }
 
 void Memory_Arena::destroy() {
-	assert(this->base != null);
+	assert(this->base != null); // An arena can only be destroyed once. The caller needs to ensure it has not been cleaned up yet.
 	assert(this->reserved != 0);
 	os_free_memory(this->base, this->reserved);
 	this->base = null;
@@ -33,6 +33,8 @@ void Memory_Arena::destroy() {
 }
 
 void *Memory_Arena::push(u64 size) {
+	assert(this->base != null); // Make sure the arena is set up properly.
+
 	if(this->size + size > this->committed) {
 		if(this->committed + this->commit_size <= this->reserved) {
 			if(os_commit_memory((char *) this->base + this->committed, this->commit_size)) {
@@ -50,4 +52,48 @@ void *Memory_Arena::push(u64 size) {
 	char *pointer = (char *) this->base + this->size;
 	this->size += size;
 	return pointer;
+}
+
+u64 Memory_Arena::mark() {
+	return this->size;
+}
+
+void Memory_Arena::release_from_mark(u64 mark) {
+	assert(mark <= this->size);
+
+	this->size = mark;
+
+	u64 decommit_size = ((u64) floorf((this->committed - mark) / this->commit_size)) * this->commit_size;
+	
+	os_decommit_memory((char *) this->base + this->committed - decommit_size, decommit_size);
+	this->committed -= decommit_size;
+}
+
+void Memory_Arena::debugPrint() {
+	printf("=== Memory Arena ===\n");
+	printf("    Reserved:    %" PRIu64 "b.\n", this->reserved);
+	printf("    Committed:   %" PRIu64 "b.\n", this->committed);
+	printf("    Size:        %" PRIu64 "b.\n", this->size);
+	printf("    Commit-Size: %" PRIu64 "b.\n", this->commit_size);
+	printf("    (OS-Committed Region: %" PRIu64 "b.)\n", os_get_committed_region_size(this->base));
+	printf("=== Memory Arena ===\n");
+}
+
+
+
+void Memory_Pool::create(Memory_Arena *arena) {
+	this->arena = arena;
+}
+
+void Memory_Pool::destroy() {
+}
+
+void *Memory_Pool::push(u64 size) {
+	return null;
+}
+
+void Memory_Pool::release(void *pointer) {
+}
+
+void Memory_Pool::debugPrint() {
 }

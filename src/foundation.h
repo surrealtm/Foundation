@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <stdio.h>
 
 typedef unsigned char      u8;
 typedef unsigned short     u16;
@@ -16,10 +17,13 @@ typedef signed long long s64;
 typedef float  f32;
 typedef double f64;
 
+typedef unsigned char b8;
+
 #define null 0
 
 #if BUILD_WIN32
 # define PRIu64 "lld"
+# define PRIx64 "llx"
 #else
 # error "This platform is not supported."
 #endif
