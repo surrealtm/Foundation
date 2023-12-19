@@ -9,24 +9,22 @@ int main() {
 	Memory_Pool pool;
 	pool.create(&arena);
 
-	u64 mark = arena.mark();
+	int *a = (int *) pool.push(sizeof(int));
+	int *b = (int *) pool.push(sizeof(int));
+	int *c = (int *) pool.push(sizeof(int) * 2);
 
-	int *data = (int *) arena.push(sizeof(int));
-	*data = 5;
+	arena.push(5);
 
-	int *more_data = (int *) arena.push(sizeof(int));
-	*more_data = 2;
+	int *d = (int *) pool.push(sizeof(int) * 4);
 
-	arena.release_from_mark(mark);
+	pool.release(c);
+	pool.release(d);
+	pool.release(b);
+	pool.release(a);
 
-	int *the_data = (int *) arena.push(sizeof(int));
-
-	int copy = *data;
-
-	arena.debugPrint();
-	pool.debugPrint();
+	pool.debug_print();
 
 	pool.destroy();
 	arena.destroy();
-	return copy;
+	return 0;
 }
