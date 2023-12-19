@@ -122,6 +122,8 @@ void Memory_Pool::destroy() {
 }
 
 void *Memory_Pool::push(u64 size) {
+	assert(size < 0x7fffffffffffffff); // Make sure we only require 63 bits for the size, or else our Block struct cannot properly encode it.
+
 	//
 	// Query the Memory Pool for an inactive block that can be reused for this
 	// allocation.
@@ -175,6 +177,7 @@ void *Memory_Pool::push(u64 size) {
 		if(this->last_block != null &&
 			(char *) this->last_block->data() + this->last_block->size_in_bytes == (char *) this->arena->base + this->arena->size) {
 			u64 padding = this->arena->ensure_alignment(16);
+			assert(size < 0x7fffffffffffffef); // Make sure adding the padding won't overflow the size.
 			this->last_block->size_in_bytes += padding;
 		} else
 			this->arena->ensure_alignment(16);

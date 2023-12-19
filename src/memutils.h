@@ -56,11 +56,10 @@ struct Memory_Arena {
 struct Memory_Pool {
 	// This is the block header that gets inlined in an allocation block, to
 	// be maintained as a list over all free / active blocks.
-	// @@Speed: Make this block smaller, if possible, by merging some members?
 	struct Block {
 		u64 offset_to_next; // Offset in bytes to the next Block header.
-		u64 size_in_bytes; // Size in bytes of the usable data section of this block. Since the arena may be used by other things, this may not correspond to the offset to the next block.
-		b8 used; // Set to false once a block is freed, so that it may be merged or reused.
+		u64 size_in_bytes : 63; // Size in bytes of the usable data section of this block. Since the arena may be used by other things, this may not correspond to the offset to the next block.
+		u64 used : 1; // Set to false once a block is freed, so that it may be merged or reused.
 	
 		Block *next();
 		void *data();
@@ -69,7 +68,7 @@ struct Memory_Pool {
 	};
 
 	static const u64 min_size_to_split  = 32; // The minimum data size in bytes for a block to make sense, meaning we won't split a block if the "left-over" data size is so small, that making a new block would not make sense.
-	static const u64 aligned_block_size = 32;
+	static const u64 aligned_block_size = 16;
 	static_assert(Memory_Pool::aligned_block_size >= sizeof(Block), "The aligned_block_size of the Memory_Pool is too little.");
 
 	Memory_Arena *arena = null;
