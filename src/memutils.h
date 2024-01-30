@@ -7,6 +7,36 @@
 #define ONE_KILOBYTE (1024ULL)
 #define ONE_BYTE     (1ULL)
 
+/* This codebases uses allocators for everything that requires memory management.
+ * This allocator API abstracts over different memory allocation strategies, which
+ * can then just be plugged in by using the appropriate allocator. If you don't care
+ * about using a specific allocator, just use the Default_Allocator (which essentially
+ * is like using malloc and free). */
+
+typedef void*(*AllocateProcedure)(void *data, u64 bytes);
+typedef void(*DeallocateProcedure)(void *data, void *pointer);
+typedef u64(*QueryAllocationSizeProcedure)(void *data, void *pointer);
+
+struct Allocator {
+	void *data;
+	AllocateProcedure   _allocate_procedure;
+	DeallocateProcedure _deallocate_procedure;
+	QueryAllocationSizeProcedure _query_allocation_size_procedure;
+
+	void *allocate(u64 size);
+	void deallocate(void *pointer);
+	u64 query_allocation_size(void *pointer);
+};
+
+/* The Heap Allocator, which just uses malloc under the hood, but also supports
+ * allocator statistics by storing the allocation size inside the allocated block. */
+void *heap_allocate(void *data /* = null */, u64 size);
+void heap_deallocate(void *data /* = null */, void *pointer);
+u64 heap_query_allocation_size(void *data /* = null */, void *pointer);
+
+extern Allocator heap_allocator;
+extern Allocator *Default_Allocator;
+
 /* A memory arena (also known as a linear allocator) is just a big block of
  * reserved virtual memory, that gradually commits to physical memory as it
  * grows. A memory arena just pushes its head further along for every allocation
