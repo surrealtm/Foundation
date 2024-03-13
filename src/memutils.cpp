@@ -98,7 +98,7 @@ void *heap_allocate(void *data /* = null */, u64 size) {
 	u64 extra_size = align_to(sizeof(u64), 16, u64); // Stuff like SIMD sometimes requires 16-byte alignment...
 	pointer = malloc(extra_size + size);
 	if(!pointer) {
-		assert(0 && "malloc failed.");
+		report_error("A call to malloc failed for the requested size of '%lld'.", size);
 		return null;
 	}
 
@@ -139,7 +139,7 @@ u64 heap_query_allocation_size(void *data /* = null */, void *pointer) {
 	u64 *_u64 = (u64 *) ((u64) pointer - extra_size);
 	size = *_u64;
 #else
-	assert(false && "ENABLE_ALLOCATOR_STATISTICS IS OFF, heap_query_allocation_size is unsupported."); // @Cleanup: Add a custom foundation_assert thing.
+	report_error("ENABLE_ALLOCATOR_STATISTICS is off, heap_query_allocation_size is unsupported.");
 	size = 0;
 #endif
 

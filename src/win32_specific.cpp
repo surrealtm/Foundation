@@ -96,7 +96,7 @@ void os_decommit_memory(void *address, u64 decommit_size) {
 	assert(address != null);
 	assert(decommit_size != 0);
 
-	bool result = VirtualFree(address, decommit_size, MEM_DECOMMIT);
+	bool result = VirtualFree(address, decommit_size, MEM_DECOMMIT); // This should just decommit parts of the virtual address space, we'll free it later in os_free_memory.
 
 	if(!result) {
 		char *error = win32_last_error_to_string();

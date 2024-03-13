@@ -146,7 +146,7 @@ struct Memory_Pool {
 		void merge_with(Block *block);
 	};
 
-	static const u64 min_payload_size_to_split  = 32; // The minimum data size in bytes for a block to make sense, meaning we won't split a block if the "left-over" data size is so small, that making a new block would not make sense.
+	static const u64 min_payload_size_to_split = 32; // The minimum data size in bytes for a block to make sense, meaning we won't split a block if the "left-over" data size is so small, that making a new block would not make sense.
 	static_assert(sizeof(Memory_Pool::Block) % 16 == 0, "The Memory Pool Block was expected to be 16 byte aligned.");
 	static_assert(Memory_Pool::min_payload_size_to_split >= sizeof(Memory_Pool::Block), "The aligned_block_size of the Memory_Pool is too little.");
 
