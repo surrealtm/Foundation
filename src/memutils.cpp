@@ -8,7 +8,7 @@ void Memory_Arena::create(u64 reserved, u64 requested_commit_size) {
 	if(this->base = os_reserve_memory(reserved)) {
 		this->page_size   = os_get_page_size();
 		this->commit_size = requested_commit_size ? align_to(requested_commit_size, this->page_size, u64) : this->page_size * 3;
-		this->reserved    = reserved;
+		this->reserved    = align_to(reserved, this->page_size, u64);
 		this->committed   = 0;
 		this->size        = 0;
 	} else {
@@ -24,11 +24,11 @@ void Memory_Arena::destroy() {
 	assert(this->base != null); // An arena can only be destroyed once. The caller needs to ensure it has not been cleaned up yet.
 	assert(this->reserved != 0);
 	os_free_memory(this->base, this->reserved);
-	this->base = null;
-	this->size = 0;
-	this->reserved = 0;
-	this->committed = 0;
-	this->page_size = 0;
+	this->base        = null;
+	this->size        = 0;
+	this->reserved    = 0;
+	this->committed   = 0;
+	this->page_size   = 0;
 	this->commit_size = 0;
 }
 
@@ -42,6 +42,8 @@ void *Memory_Arena::push(u64 size) {
 	assert(this->base != null); // Make sure the arena is set up properly.
 
 	if(this->size + size > this->committed) {
+        u64 commit_size = align_to(size, this->commit_size, u64);
+
 		if(this->committed + this->commit_size <= this->reserved) {
 			if(os_commit_memory((char *) this->base + this->committed, this->commit_size)) {
 				this->committed += this->commit_size;
@@ -70,19 +72,29 @@ void Memory_Arena::release_from_mark(u64 mark) {
 	this->size = mark;
 
 	u64 decommit_size = ((u64) floorf((this->committed - mark) / (f32) this->commit_size)) * this->commit_size;
-	
-	os_decommit_memory((char *) this->base + this->committed - decommit_size, decommit_size);
-	this->committed -= decommit_size;
+
+	if(decommit_size) {
+		os_decommit_memory((char *) this->base + this->committed - decommit_size, decommit_size);
+		this->committed -= decommit_size;
+	}
 }
 
 void Memory_Arena::debug_print(u32 indent) {
-	// @Cleanup: Better format the bytes count here.
+	f32 reserved_decimal, committed_decimal, size_decimal, commit_size_decimal, os_region_decimal;
+	Memory_Unit reserved_unit, committed_unit, size_unit, commit_size_unit, os_region_unit;
+
+	reserved_unit    = convert_to_biggest_memory_unit(this->reserved, &reserved_decimal);
+	committed_unit   = convert_to_biggest_memory_unit(this->committed, &committed_decimal);
+	size_unit        = convert_to_biggest_memory_unit(this->size, &size_decimal);
+	commit_size_unit = convert_to_biggest_memory_unit(this->commit_size, &commit_size_decimal);
+	os_region_unit   = convert_to_biggest_memory_unit(os_get_committed_region_size(this->base), &os_region_decimal);
+
 	printf("%-*s=== Memory Arena ===\n", indent, "");
-	printf("%-*s    Reserved:    %" PRIu64 "b.\n", indent, "", this->reserved);
-	printf("%-*s    Committed:   %" PRIu64 "b.\n", indent, "", this->committed);
-	printf("%-*s    Size:        %" PRIu64 "b.\n", indent, "", this->size);
-	printf("%-*s    Commit-Size: %" PRIu64 "b.\n", indent, "", this->commit_size);
-	printf("%-*s    (OS-Committed Region: %" PRIu64 "b.)\n", indent, "", os_get_committed_region_size(this->base));
+	printf("%-*s    Reserved:    %.3f%s.\n", indent, "", reserved_decimal, memory_unit_string(reserved_unit));
+	printf("%-*s    Committed:   %.3f%s.\n", indent, "", committed_decimal, memory_unit_string(committed_unit));
+	printf("%-*s    Size:        %.3f%s.\n", indent, "", size_decimal, memory_unit_string(size_unit));
+	printf("%-*s    Commit-Size: %.3f%s.\n", indent, "", commit_size_decimal, memory_unit_string(commit_size_unit));
+	printf("%-*s    (OS-Committed Region: %.3f%s.)\n", indent, "", os_region_decimal, memory_unit_string(os_region_unit));
 	printf("%-*s=== Memory Arena ===\n", indent, "");
 }
 
@@ -95,7 +107,7 @@ Memory_Pool::Block *Memory_Pool::Block::next() {
 }
 
 void *Memory_Pool::Block::data() {
-	return (char *) this + Memory_Pool::aligned_block_size;
+	return (char *) this + sizeof(Memory_Pool::Block);
 }
 
 bool Memory_Pool::Block::is_continuous_with(Block *block) {
@@ -109,7 +121,7 @@ void Memory_Pool::Block::merge_with(Block *block) {
 	} else
 		this->offset_to_next = 0;
 
-	this->size_in_bytes += block->size_in_bytes + Memory_Pool::aligned_block_size;
+	this->size_in_bytes += block->size_in_bytes + sizeof(Memory_Pool::Block);
 }
 
 void Memory_Pool::create(Memory_Arena *arena) {
@@ -122,7 +134,7 @@ void Memory_Pool::destroy() {
 }
 
 void *Memory_Pool::push(u64 size) {
-	assert(size < 0x7fffffffffffffff); // Make sure we only require 63 bits for the size, or else our Block struct cannot properly encode it.
+	assert(size <= 0x7fffffffffffffff); // Make sure we only require 63 bits for the size, or else our Block struct cannot properly encode it.
 
 	//
 	// Query the Memory Pool for an inactive block that can be reused for this
@@ -140,31 +152,45 @@ void *Memory_Pool::push(u64 size) {
 		//
 		// There exist an unused block that is big enough for this allocation to reuse it.
 		//
-		if(unused_block->size_in_bytes - size >= Memory_Pool::min_size_to_split + Memory_Pool::aligned_block_size) {
+		u64 reused_size = align_to(size, 16, u64);
+		
+		if(unused_block->size_in_bytes - reused_size >= Memory_Pool::min_payload_size_to_split + sizeof(Memory_Pool::Block)) {
 			//
 			// Split the existing block into two parts, and only use the first one.
 			//
+			u64 split_size  = unused_block->size_in_bytes - reused_size - sizeof(Memory_Pool::Block);
 			u64 split_start = align_to((u64) unused_block->data() + size, 16, u64);
 		
 			Block *split_block = (Block *) split_start;
-			split_block->offset_to_next = unused_block->offset_to_next - (split_start - (u64) unused_block);
-			split_block->size_in_bytes  = unused_block->size_in_bytes - split_start - Memory_Pool::aligned_block_size;
+			if(unused_block->offset_to_next)
+				split_block->offset_to_next = (u64) unused_block + unused_block->offset_to_next - split_start;
+			else
+				split_block->offset_to_next = 0;
+			
+			split_block->size_in_bytes  = split_size;
 			split_block->used           = false;
 
 			unused_block->offset_to_next = (u64) split_block - (u64) unused_block;
-			unused_block->size_in_bytes  = split_start - (u64) unused_block - Memory_Pool::aligned_block_size;
+			unused_block->size_in_bytes  = reused_size;
+		
+			if(this->last_block == unused_block) this->last_block = split_block;
 		}
 		
 		//
 		// Mark this block as used now.
 		//
 		unused_block->used = true;
+		
+#if ENABLE_ALLOCATOR_STATISTICS
+		unused_block->original_allocation_size = size;
+#endif
+
 		data = unused_block->data();
 	} else {
 		//
 		// The Memory Pool does not have any unused block that could be reused for
 		// this allocation.
-		// Allocate a new block and set it and add it to the list.
+		// Allocate a new block, set it up and add it to the list.
 		//
 
 		//
@@ -182,12 +208,16 @@ void *Memory_Pool::push(u64 size) {
 		} else
 			this->arena->ensure_alignment(16);
 		
-		void *pointer = this->arena->push(Memory_Pool::aligned_block_size + size);
+		void *pointer = this->arena->push(sizeof(Memory_Pool::Block) + size);
 		
 		Block *block = (Block *) pointer;
 		block->offset_to_next = 0;
 		block->size_in_bytes  = size;
 		block->used           = true;
+
+#if ENABLE_ALLOCATOR_STATISTICS
+		block->original_allocation_size = size;
+#endif
 		
 		if(this->last_block) {
 			assert(this->first_block != null);
@@ -206,7 +236,7 @@ void *Memory_Pool::push(u64 size) {
 }
 
 void Memory_Pool::release(void *pointer) {
-	// Silently ignore 'null' released.
+	// Silently ignore 'null' releases.
 	if(!pointer) return;
 
 	//
@@ -214,7 +244,7 @@ void Memory_Pool::release(void *pointer) {
 	//
 	Block *previous_block = null;
 	Block *block = this->first_block;
-	while(block && (char *) block + Memory_Pool::aligned_block_size < pointer) {
+	while(block && block->data() < pointer) {
 		previous_block = block;
 		block = block->next();
 	}
@@ -235,6 +265,7 @@ void Memory_Pool::release(void *pointer) {
 		//
 		// Merge with the previous block.
 		//
+		if(block == this->last_block) this->last_block = previous_block;
 		previous_block->merge_with(block);
 		block = previous_block;
 	}
@@ -244,8 +275,25 @@ void Memory_Pool::release(void *pointer) {
 		//
 		// Merge with the next block.
 		//
+		if(next == this->last_block) this->last_block = block;
 		block->merge_with(next);
 	}
+}
+
+u64 Memory_Pool::query_allocation_size(void *pointer) {
+#if ENABLE_ALLOCATOR_STATISTICS
+	Block *block = this->first_block;
+	while(block && block->data() < pointer) {
+		block = block->next();
+	}
+
+	assert(block != null && block->data() == pointer);
+	assert(block->used);
+
+	return block->original_allocation_size;
+#else
+	return 0;
+#endif
 }
 
 void Memory_Pool::debug_print(u32 indent) {
@@ -269,4 +317,32 @@ void Memory_Pool::debug_print(u32 indent) {
 		printf("%-*s    (Empty Pool).\n", indent, "");
 
 	printf("%-*s=== Memory Pool ===\n", indent, "");
+}
+
+
+const char *memory_unit_string(Memory_Unit unit) {
+	const char *string = "(UnknownMemoryUnit)";
+
+	switch(unit) {
+	case MEMORY_UNIT_bytes:      string = "b"; break;
+	case MEMORY_UNIT_kilobytes:  string = "kb"; break;
+	case MEMORY_UNIT_megabytes:  string = "mb"; break;
+	case MEMORY_UNIT_gigabytes:  string = "gb"; break;
+	case MEMORY_UNIT_terrabytes: string = "tb"; break;
+	}
+
+	return string;
+}
+
+Memory_Unit convert_to_biggest_memory_unit(s64 bytes, f32 *decimal) {
+	Memory_Unit unit = MEMORY_UNIT_bytes;
+	*decimal = (f32) bytes;
+
+	while(unit < MEMORY_UNIT_COUNT && bytes >= 1000) {
+		unit = (Memory_Unit) (unit + 1);
+		*decimal = (f32) bytes / 1000.0f;
+		bytes /= 1000;
+	}
+		
+	return unit;
 }

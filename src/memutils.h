@@ -2,10 +2,19 @@
 
 #include "foundation.h"
 
-#define ONE_GIGABYTE (ONE_MEGABYTE * ONE_MEGABYTE)
+#define ONE_GIGABYTE (ONE_MEGABYTE * ONE_KILOBYTE)
 #define ONE_MEGABYTE (ONE_KILOBYTE * ONE_KILOBYTE)
 #define ONE_KILOBYTE (1024ULL)
 #define ONE_BYTE     (1ULL)
+
+enum Memory_Unit {
+	MEMORY_UNIT_bytes,
+	MEMORY_UNIT_kilobytes,
+	MEMORY_UNIT_megabytes,
+	MEMORY_UNIT_gigabytes,
+	MEMORY_UNIT_terrabytes,
+	MEMORY_UNIT_COUNT,
+};
 
 /* A memory arena (also known as a linear allocator) is just a big block of
  * reserved virtual memory, that gradually commits to physical memory as it
@@ -30,7 +39,8 @@ struct Memory_Arena {
 
 	// Some memory allocations require a specific alignment, e.g. when working with
 	// SIMD. This aligns the current size of the arena to the specified alignment,
-	// potentially wasting a few bytes of memory.
+	// potentially wasting a few bytes of memory. Note that this will mess with
+	// allocator statistics.
 	u64 ensure_alignment(u64 alignment);
 	void *push(u64 size);
 
@@ -53,6 +63,7 @@ struct Memory_Arena {
  * however releasing / shrinking the arena must of course be synced with this pool.
  * A memory pool guarantees zero-initialized memory to be returned on push.
  */
+
 struct Memory_Pool {
 	// This is the block header that gets inlined in an allocation block, to
 	// be maintained as a list over all free / active blocks.
@@ -61,15 +72,24 @@ struct Memory_Pool {
 		u64 size_in_bytes : 63; // Size in bytes of the usable data section of this block. Since the arena may be used by other things, this may not correspond to the offset to the next block.
 		u64 used : 1; // Set to false once a block is freed, so that it may be merged or reused.
 	
+#if ENABLE_ALLOCATOR_STATISTICS
+		u64 original_allocation_size; // The size_in_bytes of a block is not necessarily the "user"-requested size, e.g. for alignment or when merging blocks. This "user" size however is required for proper allocator statistics.
+		u64 __padding; // The block header must be 16 byte aligned.
+#endif
+
+		// @Cleanup: If ENABLE_ALLOCATOR_STATISTICS, have a original_allocation_size here which 
+		// can be used for allocator stats purposes, since the size_in_bytes can be modified during
+		// merging or for alignment purposes.
+
 		Block *next();
 		void *data();
 		bool is_continuous_with(Block *block);
 		void merge_with(Block *block);
 	};
 
-	static const u64 min_size_to_split  = 32; // The minimum data size in bytes for a block to make sense, meaning we won't split a block if the "left-over" data size is so small, that making a new block would not make sense.
-	static const u64 aligned_block_size = 16;
-	static_assert(Memory_Pool::aligned_block_size >= sizeof(Block), "The aligned_block_size of the Memory_Pool is too little.");
+	static const u64 min_payload_size_to_split  = 32; // The minimum data size in bytes for a block to make sense, meaning we won't split a block if the "left-over" data size is so small, that making a new block would not make sense.
+	static_assert(sizeof(Memory_Pool::Block) % 16 == 0, "The Memory Pool Block was expected to be 16 byte aligned.");
+	static_assert(Memory_Pool::min_payload_size_to_split >= sizeof(Memory_Pool::Block), "The aligned_block_size of the Memory_Pool is too little.");
 
 	Memory_Arena *arena = null;
 	Block *first_block = null;
@@ -88,5 +108,10 @@ struct Memory_Pool {
 	void *push(u64 size);
 	void release(void *pointer);
 
+	u64 query_allocation_size(void *pointer);
+
 	void debug_print(u32 indent = 0);
 };
+
+const char *memory_unit_string(Memory_Unit unit); // @Cleanup: Change return type to string once that exists
+Memory_Unit convert_to_biggest_memory_unit(s64 bytes, f32 *decimal);
