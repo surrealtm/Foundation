@@ -1,6 +1,89 @@
 #include "memutils.h"
 #include "os_specific.h"
 
+#include <stdlib.h>
+
+Allocator heap_allocator = { null, heap_allocate, heap_deallocate, heap_query_allocation_size };
+Allocator *Default_Allocator = &heap_allocator;
+
+/* ============================ ALLOCATOR ============================ */
+
+void *Allocator::allocate(u64 size) {
+	// @Incomplete: Statistics
+	return this->_allocate_procedure(this->data, size);
+}
+
+void Allocator::deallocate(void *pointer) {
+	// @Incomplete: Statistics
+	this->_deallocate_procedure(this->data, pointer);
+}
+
+u64 Allocator::query_allocation_size(void *pointer) {
+	return this->_query_allocation_size_procedure(this->data, pointer);
+}
+
+/* ============================ HEAP ALLOCATOR ============================ */
+
+void *heap_allocate(void *data /* = null */, u64 size) {
+	void *pointer = null;
+
+#if ENABLE_ALLOCATOR_STATISTICS
+	// To support allocator statistics at runtime, we need to store the allocation
+	// size somewhere. While malloc does this somewhere under the hood, we don't
+	// have access to that information, so instead we need to store that size
+	// ourselves. We do that by simply allocating a bigger block, and writing the
+	// size at the first few bytes of the returned block. Not super elegent, but
+	// better than the alternatives.
+	u64 extra_size = align_to(sizeof(u64), 16, u64); // Stuff like SIMD sometimes requires 16-byte alignment...
+	pointer = malloc(extra_size + size);
+	if(!pointer) {
+		assert(0 && "malloc failed.");
+		return null;
+	}
+
+	u64 *_u64 = (u64 *) pointer;
+	*_u64 = size;
+	pointer = (void *) ((u64) pointer + extra_size);
+#else
+	pointer = malloc(size); // @Cleanup: Maybe we can even use Platform specific stuff here, like HeapAlloc?
+#endif
+
+	return pointer;
+}
+
+void heap_deallocate(void *data /* = null */, void *pointer) {
+	if(!pointer) return;
+
+#if ENABLE_ALLOCATOR_STATISTICS
+	// We gave the user code an adjusted pointer, not what malloc actually returned to
+	// us. Free however requires that exact pointer malloc returned, so we need to
+	// readjust.
+	u64 extra_size = align_to(sizeof(u64), 16, u64);
+	pointer = (void *) ((u64) pointer - extra_size);
+	free(pointer);
+#else
+	free(pointer);
+#endif
+}
+
+u64 heap_query_allocation_size(void *data /* = null */, void *pointer) {
+	u64 size;
+
+#if ENABLE_ALLOCATOR_STATISTICS
+	u64 extra_size = align_to(sizeof(u64), 16, u64);
+	u64 *_u64 = (u64 *) ((u64) pointer - extra_size);
+	size = *_u64;
+#else
+	assert(false && "ENABLE_ALLOCATOR_STATISTICS IS OFF, heap_query_allocation_size is unsupported."); // @Cleanup: Add a custom foundation_assert thing.
+	size = 0;
+#endif
+
+	return size;
+}
+
+
+/* ============================ MEMORY ARENA ============================ */
+
 void Memory_Arena::create(u64 reserved, u64 requested_commit_size) {
 	assert(this->base == null);
 	assert(reserved != 0);
@@ -99,6 +182,7 @@ void Memory_Arena::debug_print(u32 indent) {
 }
 
 
+/* ============================ MEMORY POOL ============================ */
 
 Memory_Pool::Block *Memory_Pool::Block::next() {
 	if(this->offset_to_next == 0) return null;
@@ -308,7 +392,7 @@ void Memory_Pool::debug_print(u32 indent) {
 		u64 index = 0;
 		Block *block = this->first_block;
 		while(block) {
-			u64 offset = (char *) block - this->arena->base;
+			u64 offset = (char *) block - (char *) this->arena->base;
 			printf("%-*s    > %" PRIu64 ": %" PRIu64 "b, %s. (Offset: %" PRIu64 ").\n", indent, "", index, block->size_in_bytes, block->used ? "Used" : "Free", offset);
 			block = block->next();
 			++index;
