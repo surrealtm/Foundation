@@ -7,6 +7,10 @@
 #define ONE_KILOBYTE (1024ULL)
 #define ONE_BYTE     (1ULL)
 
+#if FOUNDATION_DEVELOPER
+# define ENABLE_ALLOCATOR_STATISTICS 1
+#endif
+
 enum Memory_Unit {
 	MEMORY_UNIT_bytes,
 	MEMORY_UNIT_kilobytes,
@@ -22,25 +26,52 @@ enum Memory_Unit {
  * about using a specific allocator, just use the Default_Allocator (which essentially
  * is like using malloc and free). */
 
-typedef void*(*AllocateProcedure)(void *data, u64 bytes);
-typedef void(*DeallocateProcedure)(void *data, void *pointer);
-typedef u64(*QueryAllocationSizeProcedure)(void *data, void *pointer);
+typedef void*(*Allocate_Procedure)(void *data, u64 bytes);
+typedef void(*Deallocate_Procedure)(void *data, void *pointer);
+typedef void*(*Reallocate_Procedure)(void *data, void *old_pointer, u64 new_size);
+typedef void(*Reset_Allocator_Procedure)(void *data);
+typedef u64(*Query_Allocation_Size_Procedure)(void *data, void *pointer);
+
+/* The allocator statistics provide insight into the memory usage of the application.
+ * They display the activity of an allocator, show the total memory consumption and help
+ * find memory leaks by counting allocations and deallocations. They do cause a little
+ * overhead, so they should probably be deactivated in release builds. */
+struct Allocator_Stats {
+	u64 allocations; // The total number of allocations.
+	u64 deallocations; // The total number of deallocations.
+	u64 reallocations; // The number of reallocations done.
+	u64 working_set; // The current total number of bytes that belong to active allocations.
+	u64 peak_working_set; // The highest recorded working set.
+};
 
 struct Allocator {
-	void *data;
-	AllocateProcedure   _allocate_procedure;
-	DeallocateProcedure _deallocate_procedure;
-	QueryAllocationSizeProcedure _query_allocation_size_procedure;
+	void *data; // The pointer to the underlying allocation strategy
+	Allocate_Procedure   _allocate_procedure;
+	Deallocate_Procedure _deallocate_procedure;
+	Reallocate_Procedure _reallocate_procedure;
+	Reset_Allocator_Procedure _reset_procedure;
+	Query_Allocation_Size_Procedure _query_allocation_size_procedure;
 
-	void *allocate(u64 size);
-	void deallocate(void *pointer);
-	u64 query_allocation_size(void *pointer);
+#if ENABLE_ALLOCATOR_STATISTICS
+	Allocator_Stats stats;
+#endif
+
+
+	void *allocate(u64 size); // Returns a new, zero-initialized blob of memory
+	void deallocate(void *pointer); // Marks the memory pointer as free, so that it may be reused in the future. Not all allocation strategies support this.
+	void *reallocate(void *old_pointer, u64 new_size); // Essentially deallocates the old pointer and allocates a new one based on the new size.
+	void reset(); // Clears out the underlying allocation strategy
+	void reset_stats(); // Clears out the allocation stats.
+	u64 query_allocation_size(void *pointer); // Returns the original allocation size which returned this pointer. Not all allocation strategies support this.
+
+	void debug_print(u32 indent);
 };
 
 /* The Heap Allocator, which just uses malloc under the hood, but also supports
  * allocator statistics by storing the allocation size inside the allocated block. */
 void *heap_allocate(void *data /* = null */, u64 size);
 void heap_deallocate(void *data /* = null */, void *pointer);
+void *heap_reallocate(void *data /* = null */ , void *old_pointer, u64 new_size);
 u64 heap_query_allocation_size(void *data /* = null */, void *pointer);
 
 extern Allocator heap_allocator;
@@ -66,6 +97,7 @@ struct Memory_Arena {
 	
 	void create(u64 reserved, u64 requested_commit_size = 0);
 	void destroy();
+	void reset(); // Completely clears out this arena
 
 	// Some memory allocations require a specific alignment, e.g. when working with
 	// SIMD. This aligns the current size of the arena to the specified alignment,
@@ -83,6 +115,8 @@ struct Memory_Arena {
 	void release_from_mark(u64 mark);
 
 	void debug_print(u32 indent = 0);
+
+	Allocator allocator();
 };
 
 /* A memory pool sits on top of a memory arena and stores metadata about each
@@ -93,7 +127,6 @@ struct Memory_Arena {
  * however releasing / shrinking the arena must of course be synced with this pool.
  * A memory pool guarantees zero-initialized memory to be returned on push.
  */
-
 struct Memory_Pool {
 	// This is the block header that gets inlined in an allocation block, to
 	// be maintained as a list over all free / active blocks.
@@ -106,10 +139,6 @@ struct Memory_Pool {
 		u64 original_allocation_size; // The size_in_bytes of a block is not necessarily the "user"-requested size, e.g. for alignment or when merging blocks. This "user" size however is required for proper allocator statistics.
 		u64 __padding; // The block header must be 16 byte aligned.
 #endif
-
-		// @Cleanup: If ENABLE_ALLOCATOR_STATISTICS, have a original_allocation_size here which 
-		// can be used for allocator stats purposes, since the size_in_bytes can be modified during
-		// merging or for alignment purposes.
 
 		Block *next();
 		void *data();
@@ -137,10 +166,14 @@ struct Memory_Pool {
 
 	void *push(u64 size);
 	void release(void *pointer);
+	void *reallocate(void *old_pointer, u64 new_size);
 
 	u64 query_allocation_size(void *pointer);
 
 	void debug_print(u32 indent = 0);
+
+	// Sets up and returns an allocator based on this memory pool.
+	Allocator allocator();
 };
 
 const char *memory_unit_string(Memory_Unit unit); // @Cleanup: Change return type to string once that exists

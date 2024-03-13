@@ -3,24 +3,85 @@
 
 #include <stdlib.h>
 
-Allocator heap_allocator = { null, heap_allocate, heap_deallocate, heap_query_allocation_size };
+Allocator heap_allocator = { null, heap_allocate, heap_deallocate, heap_reallocate, null, heap_query_allocation_size };
 Allocator *Default_Allocator = &heap_allocator;
+
 
 /* ============================ ALLOCATOR ============================ */
 
 void *Allocator::allocate(u64 size) {
-	// @Incomplete: Statistics
+#if ENABLE_ALLOCATOR_STATISTICS
+	++this->stats.allocations;
+	this->stats.working_set += size;
+	if(this->stats.working_set > this->stats.peak_working_set) this->stats.peak_working_set = this->stats.working_set;
+#endif
+
 	return this->_allocate_procedure(this->data, size);
 }
 
 void Allocator::deallocate(void *pointer) {
-	// @Incomplete: Statistics
+	if(pointer == null) return; // Silently ignore "null" deallocations
+
+#if ENABLE_ALLOCATOR_STATISTICS
+	++this->stats.deallocations;
+	u64 size = this->_query_allocation_size_procedure(this->data, pointer);
+	this->stats.working_set -= size;
+#endif
+
 	this->_deallocate_procedure(this->data, pointer);
+}
+
+void *Allocator::reallocate(void *old_pointer, u64 new_size) {
+	if(old_pointer == null) return null; // Silently ignore "null" deallocations
+	
+#if ENABLE_ALLOCATOR_STATISTICS
+	++this->stats.reallocations;
+	u64 previous_size = this->_query_allocation_size_procedure(this->data, old_pointer);
+	this->stats.working_set += (new_size - previous_size);
+	if(this->stats.working_set > this->stats.peak_working_set) this->stats.peak_working_set = this->stats.working_set;
+#endif
+
+	return this->_reallocate_procedure(this->data, old_pointer, new_size);
+}
+
+void Allocator::reset() {
+	this->_reset_procedure(this->data);
+	this->reset_stats();
+}
+
+void Allocator::reset_stats() {
+#if ENABLE_ALLOCATOR_STATISTICS
+	this->stats.allocations      = 0;
+	this->stats.deallocations    = 0;
+	this->stats.reallocations    = 0;
+	this->stats.working_set      = 0;
+	this->stats.peak_working_set = 0;
+#endif
 }
 
 u64 Allocator::query_allocation_size(void *pointer) {
 	return this->_query_allocation_size_procedure(this->data, pointer);
 }
+
+void Allocator::debug_print(u32 indent) {
+#if ENABLE_ALLOCATOR_STATISTICS
+	f32 working_set_decimal, peak_working_set_decimal;
+	Memory_Unit working_set_unit, peak_working_set_unit;
+
+	working_set_unit = convert_to_biggest_memory_unit(this->stats.working_set, &working_set_decimal);
+	peak_working_set_unit = convert_to_biggest_memory_unit(this->stats.peak_working_set, &peak_working_set_decimal);
+	
+	printf("%-*s=== Allocator ===\n", indent, "");
+	printf("%-*s    Allocations:      %lld.\n", indent, "", this->stats.allocations);
+	printf("%-*s    Deallocations:    %lld.\n", indent, "", this->stats.deallocations);
+	printf("%-*s     -> Alive:        %lld.\n", indent, "", this->stats.allocations - this->stats.deallocations);
+	printf("%-*s    Reallocations:    %lld.\n", indent, "", this->stats.reallocations);
+	printf("%-*s    Working Set:      %.3f%s.\n", indent, "", working_set_decimal, memory_unit_string(working_set_unit));
+	printf("%-*s    Peak Working Set: %.3f%s.\n", indent, "", peak_working_set_decimal, memory_unit_string(peak_working_set_unit));
+	printf("%-*s=== Allocator ===\n", indent, "");
+#endif
+}
+
 
 /* ============================ HEAP ALLOCATOR ============================ */
 
@@ -64,6 +125,10 @@ void heap_deallocate(void *data /* = null */, void *pointer) {
 #else
 	free(pointer);
 #endif
+}
+
+void *heap_reallocate(void *data /* = null */, void *old_pointer, u64 new_size) {
+	return realloc(old_pointer, new_size);
 }
 
 u64 heap_query_allocation_size(void *data /* = null */, void *pointer) {
@@ -113,6 +178,10 @@ void Memory_Arena::destroy() {
 	this->committed   = 0;
 	this->page_size   = 0;
 	this->commit_size = 0;
+}
+
+void Memory_Arena::reset() {
+	this->release_from_mark(0);
 }
 
 u64 Memory_Arena::ensure_alignment(u64 alignment) {
@@ -179,6 +248,19 @@ void Memory_Arena::debug_print(u32 indent) {
 	printf("%-*s    Commit-Size: %.3f%s.\n", indent, "", commit_size_decimal, memory_unit_string(commit_size_unit));
 	printf("%-*s    (OS-Committed Region: %.3f%s.)\n", indent, "", os_region_decimal, memory_unit_string(os_region_unit));
 	printf("%-*s=== Memory Arena ===\n", indent, "");
+}
+
+Allocator Memory_Arena::allocator() {
+	Allocator allocator = {
+		this, 
+		[](void *data, u64 size) -> void* { return ((Memory_Arena *) data)->push(size); },
+		null,
+		null,
+		[](void *data) -> void { ((Memory_Arena *) data)->reset(); },
+		null,
+	};
+
+	return allocator;
 }
 
 
@@ -364,6 +446,18 @@ void Memory_Pool::release(void *pointer) {
 	}
 }
 
+void *Memory_Pool::reallocate(void *old_pointer, u64 new_size) {
+    // This is definitely not a very smart reallocation technique, but it has to do for now.
+    // In the future, it would make sense to only actually allocate a new block if the new size is bigger than
+    // the old one. If the new size is smaller, the current block could be split to free up space.
+    u64 old_size = this->query_allocation_size(old_pointer);
+    void *new_pointer = this->push(new_size);
+
+    memcpy(new_pointer, old_pointer, min(old_size, new_size));
+    this->release(old_pointer);
+    return new_pointer;
+}
+
 u64 Memory_Pool::query_allocation_size(void *pointer) {
 #if ENABLE_ALLOCATOR_STATISTICS
 	Block *block = this->first_block;
@@ -403,6 +497,21 @@ void Memory_Pool::debug_print(u32 indent) {
 	printf("%-*s=== Memory Pool ===\n", indent, "");
 }
 
+Allocator Memory_Pool::allocator() {
+	Allocator allocator = {
+		this, 
+		[](void *data, u64 size)      -> void* { return ((Memory_Pool *) data)->push(size); },
+		[](void *data, void *pointer) -> void  { return ((Memory_Pool *) data)->release(pointer); },
+		[](void *data, void *old_pointer, u64 new_size) -> void * { return ((Memory_Pool*) data)->reallocate(old_pointer, new_size); },
+		[](void *data) -> void { ((Memory_Pool*) data)->destroy(); },
+		[](void *data, void *pointer) -> u64   { return ((Memory_Pool *) data)->query_allocation_size(pointer); } 
+	};
+
+	return allocator;
+}
+
+
+/* ============================ UTILS ============================ */
 
 const char *memory_unit_string(Memory_Unit unit) {
 	const char *string = "(UnknownMemoryUnit)";

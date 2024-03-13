@@ -9,20 +9,24 @@ int main() {
 	Memory_Pool pool;
 	pool.create(&arena);
 
-	int *a = (int *) pool.push(sizeof(int));
-	int *b = (int *) pool.push(sizeof(int));
-	int *c = (int *) pool.push(sizeof(int) * 2);
+	Allocator allocator = pool.allocator();
 
-	arena.push(5);
+	int *a = (int *) allocator.allocate(sizeof(int));
+	int *b = (int *) allocator.allocate(sizeof(int));
+	int *c = (int *) allocator.allocate(sizeof(int) * 2);
 
-	int *d = (int *) pool.push(sizeof(int) * 4);
+	allocator.allocate(5);
 
-	pool.release(c);
-	pool.release(d);
-	pool.release(b);
-	pool.release(a);
+	int *d = (int *) allocator.allocate(sizeof(int) * 4);
+
+	allocator.deallocate(c);
+	allocator.deallocate(d);
+	allocator.deallocate(b);
+	allocator.deallocate(a);
 
 	pool.debug_print();
+
+	allocator.debug_print(0);
 
 	pool.destroy();
 	arena.destroy();
