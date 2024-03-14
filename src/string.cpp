@@ -1,7 +1,7 @@
 #include "string.h"
 #include "memutils.h"
 
-string operator "" _Z(const char *literal, size_t size) {
+string operator "" _s(const char *literal, size_t size) {
 	string _string;
 	_string.count = size;
 	_string.data  = (u8 *) literal;

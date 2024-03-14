@@ -401,6 +401,10 @@ struct Linked_List {
 		return value;
 	}
 
+	T *first() { return &this->head->data; }
+
+	T *last() { return &this->tail->data; }
+
 	T &operator[](s64 index) {
 		assert(index >= 0 && index < this->count);
 
