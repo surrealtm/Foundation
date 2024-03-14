@@ -4,10 +4,16 @@
 #include "string.h"
 
 int main() {
-	string s = "Hello World"_Z;
+	Linked_List<int> list;
+	list.add(1);
+	list.add(5);
+	list.add(-2);
 
-	Linked_List<string> list;
-	list.add(s);
+	int total = 0;
 
-	return 0;
+	for(int i : list) {
+		total += i;
+	}
+
+	return total;
 }

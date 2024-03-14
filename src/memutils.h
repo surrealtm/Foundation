@@ -180,6 +180,16 @@ template<typename T>
 struct Resizable_Array {
 	static const s64 INITIAL_SIZE = 128;
 	
+	struct Iterator {
+        T *pointer;
+        
+		bool operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
+        Iterator &operator++() { ++this->pointer; return *this; }
+        
+        T &operator*() { return *this->pointer; }
+		T *operator->() { return this->pointer; }
+    };
+
 	Allocator *allocator = Default_Allocator;
 	T *data       = null;
 	s64 count     = 0;
@@ -280,6 +290,9 @@ struct Resizable_Array {
 		assert(index >= 0 && index < this->count);
 		return this->data[index];
 	}
+
+    Iterator begin() { return Iterator { this->data }; }
+	Iterator end() { return Iterator { this->data + this->count + 1 }; }
 };
 
 template<typename T>
@@ -288,6 +301,16 @@ struct Linked_List {
 		Node *next;
 		T data;
 	};
+
+	struct Iterator {
+        Node *pointer;
+        
+		bool operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
+        Iterator &operator++() { this->pointer = this->pointer->next; return *this; }
+        
+        T &operator*() { return this->pointer->data; }
+		T *operator->() { return &this->pointer->data; }
+    };
 
 	Allocator *allocator = Default_Allocator;
 	Node *head = null;
@@ -390,6 +413,9 @@ struct Linked_List {
 
 		return node->data;
 	}
+
+    Iterator begin() { return Iterator { this->head }; }
+	Iterator end() { return Iterator { null }; }
 };
 
 const char *memory_unit_string(Memory_Unit unit); // @Cleanup: Change return type to string once that exists
