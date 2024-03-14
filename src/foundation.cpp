@@ -6,8 +6,8 @@
 int main() {
 	string s = "Hello World"_Z;
 
-	Resizable_Array<string> array;
-	array.add(s);
+	Linked_List<string> list;
+	list.add(s);
 
 	return 0;
 }

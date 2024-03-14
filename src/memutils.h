@@ -282,5 +282,115 @@ struct Resizable_Array {
 	}
 };
 
+template<typename T>
+struct Linked_List {
+	struct Node {
+		Node *next;
+		T data;
+	};
+
+	Allocator *allocator = Default_Allocator;
+	Node *head = null;
+	Node *tail = null;
+	s64 count  = 0;
+
+	Node *make_node(T const &value) {
+		Node *node = (Node *) this->allocator->allocate(sizeof(Node));
+		node->next = null;
+		node->data = value;
+		return node;
+	}
+
+	void add(T const &value) {
+		Node *node = this->make_node(value);
+		
+		if(this->head) {
+			this->tail->next = node;
+			this->tail = node;
+		} else {
+			this->head = node;
+			this->tail = this->head;
+		}
+
+		++this->count;
+	}
+
+	void remove(Node *node) {
+		if(!node) return;
+
+		if(node != this->head) {
+			Node *previous = this->head;
+
+			while(previous && previous->next != node) {
+				previous = previous->next;
+			}
+
+			assert(previous != null);
+			previous->next = node->next;
+
+			if(this->tail == node) this->tail = previous;
+		} else {
+			this->head = this->head->next;
+		}
+
+		--this->count;
+	}
+
+	void remove(T const &value) {
+		Node *node = this->head;
+
+		while(node && node->value != value) {
+			node = node->next;
+		}
+
+		this->remove(node);
+	}
+
+	void remove(s64 index) {
+		assert(index >= 0 && index < this->count);
+		
+		Node *node = this->head;
+
+		while(index > 0) {
+			node = node->next;
+			--index;
+		}
+
+		this->remove(node);
+	}
+
+	T *push() {
+		this->add(T{});
+		return &this->tail->data;
+	}
+
+	T pop() {
+		assert(this->count > 0);
+
+		Node *previous = this->head;
+
+		while(previous && previous->next) {
+			previous = previous->next;
+		}
+
+		T value = this->tail->data;
+		this->tail = previous;
+		return value;
+	}
+
+	T &operator[](s64 index) {
+		assert(index >= 0 && index < this->count);
+
+		Node *node = this->head;
+
+		while(index > 0) {
+			node = node->next;
+			--index;
+		}
+
+		return node->data;
+	}
+};
+
 const char *memory_unit_string(Memory_Unit unit); // @Cleanup: Change return type to string once that exists
 Memory_Unit convert_to_biggest_memory_unit(s64 bytes, f32 *decimal);
