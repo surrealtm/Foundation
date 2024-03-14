@@ -1,6 +1,13 @@
 #include "string.h"
 #include "memutils.h"
 
+string operator "" _Z(const char *literal, size_t size) {
+	string _string;
+	_string.count = size;
+	_string.data  = (u8 *) literal;
+	return _string;
+}
+
 s64 cstring_length(char *cstring) {
 	s64 length = 0;
 	while(*cstring) {

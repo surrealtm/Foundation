@@ -22,6 +22,8 @@ struct string {
 	u8 operator[](s64 index) { assert(index >= 0 && index < this->count); return this->data[index]; }
 };
 
+string operator "" _Z(const char *literal, size_t size);
+
 s64 cstring_length(char *cstring);
 string from_cstring(Allocator *allocator, char *cstring);
 char *to_cstring(Allocator *allocator, string _string);

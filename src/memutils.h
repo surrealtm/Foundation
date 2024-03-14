@@ -151,8 +151,8 @@ struct Memory_Pool {
 	static_assert(Memory_Pool::min_payload_size_to_split >= sizeof(Memory_Pool::Block), "The aligned_block_size of the Memory_Pool is too little.");
 
 	Memory_Arena *arena = null;
-	Block *first_block = null;
-	Block *last_block = null;
+	Block *first_block  = null;
+	Block *last_block   = null;
 
 	// Sets up an empty memory pool. Since a memory pool shares the arena, it is not the responsibility
 	// of the pool to manage the arena.
@@ -174,6 +174,112 @@ struct Memory_Pool {
 
 	// Sets up and returns an allocator based on this memory pool.
 	Allocator allocator();
+};
+
+template<typename T>
+struct Resizable_Array {
+	static const s64 INITIAL_SIZE = 128;
+	
+	Allocator *allocator = Default_Allocator;
+	T *data       = null;
+	s64 count     = 0;
+	s64 allocated = 0;
+	
+	void maybe_grow() {
+		if(this->allocated == 0) {
+			this->allocated = Resizable_Array::INITIAL_SIZE;
+			this->data      = (T *) this->allocator->allocate(this->allocated * sizeof(T));
+		} else if(this->count == this->allocated) {
+			this->allocated *= 2;
+		
+			if(!this->allocator->_reallocate_procedure) {
+				// Not all allocators actually provide a reallocation strategy (e.g. Memory Arenas). In that case,
+				// allocate new memory manually, copy the existing data and if the allocator does have a deallocation
+				// strategy, free the previous pointer. If the allocator does not have a deallocation, then it is
+				// most likely some sort of scratch allocator that frees all memory at once.
+				T *new_pointer = (T *) this->allocator->allocate(this->allocated * sizeof(T));
+				memcpy(new_pointer, this->data, this->count * sizeof(T));
+				if(this->allocator->_deallocate_procedure) this->allocator->deallocate(this->data);
+				this->data = new_pointer;	
+			} else {
+				this->data = (T *) this->allocator->reallocate(this->data, this->allocated * sizeof(T));
+			}
+		}
+	}
+
+	void maybe_shrink() {
+		if(this->count < this->allocated / 2 - 1 && this->allocated >= Resizable_Array::INITIAL_SIZE * 2) {
+		    // If the array is less-than-half full, shrink the array
+	        this->allocated /= 2;
+
+			if(!this->allocator->_reallocate_procedure) {
+				// Not all allocators actually provide a reallocation strategy (e.g. Memory Arenas). In that case,
+				// allocate new memory manually, copy the existing data and if the allocator does have a deallocation
+				// strategy, free the previous pointer. If the allocator does not have a deallocation, then it is
+				// most likely some sort of scratch allocator that frees all memory at once.
+				T *new_pointer = (T *) this->allocator->allocate(this->allocated * sizeof(T));
+				memcpy(new_pointer, this->data, this->count * sizeof(T));
+				if(this->allocator->_deallocate_procedure) this->allocator->deallocate(this->data);
+				this->data = new_pointer;	
+			} else {
+				this->data = (T *) this->allocator->reallocate(this->data, this->allocated * sizeof(T));
+			}
+		}
+	}
+
+	void clear() {
+		this->allocator->deallocate(this->data);
+		this->count = 0;
+		this->allocated = 0;
+		this->data = null;
+	}
+
+	void add(T const &data) {
+		this->maybe_grow();
+		this->data[this->count] = data;
+		++this->count;
+	}
+
+	void remove(s64 index) {
+		memcpy(&this->data[index], &this->data[index + 1], (this->count - index) * sizeof(T));
+		--this->count;
+		this->maybe_shrink();
+	}
+
+	void remove_range(s64 first_to_remove, s64 last_to_remove) {
+		memcpy(&this->data[first_to_remove], &this->data[last_to_remove + 1], (this->count - last_to_remove - 1) * sizeof(T));
+		this->count -= (last_to_remove - first_to_remove) + 1;
+		this->maybe_shrink();
+	}
+
+	void remove_by_value(T const &value) {
+		for(s64 i = 0; i < this->count; ++i) {
+			if(this->data[i] == value) {
+				this->remove(i);
+				break;
+			}
+		}
+	}
+
+	T *push() {
+		this->maybe_grow();
+		T *pointer = &this->data[this->count];
+		++this->count;
+		return pointer;
+	}
+
+	T pop() {
+		assert(this->count > 0);
+		T value = this->data[this->count - 1];
+		--this->count;
+		this->maybe_shrink();
+		return value;
+	}
+
+	T &operator[](s64 index) {
+		assert(index >= 0 && index < this->count);
+		return this->data[index];
+	}
 };
 
 const char *memory_unit_string(Memory_Unit unit); // @Cleanup: Change return type to string once that exists
