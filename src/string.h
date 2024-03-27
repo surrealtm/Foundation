@@ -29,6 +29,7 @@ struct string {
 string operator "" _s(const char *literal, size_t size);
 
 s64 cstring_length(char *cstring);
+s64 cstring_length(const char *cstring);
 string from_cstring(Allocator *allocator, char *cstring);
 char *to_cstring(Allocator *allocator, string _string);
 
@@ -58,6 +59,22 @@ b8 string_ends_with(string lhs, string rhs);
  * The string builder maintains an internal linked list of different string blocks in case the
  * underlying allocator does not provide it with a continuous block of memory, so that these parts
  * can then be stitched together at the end with as few allocations in-bewteen as possible. */
+enum Radix {
+	RADIX_floating_point = 0,
+	RADIX_binary = 2,
+	RADIX_decimal = 10,
+	RADIX_hexadecimal = 16,
+};
+
+struct String_Builder_Format {
+	Radix radix;
+	u64 value;
+	u8  digits; // For binary, decimal, hexadecimal: Number of digits to print out in total. For floating point: Number of decimal digit.
+	u8  fractionals; // Only for floating point: Number of fractional digits.
+	b8  sign;
+	b8  prefix;
+};
+
 struct String_Builder {
 	struct Block {
 		Block *next;
@@ -71,11 +88,29 @@ struct String_Builder {
 	s64 total_count;
 
 	u8 *grow(s64 count);
+	u64 radix_value(Radix radix, u64 index);
+	u64 number_of_required_digits(Radix radix, u64 value);
+	u64 number_of_required_digits(Radix radix, s64 value);
+	u64 number_of_required_digits(f64 value);
+	void append_string_builder_format(String_Builder_Format format);
+	void append_digit(u64 digit);
 
 	void create(Allocator *allocator);
 
-	void append_string(string s);
-	void append_character(char c);
-
+	void append(const char *s);
+	void append(char *s);
+	void append(string s);
+	void append(char c);
+	void append(s64 v);
+	void append(s32 v);
+	void append(s16 v);
+	void append(s8 v);
+	void append(u64 v);
+	void append(u32 v);
+	void append(u16 v);
+	void append(u8 v);
+	void append(f64 v);
+	void append(f32 v);
+	
 	string finish();
 };

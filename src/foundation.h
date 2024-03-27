@@ -7,12 +7,12 @@
 
 typedef unsigned char      u8;
 typedef unsigned short     u16;
-typedef unsigned int       u32;
+typedef unsigned long      u32;
 typedef unsigned long long u64;
 
 typedef signed char      s8;
 typedef signed short     s16;
-typedef signed int       s32;
+typedef signed long      s32;
 typedef signed long long s64;
 
 typedef float  f32;
@@ -21,6 +21,32 @@ typedef double f64;
 typedef unsigned char b8;
 
 #define null 0
+
+constexpr s64 MAX_S64 = 0x7fffffffffffffff;
+constexpr s64 MIN_S64 = (s64) 0x8000000000000000;
+constexpr u64 MAX_U64 = 0xffffffffffffffff;
+constexpr u64 MIN_U64 = 0;
+
+constexpr s32 MAX_S32 = 0x7fffffff;
+constexpr s32 MIN_S32 = (s32) 0x80000000;
+constexpr u32 MAX_U32 = 0xffffffff;
+constexpr u32 MIN_U32 = 0;
+
+constexpr s16 MAX_S16 = 0x7fff;
+constexpr s16 MIN_S16 = (s16) 0x8000;
+constexpr u16 MAX_U16 = 0xffff;
+constexpr u16 MIN_U16 = 0;
+
+constexpr s8 MAX_S8 = 0x7f;
+constexpr s8 MIN_S8 = (s8) 0x80;
+constexpr u8 MAX_U8 = 0xff;
+constexpr u8 MIN_U8 = 0;
+
+constexpr f64 MAX_F64 = 1.7976931348623157e308L;
+constexpr f64 MIN_F64 = -1.7976931348623157e308L;
+
+constexpr f32 MAX_F32 = 3.40282347e38F;
+constexpr f32 MIN_F32 = -3.40282347e38F;
 
 #if BUILD_WIN32
 # define PRIu64 "lld"

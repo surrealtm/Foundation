@@ -1,5 +1,6 @@
 #include "string.h"
 #include "memutils.h"
+#include "os_specific.h"
 
 string operator "" _s(const char *literal, size_t size) {
 	string _string;
@@ -9,6 +10,15 @@ string operator "" _s(const char *literal, size_t size) {
 }
 
 s64 cstring_length(char *cstring) {
+	s64 length = 0;
+	while(*cstring) {
+		++length;
+		++cstring;
+	}
+	return length;
+}
+
+s64 cstring_length(const char *cstring) {
 	s64 length = 0;
 	while(*cstring) {
 		++length;
@@ -175,6 +185,195 @@ u8 *String_Builder::grow(s64 count) {
 	return next_content_block;
 }
 
+u64 String_Builder::radix_value(Radix radix, u64 index) {
+	u64 power = 1;
+
+	switch(radix) {
+	case RADIX_binary:      power = 1ULL << index; break;
+	case RADIX_hexadecimal: power = 1ULL << (index * 4); break;
+	case RADIX_decimal:
+		for(u64 i = 0; i < index; ++i) {
+			power *= 10;
+		}
+		break;
+	}
+
+	return power;
+}
+
+u64 String_Builder::number_of_required_digits(Radix radix, u64 value) {
+	if(value == 0) return 1;
+	
+	u64 count = 0;
+
+	while(value != 0) {
+		value /= radix;
+		++count;
+	}
+
+	return count;
+}
+
+u64 String_Builder::number_of_required_digits(Radix radix, s64 value) {
+	if(value == 0) return 1;
+	
+	u64 count = 0;
+
+	while(value != 0) {
+		value /= radix;
+		++count;
+	}
+
+	return count;
+}
+
+u64 String_Builder::number_of_required_digits(f64 value) {
+	if(value == 0) return 1;
+
+	u64 count = 0;
+
+	while(value >= 1 || value <= -1) {
+		value /= 10;
+		++count;
+	}
+
+	return count;
+}
+
+void String_Builder::append_string_builder_format(String_Builder_Format format) {
+	if(format.prefix) {
+		switch(format.radix) {
+		case RADIX_binary: this->append("0b"_s); break;
+		case RADIX_hexadecimal: this->append("0x"_s); break;
+		}
+	}
+	
+	if(format.radix == RADIX_binary || format.radix == RADIX_hexadecimal || (format.radix == RADIX_decimal && !format.sign)) {
+		u64 value = format.value;
+		u64 required_digits = this->number_of_required_digits(format.radix, value);
+		
+		//
+		// Print out leading zeros.
+		//
+		for(u64 i = required_digits; i < format.digits; ++i) {
+			this->append('0');
+		}
+		
+		//
+		// Print out the actual value.
+		//
+		s64 index = required_digits - 1;
+		
+		while(index >= 0) {
+			u64 power = this->radix_value(format.radix, index);
+			u64 digit = value / power;
+			
+			this->append_digit(digit);
+
+			value -= digit * power;
+			--index;
+		}
+	} else if(format.radix == RADIX_decimal && format.sign) {
+		u64 value = format.value;
+		u64 required_digits = this->number_of_required_digits(format.radix, (s64) value);
+		
+		//
+		// Handle sign.
+		//
+		if(value & 0x8000000000000000) { // value < 0
+			value = (u64) (- (s64) value);
+			this->append('-');
+		} else if(format.prefix) {
+			this->append('+');
+		}
+		
+		//
+		// Print out leading zeros.
+		//
+		for(u64 i = required_digits; i < format.digits; ++i) {
+			this->append('0');
+		}
+
+		//
+		// Print out the actual value.
+		//
+		s64 index = required_digits - 1;
+		
+		while(index >= 0) {
+			u64 power = this->radix_value(format.radix, index);
+			u64 digit = value / power;
+			
+			this->append_digit(digit);
+
+			value -= digit * power;
+			--index;
+		}
+	} else if(format.radix == RADIX_floating_point) {
+		f64 value;
+		memcpy(&value, &format.value, sizeof(f64));
+		u64 required_digits = this->number_of_required_digits(value);
+
+		//
+		// Handle sign.
+		//
+		if(value < 0) {
+			value = -value;
+			this->append('-');
+		} else if(format.prefix) {
+			this->append('+');
+		}
+
+		//
+		// Print out leading zeros.
+		//
+		for(u64 i = required_digits; i < format.digits; ++i) {
+			this->append('0');
+		}
+
+		//
+		// Print out the decimal spaces.
+		//
+		s64 index = required_digits - 1;
+
+		while(index >= 0) {
+			f64 power = pow(10, (f64) index);
+			f64 digit = floor(value / power);
+
+			this->append_digit((u64) digit);
+
+			value -= digit * power;
+			--index;
+		}
+
+		//
+		// Print the decimal point.
+		//
+
+		this->append('.');
+
+		//
+		// Print the fractional spaces.
+		//
+		for(u64 i = 0; i < format.fractionals; ++i) {
+			value *= 10;
+
+			f64 digit = floor(value);
+		
+			this->append_digit((u64) digit);
+		
+			value -= digit;
+		}
+	}
+}
+
+void String_Builder::append_digit(u64 value) {
+	if(value >= 0 && value <= 9) {
+		this->append((char) (value + '0'));
+	} else if(value >= 10 && value <= 15) {
+		this->append((char) (value - 10 + 'a'));
+	}
+}
+
 void String_Builder::create(Allocator *allocator) {
 	this->allocator   = allocator;
 	this->first       = { 0 };
@@ -182,14 +381,68 @@ void String_Builder::create(Allocator *allocator) {
 	this->total_count = 0;
 }
 
-void String_Builder::append_string(string s) {
+void String_Builder::append(const char *s) {
+	s64 length = cstring_length(s);
+	u8 *pointer = this->grow(length);
+	memcpy(pointer, s, length);
+}
+
+void String_Builder::append(char *s) {
+	s64 length = cstring_length(s);
+	u8 *pointer = this->grow(length);
+	memcpy(pointer, s, length);
+}
+
+void String_Builder::append(string s) {
 	u8 *pointer = this->grow(s.count);
 	memcpy(pointer, s.data, s.count);
 }
 
-void String_Builder::append_character(char c) {
+void String_Builder::append(char c) {
 	u8 *pointer = this->grow(1);
 	*pointer = c;
+}
+
+void String_Builder::append(s64 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+}
+
+void String_Builder::append(s32 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+}
+
+void String_Builder::append(s16 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+}
+
+void String_Builder::append(s8 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+}
+
+void String_Builder::append(u64 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
+}
+
+void String_Builder::append(u32 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
+}
+
+void String_Builder::append(u16 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
+}
+
+void String_Builder::append(u8 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
+}
+
+void String_Builder::append(f64 value) {
+	u64 _u64;
+	memcpy(&_u64, &value, sizeof(f64));
+	this->append_string_builder_format({ RADIX_floating_point, _u64, 1, 5, true, false });
+}
+
+void String_Builder::append(f32 value) {
+	this->append((f64) value);
 }
 
 string String_Builder::finish() {
