@@ -1,8 +1,13 @@
 #include "foundation.h"
 #include "os_specific.h"
+#include "memutils.h"
 
 #define WIN32_MEAN_AND_LEAN
 #include <Windows.h>
+
+
+
+/* ---------------------------------------------- Win32 Helpers ---------------------------------------------- */
 
 char *win32_last_error_to_string() {
 	DWORD error = GetLastError();
@@ -30,6 +35,9 @@ void os_write_to_console(const char *format, ...) {
 	printf("\n");
 }
 
+
+
+/* ---------------------------------------------- Virtual Memory ---------------------------------------------- */
 
 u64 os_get_page_size() {
 	SYSTEM_INFO system_info;
@@ -107,13 +115,118 @@ void os_decommit_memory(void *address, u64 decommit_size) {
 
 
 
+/* ------------------------------------------------- File IO ------------------------------------------------- */
+
+string os_read_file(Allocator *allocator, string file_path) {
+	string file_content = { 0 };
+	char *cstring = to_cstring(Default_Allocator, file_path);
+
+	HANDLE file_handle = CreateFileA(cstring, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, null, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, null);
+	if(file_handle != INVALID_HANDLE_VALUE) {
+		file_content.count = GetFileSize(file_handle, null);
+		file_content.data  = (u8 *) allocator->allocate(file_content.count);
+
+		if(!ReadFile(file_handle, file_content.data, (u32) file_content.count, null, null)) {
+			allocator->deallocate(file_content.data);
+			file_content = { 0 };
+		}
+	}
+
+	CloseHandle(file_handle);
+
+	free_cstring(Default_Allocator, cstring);
+	return file_content;
+}
+
+void os_free_file_content(Allocator *allocator, string *file_content) {
+	allocator->deallocate(file_content->data);
+	file_content->count = 0;
+	file_content->data  = 0;
+}
+
+b8 os_write_file(string file_path, string file_content, b8 append) {
+	bool success = false;
+	char *cstring = to_cstring(Default_Allocator, file_path);
+
+	HANDLE file_handle = CreateFileA(cstring, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, null, append ? OPEN_ALWAYS : CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, null);
+
+	if(file_handle != INVALID_HANDLE_VALUE) {
+		u32 file_offset = 0;
+		if(append) file_offset = SetFilePointer(file_handle, 0, null, FILE_END);
+
+		success = WriteFile(file_handle, file_content.data, (u32) file_content.count, null, null);
+	}
+
+	CloseHandle(file_handle);
+
+	free_cstring(Default_Allocator, cstring);
+	return success;
+}
+
+b8 os_delete_file(string file_path) {
+	char *cstring = to_cstring(Default_Allocator, file_path);
+	b8 success = DeleteFileA(cstring);
+	free_cstring(Default_Allocator, cstring);
+	return success;
+}
+
+b8 os_delete_directory(string file_path) {
+	// The Win32 API also has a RemoveDirectoryA procedure, but that only works on empty folders, which we don't
+    // require in this module procedure, so instead we use a PowerShell procedure... Sigh.
+    // SHFileOperation requires the strings to be double-null-terminated for some fucking reason...
+
+    char *cstring = (char *) Default_Allocator->allocate(file_path.count + 2);
+    memcpy(cstring, file_path.data, file_path.count);
+    cstring[file_path.count + 0] = 0;
+    cstring[file_path.count + 1] = 0;
+    
+    SHFILEOPSTRUCTA file_operation;
+    file_operation.hwnd   = null;
+    file_operation.wFunc  = FO_DELETE;
+    file_operation.pFrom  = cstring;
+    file_operation.pTo    = null;
+    file_operation.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
+
+    // @Cleanup: This just randomly fails sometimes with the weirdest return values...
+    // I am not sure what the fuck is happening here, so maybe we need to find something else man.
+	//  ^ The above message was copied from the prometheus module, not sure...
+	u32 result = SHFileOperationA(&file_operation);
+
+	Default_Allocator->deallocate(cstring);
+
+    return result == 0;
+}
+
+b8 os_file_exists(string file_path) {
+	char *cstring = to_cstring(Default_Allocator, file_path);
+	
+	u32 attributes = GetFileAttributesA(cstring);
+	b8 success = attributes != -1 && !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+	
+	free_cstring(Default_Allocator, cstring);
+	return success;
+}
+
+b8 os_directory_exists(string file_path) {
+	char *cstring = to_cstring(Default_Allocator, file_path);
+	
+	u32 attributes = GetFileAttributesA(cstring);
+	b8 success = attributes != -1 && attributes & FILE_ATTRIBUTE_DIRECTORY;
+	
+	free_cstring(Default_Allocator, cstring);
+	return success;	
+}
+
+
+
+/* --------------------------------------------- Bit Manipulation --------------------------------------------- */
+
 u64 os_highest_bit_set(u64 value) {
     u32 highest_bit = 0;
     if(!_BitScanForward64(&highest_bit, value))
         return 0; // BitScanForward returns 0 if the value is 0
     return highest_bit;
-};
-
+}
 
 u64 os_lowest_bit_set(u64 value) {
     u32 lowest_bit = 0;

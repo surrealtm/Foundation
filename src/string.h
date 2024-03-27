@@ -28,10 +28,19 @@ struct string {
 
 string operator "" _s(const char *literal, size_t size);
 
+
+
+/* ------------------------------------------------ C Strings ------------------------------------------------ */
+
 s64 cstring_length(char *cstring);
 s64 cstring_length(const char *cstring);
 string from_cstring(Allocator *allocator, char *cstring);
 char *to_cstring(Allocator *allocator, string _string);
+void free_cstring(Allocator *allocator, char *cstring);
+
+
+
+/* ------------------------------------------------- Strings ------------------------------------------------- */
 
 string strltr(char *literal); // Build a string from a string literal
 string string_view(u8 *data, s64 count);
@@ -52,6 +61,9 @@ b8 compare_strings(string lhs, string rhs);
 b8 string_starts_with(string lhs, string rhs);
 b8 string_ends_with(string lhs, string rhs);
 
+
+
+/* ---------------------------------------------- String Builder ---------------------------------------------- */
 
 /* A string builder is a helper struct to create one continuous string from multiple data by
  * concatenating the different information. The string builder returns one string by concatenating

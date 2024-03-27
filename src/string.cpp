@@ -9,6 +9,10 @@ string operator "" _s(const char *literal, size_t size) {
 	return _string;
 }
 
+
+
+/* ------------------------------------------------- C String ------------------------------------------------- */
+
 s64 cstring_length(char *cstring) {
 	s64 length = 0;
 	while(*cstring) {
@@ -41,6 +45,13 @@ char *to_cstring(Allocator *allocator, string _string) {
 	return cstring;
 }
 
+void free_cstring(Allocator *allocator, char *cstring) {
+	allocator->deallocate(cstring);
+}
+
+
+
+/* -------------------------------------------------- String -------------------------------------------------- */
 
 string strltr(char *literal) {
 	string _string;
@@ -148,6 +159,8 @@ b8 string_ends_with(string lhs, string rhs) {
 }
 
 
+
+/* ---------------------------------------------- String Builder ---------------------------------------------- */
 
 u8 *String_Builder::grow(s64 count) {
 	u8 *next_content_block = (u8 *) this->allocator->allocate(count);
