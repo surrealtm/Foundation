@@ -1,7 +1,7 @@
 #include "string.h"
 #include "memutils.h"
 
-string operator "" _Z(const char *literal, size_t size) {
+string operator "" _s(const char *literal, size_t size) {
 	string _string;
 	_string.count = size;
 	_string.data  = (u8 *) literal;
@@ -135,4 +135,84 @@ b8 string_ends_with(string lhs, string rhs) {
 	if(rhs.count > lhs.count) return false;
 
 	return compare_strings(substring_view(lhs, lhs.count - rhs.count, lhs.count), rhs);
+}
+
+
+
+u8 *String_Builder::grow(s64 count) {
+	u8 *next_content_block = (u8 *) this->allocator->allocate(count);
+
+	if(!this->current) {
+		// This is the first time the string builder has been used. Set up the
+		// first node without an allocation to provide a fast code path for small
+		// strings.
+		this->current = &this->first;
+		this->current->next = null;
+		this->current->data = next_content_block;
+		this->current->count = 0;
+	}
+
+	if(this->current->data + this->current->count != next_content_block) {
+	    // The allocator could not provide us with continous data for the current block,
+        // so we need to add another block entry into our list entry.
+        // We don't use the provided allocator for these blocks since that would mean we
+        // can never continously allocate (since the block entry comes between the
+        // current content, and content in the future...)
+		Block *block = (Block *) Default_Allocator->allocate(sizeof(Block));
+		block->next  = null;
+		block->count = count;
+		block->data  = next_content_block;
+		this->current->next = block;
+		this->current       = block;
+	} else {
+		// The next content block is continuous to the previous block, so we can just
+		// append the new data to the block.
+		this->current->count += count;
+	}
+
+	this->total_count += count;
+	
+	return next_content_block;
+}
+
+void String_Builder::create(Allocator *allocator) {
+	this->allocator   = allocator;
+	this->first       = { 0 };
+	this->current     = null;
+	this->total_count = 0;
+}
+
+void String_Builder::append_string(string s) {
+	u8 *pointer = this->grow(s.count);
+	memcpy(pointer, s.data, s.count);
+}
+
+void String_Builder::append_character(char c) {
+	u8 *pointer = this->grow(1);
+	*pointer = c;
+}
+
+string String_Builder::finish() {
+	if(this->first.next) {
+		// There are at least two different blocks of data which we need to concatenate here.
+		string result = allocate_string(this->allocator, this->total_count);
+		s64 offset = 0;
+
+		Block *block = &this->first;
+		while(block) {
+			memcpy(&result.data[offset], block->data, block->count);
+			offset += block->count;
+
+			this->allocator->deallocate(block->data);
+			if(block != &this->first) Default_Allocator->deallocate(block);
+
+			block = block->next;
+		}
+	
+		return result;
+	} else {
+		// There was only ever one block of data, meaning this block is already our complete
+		// string.
+		return string_view(this->first.data, this->first.count);
+	}
 }

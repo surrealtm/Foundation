@@ -106,7 +106,7 @@ void *heap_allocate(void *data /* = null */, u64 size) {
 	*_u64 = size;
 	pointer = (void *) ((u64) pointer + extra_size);
 #else
-	pointer = malloc(size); // @Cleanup: Maybe we can even use Platform specific stuff here, like HeapAlloc?
+	pointer = malloc(size);
 #endif
 
 	return pointer;

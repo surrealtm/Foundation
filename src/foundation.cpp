@@ -4,16 +4,14 @@
 #include "string.h"
 
 int main() {
-	Linked_List<int> list;
-	list.add(1);
-	list.add(5);
-	list.add(-2);
+	String_Builder builder;
+	builder.create(Default_Allocator);
+	builder.append_string("Hello World: "_s);
+	builder.append_character('A');
+	builder.append_string("!"_s);
+	string result = builder.finish();
 
-	int total = 0;
+	printf("Result: %.*s\n", PRINT_STRING(result));
 
-	for(int i : list) {
-		total += i;
-	}
-
-	return total;
+	return 0;
 }

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "foundation.h"
 
 /*
@@ -13,6 +15,8 @@
 	    needing to copy the data. This is a massive performance improvement.
 */
 
+#define PRINT_STRING(__string) (u32) __string.count, __string.data
+
 struct Allocator;
 
 struct string {
@@ -22,7 +26,7 @@ struct string {
 	u8 operator[](s64 index) { assert(index >= 0 && index < this->count); return this->data[index]; }
 };
 
-string operator "" _Z(const char *literal, size_t size);
+string operator "" _s(const char *literal, size_t size);
 
 s64 cstring_length(char *cstring);
 string from_cstring(Allocator *allocator, char *cstring);
@@ -46,3 +50,32 @@ s64 search_string_reverse(string _string, u8 _char);
 b8 compare_strings(string lhs, string rhs);
 b8 string_starts_with(string lhs, string rhs);
 b8 string_ends_with(string lhs, string rhs);
+
+
+/* A string builder is a helper struct to create one continuous string from multiple data by
+ * concatenating the different information. The string builder returns one string by concatenating
+ * the different substrings together.
+ * The string builder maintains an internal linked list of different string blocks in case the
+ * underlying allocator does not provide it with a continuous block of memory, so that these parts
+ * can then be stitched together at the end with as few allocations in-bewteen as possible. */
+struct String_Builder {
+	struct Block {
+		Block *next;
+		u8 *data;
+		s64 count;
+	};
+
+	Allocator *allocator;
+	Block first;
+	Block *current;
+	s64 total_count;
+
+	u8 *grow(s64 count);
+
+	void create(Allocator *allocator);
+
+	void append_string(string s);
+	void append_character(char c);
+
+	string finish();
+};

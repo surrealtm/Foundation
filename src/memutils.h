@@ -186,7 +186,7 @@ struct Resizable_Array {
 		bool operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
         Iterator &operator++() { ++this->pointer; return *this; }
         
-        T &operator*() { return *this->pointer; }
+        T *operator*()  { return this->pointer; }
 		T *operator->() { return this->pointer; }
     };
 
@@ -308,7 +308,7 @@ struct Linked_List {
 		bool operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
         Iterator &operator++() { this->pointer = this->pointer->next; return *this; }
         
-        T &operator*() { return this->pointer->data; }
+        T *operator*()  { return &this->pointer->data; }
 		T *operator->() { return &this->pointer->data; }
     };
 
@@ -401,6 +401,10 @@ struct Linked_List {
 		return value;
 	}
 
+	T *first() { return &this->head->data; }
+
+	T *last() { return &this->tail->data; }
+
 	T &operator[](s64 index) {
 		assert(index >= 0 && index < this->count);
 
@@ -418,5 +422,5 @@ struct Linked_List {
 	Iterator end() { return Iterator { null }; }
 };
 
-const char *memory_unit_string(Memory_Unit unit); // @Cleanup: Change return type to string once that exists
+const char *memory_unit_string(Memory_Unit unit);
 Memory_Unit convert_to_biggest_memory_unit(s64 bytes, f32 *decimal);
