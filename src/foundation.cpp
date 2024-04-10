@@ -3,6 +3,8 @@
 #include "memutils.h"
 #include "string.h"
 
+#include "math/math.h"
+
 int main() {
 	String_Builder builder;
 	builder.create(Default_Allocator);
