@@ -7,7 +7,8 @@ Allocator heap_allocator = { null, heap_allocate, heap_deallocate, heap_realloca
 Allocator *Default_Allocator = &heap_allocator;
 
 
-/* ============================ ALLOCATOR ============================ */
+
+/* ------------------------------------------------ Allocator ------------------------------------------------ */
 
 void *Allocator::allocate(u64 size) {
 #if ENABLE_ALLOCATOR_STATISTICS
@@ -76,14 +77,15 @@ void Allocator::debug_print(u32 indent) {
 	printf("%-*s    Deallocations:    %lld.\n", indent, "", this->stats.deallocations);
 	printf("%-*s     -> Alive:        %lld.\n", indent, "", this->stats.allocations - this->stats.deallocations);
 	printf("%-*s    Reallocations:    %lld.\n", indent, "", this->stats.reallocations);
-	printf("%-*s    Working Set:      %.3f%s.\n", indent, "", working_set_decimal, memory_unit_string(working_set_unit));
-	printf("%-*s    Peak Working Set: %.3f%s.\n", indent, "", peak_working_set_decimal, memory_unit_string(peak_working_set_unit));
+	printf("%-*s    Working Set:      %.3f%s.\n", indent, "", working_set_decimal, memory_unit_suffix(working_set_unit));
+	printf("%-*s    Peak Working Set: %.3f%s.\n", indent, "", peak_working_set_decimal, memory_unit_suffix(peak_working_set_unit));
 	printf("%-*s=== Allocator ===\n", indent, "");
 #endif
 }
 
 
-/* ============================ HEAP ALLOCATOR ============================ */
+
+/* ---------------------------------------------- Heap Allocator ---------------------------------------------- */
 
 void *heap_allocate(void *data /* = null */, u64 size) {
 	void *pointer = null;
@@ -147,7 +149,8 @@ u64 heap_query_allocation_size(void *data /* = null */, void *pointer) {
 }
 
 
-/* ============================ MEMORY ARENA ============================ */
+
+/* ----------------------------------------------- Memory Arena ----------------------------------------------- */
 
 void Memory_Arena::create(u64 reserved, u64 requested_commit_size) {
 	assert(this->base == null);
@@ -242,11 +245,11 @@ void Memory_Arena::debug_print(u32 indent) {
 	os_region_unit   = convert_to_biggest_memory_unit(os_get_committed_region_size(this->base), &os_region_decimal);
 
 	printf("%-*s=== Memory Arena ===\n", indent, "");
-	printf("%-*s    Reserved:    %.3f%s.\n", indent, "", reserved_decimal, memory_unit_string(reserved_unit));
-	printf("%-*s    Committed:   %.3f%s.\n", indent, "", committed_decimal, memory_unit_string(committed_unit));
-	printf("%-*s    Size:        %.3f%s.\n", indent, "", size_decimal, memory_unit_string(size_unit));
-	printf("%-*s    Commit-Size: %.3f%s.\n", indent, "", commit_size_decimal, memory_unit_string(commit_size_unit));
-	printf("%-*s    (OS-Committed Region: %.3f%s.)\n", indent, "", os_region_decimal, memory_unit_string(os_region_unit));
+	printf("%-*s    Reserved:    %.3f%s.\n", indent, "", reserved_decimal, memory_unit_suffix(reserved_unit));
+	printf("%-*s    Committed:   %.3f%s.\n", indent, "", committed_decimal, memory_unit_suffix(committed_unit));
+	printf("%-*s    Size:        %.3f%s.\n", indent, "", size_decimal, memory_unit_suffix(size_unit));
+	printf("%-*s    Commit-Size: %.3f%s.\n", indent, "", commit_size_decimal, memory_unit_suffix(commit_size_unit));
+	printf("%-*s    (OS-Committed Region: %.3f%s.)\n", indent, "", os_region_decimal, memory_unit_suffix(os_region_unit));
 	printf("%-*s=== Memory Arena ===\n", indent, "");
 }
 
@@ -264,7 +267,8 @@ Allocator Memory_Arena::allocator() {
 }
 
 
-/* ============================ MEMORY POOL ============================ */
+
+/* ----------------------------------------------- Memory Pool ----------------------------------------------- */
 
 Memory_Pool::Block *Memory_Pool::Block::next() {
 	if(this->offset_to_next == 0) return null;
@@ -511,24 +515,25 @@ Allocator Memory_Pool::allocator() {
 }
 
 
-/* ============================ UTILS ============================ */
 
-const char *memory_unit_string(Memory_Unit unit) {
+/* -------------------------------------------------- Utils -------------------------------------------------- */
+
+const char *memory_unit_suffix(Memory_Unit unit) {
 	const char *string = "(UnknownMemoryUnit)";
 
 	switch(unit) {
-	case MEMORY_UNIT_bytes:      string = "b"; break;
-	case MEMORY_UNIT_kilobytes:  string = "kb"; break;
-	case MEMORY_UNIT_megabytes:  string = "mb"; break;
-	case MEMORY_UNIT_gigabytes:  string = "gb"; break;
-	case MEMORY_UNIT_terrabytes: string = "tb"; break;
+	case Bytes:      string = "b"; break;
+	case Kilobytes:  string = "kb"; break;
+	case Megabytes:  string = "mb"; break;
+	case Gigabytes:  string = "gb"; break;
+	case Terrabytes: string = "tb"; break;
 	}
 
 	return string;
 }
 
 Memory_Unit convert_to_biggest_memory_unit(s64 bytes, f32 *decimal) {
-	Memory_Unit unit = MEMORY_UNIT_bytes;
+	Memory_Unit unit = Bytes;
 	*decimal = (f32) bytes;
 
 	while(unit < MEMORY_UNIT_COUNT && bytes >= 1000) {

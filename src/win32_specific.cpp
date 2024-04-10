@@ -219,6 +219,41 @@ b8 os_directory_exists(string file_path) {
 
 
 
+/* -------------------------------------------------- Timing -------------------------------------------------- */
+
+LARGE_INTEGER __win32_performance_frequency;
+b8 __win32_performance_frequency_set = false;
+
+Hardware_Time os_get_hardware_time() {
+    LARGE_INTEGER counter;
+    QueryPerformanceCounter(&counter);
+    return counter.QuadPart;
+}
+
+f64 os_convert_hardware_time(Hardware_Time time, Time_Unit unit) {
+    if(!__win32_performance_frequency_set) __win32_performance_frequency_set = QueryPerformanceFrequency(&__win32_performance_frequency);
+
+
+    f64 resolution_factor;
+
+    switch(unit) {
+    case Minutes:      resolution_factor = 1.0 / 60.0; break;
+    case Seconds:      resolution_factor = 1.0; break;
+    case Milliseconds: resolution_factor = 1000.0; break;
+    case Microseconds: resolution_factor = 1000000.0; break;
+    case Nanoseconds:  resolution_factor = 1000000000.0; break;
+	default:           resolution_factor = 1; break;
+    }
+    
+    return (f64) time / (f64) (__win32_performance_frequency.QuadPart) * resolution_factor;
+}
+
+void os_sleep(f64 seconds) {
+    Sleep((DWORD) round(seconds * 1000));
+}
+
+
+
 /* --------------------------------------------- Bit Manipulation --------------------------------------------- */
 
 u64 os_highest_bit_set(u64 value) {

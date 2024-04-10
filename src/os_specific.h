@@ -5,6 +5,8 @@
 
 struct Allocator;
 
+typedef s64 Hardware_Time;
+
 void os_write_to_console(const char *format, ...);
 
 
@@ -29,6 +31,15 @@ b8 os_delete_file(string file_path);
 b8 os_delete_directory(string file_path);
 b8 os_file_exists(string file_path);
 b8 os_directory_exists(string file_path);
+
+
+
+/* -------------------------------------------------- Timing -------------------------------------------------- */
+
+Hardware_Time os_get_hardware_time();
+f64 os_convert_hardware_time(Hardware_Time input, Time_Unit unit);
+void os_sleep(f64 seconds);
+
 
 
 /* --------------------------------------------- Bit Manipulation --------------------------------------------- */

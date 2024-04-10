@@ -12,11 +12,11 @@
 #endif
 
 enum Memory_Unit {
-	MEMORY_UNIT_bytes,
-	MEMORY_UNIT_kilobytes,
-	MEMORY_UNIT_megabytes,
-	MEMORY_UNIT_gigabytes,
-	MEMORY_UNIT_terrabytes,
+	Bytes,
+	Kilobytes,
+	Megabytes,
+	Gigabytes,
+	Terrabytes,
 	MEMORY_UNIT_COUNT,
 };
 
@@ -422,5 +422,5 @@ struct Linked_List {
 	Iterator end() { return Iterator { null }; }
 };
 
-const char *memory_unit_string(Memory_Unit unit);
+const char *memory_unit_suffix(Memory_Unit unit);
 Memory_Unit convert_to_biggest_memory_unit(s64 bytes, f32 *decimal);
