@@ -3,6 +3,7 @@
 #include "memutils.h"
 
 #define WIN32_MEAN_AND_LEAN
+#include <wchar.h> // Apparently some fucking windows header requires this somethimes or something I don't even know I don't want to have to deal with this shit.
 #include <Windows.h>
 
 

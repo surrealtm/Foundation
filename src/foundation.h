@@ -48,7 +48,7 @@ constexpr f64 MIN_F64 = -1.7976931348623157e308L;
 constexpr f32 MAX_F32 = 3.40282347e38F;
 constexpr f32 MIN_F32 = -3.40282347e38F;
 
-#if BUILD_WIN32
+#if FOUNDATION_WIN32
 # define PRIu64 "lld"
 # define PRIx64 "llx"
 # define LITTLE_ENDIAN true
