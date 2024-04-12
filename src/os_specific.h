@@ -34,6 +34,9 @@ b8 os_delete_directory(string file_path);
 b8 os_file_exists(string file_path);
 b8 os_directory_exists(string file_path);
 
+void os_set_working_directory(string file_path);
+string os_get_working_directory();
+string os_get_executable_directory();
 
 
 /* -------------------------------------------------- Timing -------------------------------------------------- */

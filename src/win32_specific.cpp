@@ -240,6 +240,28 @@ b8 os_directory_exists(string file_path) {
 }
 
 
+void os_set_working_directory(string file_path) {
+    char *cstring = to_cstring(Default_Allocator, file_path);
+    SetCurrentDirectoryA(cstring);
+    free_cstring(Default_Allocator, cstring);
+}
+
+string os_get_working_directory() {
+    u8 path[MAX_PATH];
+    auto path_length = GetCurrentDirectoryA(MAX_PATH, (LPSTR) path);
+    return make_string(Default_Allocator, path, path_length);
+}
+
+string os_get_executable_directory() {
+    u8 path[MAX_PATH];
+    auto path_length  = GetModuleFileNameA(null, (LPSTR) path, MAX_PATH);
+    string path_view  = string_view(path, path_length);
+    s64 folder_length = os_search_path_for_directory_slash_reverse(path_view);
+    if(folder_length == -1) folder_length = path_view.count;
+    return make_string(Default_Allocator, path, folder_length);
+}
+
+
 
 /* -------------------------------------------------- Timing -------------------------------------------------- */
 
