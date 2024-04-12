@@ -58,7 +58,7 @@ string Ascii_Parser::read_string() {
 u8 Ascii_Parser::read_u8() {
     string _string = this->read_string();
     b8 success;
-	u8 value = string_to_int(_string, &success);
+	u8 value = (u8) string_to_int(_string, &success);
 	return value;
 }
 
@@ -158,6 +158,24 @@ s64 Binary_Parser::read_s64() {
 	return value;
 }
 
+f32 Binary_Parser::read_f32() {
+	f32 *pointer = (f32 *) this->read(sizeof(f32));
+	f32 value = *pointer;
+#if !LITTLE_ENDIAN
+	byteswap4(&value);
+#endif
+	return value;
+}
+
+f64 Binary_Parser::read_f64() {
+	f64 *pointer = (f64 *) this->read(sizeof(f64));
+	f64 value = *pointer;
+#if !LITTLE_ENDIAN
+	byteswap8(&value);
+#endif
+	return value;
+}
+
 string Binary_Parser::read_string() {
 	s64 count = this->read_s64();
 	u8 *pointer = (u8 *) this->read(count);
@@ -251,6 +269,20 @@ void Binary_Writer::write_s64(s64 value) {
 	byteswap8(&value);
 #endif
 	this->write(&value, sizeof(s64));
+}
+
+void Binary_Writer::write_f32(f32 value) {
+#if !LITTLE_ENDIAN
+	byteswap4(&value);
+#endif
+	this->write(&value, sizeof(f32));
+}
+
+void Binary_Writer::write_f64(f64 value) {
+#if !LITTLE_ENDIAN
+	byteswap8(&value);
+#endif
+	this->write(&value, sizeof(f64));
 }
 
 void Binary_Writer::write_string(string value) {

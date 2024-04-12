@@ -439,8 +439,8 @@ u64 String_Builder::number_of_required_digits(f64 value) {
 void String_Builder::append_string_builder_format(String_Builder_Format format) {
 	if(format.prefix) {
 		switch(format.radix) {
-		case RADIX_binary: this->append("0b"_s); break;
-		case RADIX_hexadecimal: this->append("0x"_s); break;
+		case RADIX_binary: this->append_string("0b"_s); break;
+		case RADIX_hexadecimal: this->append_string("0x"_s); break;
 		}
 	}
 	
@@ -452,7 +452,7 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
 		// Print out leading zeros.
 		//
 		for(u64 i = required_digits; i < format.digits; ++i) {
-			this->append('0');
+			this->append_char('0');
 		}
 		
 		//
@@ -478,16 +478,16 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
 		//
 		if(value & 0x8000000000000000) { // value < 0
 			value = (u64) (- (s64) value);
-			this->append('-');
+			this->append_char('-');
 		} else if(format.prefix) {
-			this->append('+');
+			this->append_char('+');
 		}
 		
 		//
 		// Print out leading zeros.
 		//
 		for(u64 i = required_digits; i < format.digits; ++i) {
-			this->append('0');
+			this->append_char('0');
 		}
 
 		//
@@ -514,16 +514,16 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
 		//
 		if(value < 0) {
 			value = -value;
-			this->append('-');
+			this->append_char('-');
 		} else if(format.prefix) {
-			this->append('+');
+			this->append_char('+');
 		}
 
 		//
 		// Print out leading zeros.
 		//
 		for(u64 i = required_digits; i < format.digits; ++i) {
-			this->append('0');
+			this->append_char('0');
 		}
 
 		//
@@ -545,7 +545,7 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
 		// Print the decimal point.
 		//
 
-		this->append('.');
+		this->append_char('.');
 
 		//
 		// Print the fractional spaces.
@@ -564,9 +564,9 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
 
 void String_Builder::append_digit(u64 value) {
 	if(value >= 0 && value <= 9) {
-		this->append((char) (value + '0'));
+		this->append_char((char) (value + '0'));
 	} else if(value >= 10 && value <= 15) {
-		this->append((char) (value - 10 + 'a'));
+		this->append_char((char) (value - 10 + 'a'));
 	}
 }
 
@@ -577,68 +577,68 @@ void String_Builder::create(Allocator *allocator) {
 	this->total_count = 0;
 }
 
-void String_Builder::append(const char *s) {
-	s64 length = cstring_length(s);
-	u8 *pointer = this->grow(length);
-	memcpy(pointer, s, length);
-}
-
-void String_Builder::append(char *s) {
-	s64 length = cstring_length(s);
-	u8 *pointer = this->grow(length);
-	memcpy(pointer, s, length);
-}
-
-void String_Builder::append(string s) {
-	u8 *pointer = this->grow(s.count);
-	memcpy(pointer, s.data, s.count);
-}
-
-void String_Builder::append(char c) {
-	u8 *pointer = this->grow(1);
-	*pointer = c;
-}
-
-void String_Builder::append(s64 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
-}
-
-void String_Builder::append(s32 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
-}
-
-void String_Builder::append(s16 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
-}
-
-void String_Builder::append(s8 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
-}
-
-void String_Builder::append(u64 v) {
+void String_Builder::append_u8(u8 v) {
 	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
 }
 
-void String_Builder::append(u32 v) {
+void String_Builder::append_u16(u16 v) {
 	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
 }
 
-void String_Builder::append(u16 v) {
+void String_Builder::append_u32(u32 v) {
 	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
 }
 
-void String_Builder::append(u8 v) {
+void String_Builder::append_u64(u64 v) {
 	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
 }
 
-void String_Builder::append(f64 value) {
+void String_Builder::append_s8(s8 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+}
+
+void String_Builder::append_s16(s16 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+}
+
+void String_Builder::append_s32(s32 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+}
+
+void String_Builder::append_s64(s64 v) {
+	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+}
+
+void String_Builder::append_f32(f32 value) {
+	this->append_f64((f64) value);
+}
+
+void String_Builder::append_f64(f64 value) {
 	u64 _u64;
 	memcpy(&_u64, &value, sizeof(f64));
 	this->append_string_builder_format({ RADIX_floating_point, _u64, 1, 5, true, false });
 }
 
-void String_Builder::append(f32 value) {
-	this->append((f64) value);
+void String_Builder::append_char(char c) {
+	u8 *pointer = this->grow(1);
+	*pointer = c;
+}
+
+void String_Builder::append_string(const char *s) {
+	s64 length = cstring_length(s);
+	u8 *pointer = this->grow(length);
+	memcpy(pointer, s, length);
+}
+
+void String_Builder::append_string(char *s) {
+	s64 length = cstring_length(s);
+	u8 *pointer = this->grow(length);
+	memcpy(pointer, s, length);
+}
+
+void String_Builder::append_string(string s) {
+	u8 *pointer = this->grow(s.count);
+	memcpy(pointer, s.data, s.count);
 }
 
 string String_Builder::finish() {

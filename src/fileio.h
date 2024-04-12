@@ -39,6 +39,8 @@ struct Binary_Parser {
 	s16 read_s16();
 	s32 read_s32();
 	s64 read_s64();
+	f32 read_f32();
+	f64 read_f64();
 	string read_string();
 };
 
@@ -62,5 +64,7 @@ struct Binary_Writer {
 	void write_s16(s16 value);
 	void write_s32(s32 value);
 	void write_s64(s64 value);
+	void write_f32(f32 value);
+	void write_f64(f64 value);
 	void write_string(string value);
 };

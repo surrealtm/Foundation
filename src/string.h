@@ -117,21 +117,20 @@ struct String_Builder {
 
 	void create(Allocator *allocator);
 
-	// @Cleanup: Ah fuck it replace these with _type again...
-	void append(const char *s);
-	void append(char *s);
-	void append(string s);
-	void append(char c);
-	void append(s64 v);
-	void append(s32 v);
-	void append(s16 v);
-	void append(s8 v);
-	void append(u64 v);
-	void append(u32 v);
-	void append(u16 v);
-	void append(u8 v);
-	void append(f64 v);
-	void append(f32 v);
+	void append_u8(u8 v);
+	void append_u16(u16 v);
+	void append_u32(u32 v);
+	void append_u64(u64 v);
+	void append_s8(s8 v);
+	void append_s16(s16 v);
+	void append_s32(s32 v);
+	void append_s64(s64 v);
+	void append_f32(f32 v);
+	void append_f64(f64 v);
+	void append_char(char c);
+	void append_string(const char *s);
+	void append_string(char *s);
+	void append_string(string s);
 	
 	string finish();
 };
