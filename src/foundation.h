@@ -51,6 +51,7 @@ constexpr f32 MIN_F32 = -3.40282347e38F;
 #if BUILD_WIN32
 # define PRIu64 "lld"
 # define PRIx64 "llx"
+# define LITTLE_ENDIAN true
 #else
 # error "This platform is not supported."
 #endif

@@ -8,6 +8,7 @@ struct Allocator;
 typedef s64 Hardware_Time;
 
 void os_write_to_console(const char *format, ...);
+s64 os_search_path_for_directory_slash_reverse(string file_path);
 
 
 
@@ -27,6 +28,7 @@ void os_decommit_memory(void *base, u64 decommit_size);
 string os_read_file(Allocator *allocator, string file_path);
 void os_free_file_content(Allocator *allocator, string *file_content);
 b8 os_write_file(string file_path, string file_content, b8 append);
+b8 os_create_directory(string file_path);
 b8 os_delete_file(string file_path);
 b8 os_delete_directory(string file_path);
 b8 os_file_exists(string file_path);

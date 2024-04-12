@@ -1,20 +1,26 @@
 #include "foundation.h"
 #include "os_specific.h"
+#include "fileio.h"
 
 int main() {
-    printf("Starting...\n");
-
-    auto start = os_get_hardware_time();
-
-    for(int i = 0; i < 10; ++i) {
-        os_sleep(0.5);
+    {
+        Binary_Writer writer;
+        writer.create("data/test.txt"_s, 1024);
+        writer.write_s64(5);
+        writer.write_u8(10);
+        writer.write_string("Hello World, how are you?"_s);
+        writer.destroy();
     }
-    
-    auto end = os_get_hardware_time();
 
-    Time_Unit unit = Seconds;
-    
-    printf("Took: %f%s\n", os_convert_hardware_time(end - start, unit), time_unit_suffix(unit));
-    
+    {
+        Binary_Parser parser;
+        parser.create_from_file("data/test.txt"_s);
+        s64 _s64 = parser.read_s64();
+        u8 _u8 = parser.read_u8();
+        string _string = parser.read_string();
+        parser.destroy_file_data();
+
+        printf("Data: %lld, %u, %.*s\n", _s64, _u8, _string.count, _string.data);
+    }
     return 0;
 }

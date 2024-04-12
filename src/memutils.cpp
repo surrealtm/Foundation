@@ -544,3 +544,19 @@ Memory_Unit convert_to_biggest_memory_unit(s64 bytes, f32 *decimal) {
 		
 	return unit;
 }
+
+
+void byteswap2(void *value) {
+	u8 *bytes = (u8 *) value;
+	*(u16 *) value = (bytes[0] << 8) | (bytes[1]);
+}
+
+void byteswap4(void *value) {
+	u8 *bytes = (u8 *) value;
+	*(u32 *) value = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | (bytes[3]);
+}
+
+void byteswap8(void *value) {
+	u8 *bytes = (u8 *) value;
+	*(u64 *) value =  ((u64) bytes[0] << 56ULL) | ((u64) bytes[1] << 48ULL) | ((u64) bytes[2] << 40ULL) | ((u64) bytes[3] << 32ULL) | ((u64) bytes[4] << 24ULL) | ((u64) bytes[5] << 16ULL) | ((u64) bytes[6] << 8ULL) | ((u64) bytes[7]);
+}

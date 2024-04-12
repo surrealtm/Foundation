@@ -25,6 +25,14 @@ void win32_free_last_error_string(char *string) {
 	if(string) LocalFree(string);
 }
 
+s64 os_search_path_for_directory_slash_reverse(string file_path) {
+    for(s64 i = file_path.count - 1; i >= 0; --i) {
+        if(file_path.data[i] == '\\' || file_path.data[i] == '/') return i;
+    }
+
+    return -1;
+}
+
 
 void os_write_to_console(const char *format, ...) {
     va_list args;
@@ -161,6 +169,20 @@ b8 os_write_file(string file_path, string file_content, b8 append) {
 
 	free_cstring(Default_Allocator, cstring);
 	return success;
+}
+
+b8 os_create_directory(string file_path) {
+    s64 parent_folder_end = os_search_path_for_directory_slash_reverse(file_path);
+    if(parent_folder_end != -1) {
+        string parent_folder = substring_view(file_path, 0, parent_folder_end);
+        if(!os_create_directory(parent_folder)) return false;
+    }
+        
+    char *path_cstring = to_cstring(Default_Allocator, file_path);
+    b8 result = CreateDirectoryA(path_cstring, null);
+    free_cstring(Default_Allocator, path_cstring);
+
+    return result;
 }
 
 b8 os_delete_file(string file_path) {

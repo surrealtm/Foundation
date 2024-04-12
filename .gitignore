@@ -37,3 +37,6 @@
 *.vcxproj*
 x64/*
 Foundation/*
+
+# Emacs
+.emacs.*
