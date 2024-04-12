@@ -62,9 +62,142 @@ u8 Ascii_Parser::read_u8() {
 	return value;
 }
 
+u16 Ascii_Parser::read_u16() {
+    string _string = this->read_string();
+    b8 success;
+    u16 value = (u16) string_to_int(_string, &success);
+    return value;
+}
+
+u32 Ascii_Parser::read_u32() {
+    string _string = this->read_string();
+    b8 success;
+    u32 value = (u32) string_to_int(_string, &success);
+    return value;
+}
+
+u64 Ascii_Parser::read_u64() {
+    string _string = this->read_string();
+    b8 success;
+    u64 value = (u64) string_to_int(_string, &success);
+    return value;
+}
+
+s8 Ascii_Parser::read_s8() {
+    string _string = this->read_string();
+    b8 success;
+    s8 value = (s8) string_to_int(_string, &success);
+    return value;
+}
+
+s16 Ascii_Parser::read_s16() {
+    string _string = this->read_string();
+    b8 success;
+    s16 value = (s16) string_to_int(_string, &success);
+    return value;
+}
+
+s32 Ascii_Parser::read_s32() {
+    string _string = this->read_string();
+    b8 success;
+    s32 value = (s32) string_to_int(_string, &success);
+    return value;
+}
+
+s64 Ascii_Parser::read_s64() {
+    string _string = this->read_string();
+    b8 success;
+    s64 value = (s64) string_to_int(_string, &success);
+    return value;
+}
+
+f32 Ascii_Parser::read_f32() {
+    string _string = this->read_string();
+    b8 success;
+    f32 value = string_to_float(_string, &success);
+    return value;
+}
+
+f64 Ascii_Parser::read_f64() {
+    string _string = this->read_string();
+    b8 success;
+    f64 value = string_to_double(_string, &success);
+    return value;
+}
 
 
-/* ---------------------------------------------- Binary_Writer ---------------------------------------------- */
+
+/* ----------------------------------------------- Ascii_Writer ----------------------------------------------- */
+
+void Ascii_Writer::create(string file_path, s64 buffer_size) {
+    this->file_path = copy_string(Default_Allocator, file_path);
+	this->builder.create(Default_Allocator);
+}
+
+void Ascii_Writer::destroy() {
+    this->flush();
+    deallocate_string(Default_Allocator, &this->file_path);
+    this->builder.destroy();
+}
+
+void Ascii_Writer::flush() {
+    s64 directory_end = os_search_path_for_directory_slash_reverse(this->file_path);
+	if(directory_end != -1) os_create_directory(substring_view(this->file_path, 0, directory_end));
+
+	b8 append = false;
+	for(String_Builder::Block *block = &this->builder.first; block != NULL; block = block->next) {
+		os_write_file(this->file_path, string_view(block->data, block->count), append);
+		append = true;
+	}
+}
+
+void Ascii_Writer::write_string(string data) {
+	this->builder.append_string(data);
+}
+
+void Ascii_Writer::write_u8(u8 value) {
+    this->builder.append_u8(value);
+}
+
+void Ascii_Writer::write_u16(u16 value) {
+    this->builder.append_u16(value);
+}
+
+void Ascii_Writer::write_u32(u32 value) {
+    this->builder.append_u32(value);
+}
+
+void Ascii_Writer::write_u64(u64 value) {
+    this->builder.append_u64(value);
+}
+
+void Ascii_Writer::write_s8(s8 value) {
+    this->builder.append_s8(value);
+}
+
+void Ascii_Writer::write_s16(s16 value) {
+    this->builder.append_s16(value);
+}
+
+void Ascii_Writer::write_s32(s32 value) {
+    this->builder.append_s32(value);
+}
+
+void Ascii_Writer::write_s64(s64 value) {
+    this->builder.append_s64(value);
+}
+
+void Ascii_Writer::write_f32(f32 value) {
+    this->builder.append_f32(value);
+}
+
+void Ascii_Writer::write_f64(f64 value) {
+    this->builder.append_f64(value);
+}
+
+
+
+/* ---------------------------------------------- Binary_Parser ---------------------------------------------- */
 
 void Binary_Parser::create_from_string(string data) {
 	this->data = data;

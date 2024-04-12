@@ -96,9 +96,11 @@ struct String_Builder_Format {
 };
 
 struct String_Builder {
+	const static s64 BLOCK_SIZE = 256;
+	
 	struct Block {
 		Block *next;
-		u8 *data;
+		u8 data[BLOCK_SIZE];
 		s64 count;
 	};
 
@@ -116,6 +118,7 @@ struct String_Builder {
 	void append_digit(u64 digit);
 
 	void create(Allocator *allocator);
+	void destroy(); // This destroys all underlying data of the string builder. This might just pull the rug under the finished()'ed string!
 
 	void append_u8(u8 v);
 	void append_u16(u16 v);

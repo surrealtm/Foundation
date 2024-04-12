@@ -346,7 +346,7 @@ f32 string_to_float(string input, b8 *success) {
 /* ---------------------------------------------- String Builder ---------------------------------------------- */
 
 u8 *String_Builder::grow(s64 count) {
-	u8 *next_content_block = (u8 *) this->allocator->allocate(count);
+	assert(count < BLOCK_SIZE);
 
 	if(!this->current) {
 		// This is the first time the string builder has been used. Set up the
@@ -354,11 +354,12 @@ u8 *String_Builder::grow(s64 count) {
 		// strings.
 		this->current = &this->first;
 		this->current->next = null;
-		this->current->data = next_content_block;
 		this->current->count = 0;
 	}
 
-	if(this->current->data + this->current->count != next_content_block) {
+	u8 *pointer;
+
+	if(this->current->count + count > BLOCK_SIZE) {
 	    // The allocator could not provide us with continous data for the current block,
         // so we need to add another block entry into our list entry.
         // We don't use the provided allocator for these blocks since that would mean we
@@ -366,19 +367,20 @@ u8 *String_Builder::grow(s64 count) {
         // current content, and content in the future...)
 		Block *block = (Block *) Default_Allocator->allocate(sizeof(Block));
 		block->next  = null;
-		block->count = count;
-		block->data  = next_content_block;
+		block->count = 0;
+		pointer = block->data;;
 		this->current->next = block;
 		this->current       = block;
 	} else {
 		// The next content block is continuous to the previous block, so we can just
 		// append the new data to the block.
+		pointer = &this->current->data[this->current->count];
 		this->current->count += count;
 	}
 
 	this->total_count += count;
 	
-	return next_content_block;
+	return pointer;
 }
 
 u64 String_Builder::radix_value(Radix radix, u64 index) {
@@ -577,6 +579,15 @@ void String_Builder::create(Allocator *allocator) {
 	this->total_count = 0;
 }
 
+void String_Builder::destroy() {
+	Block *block = this->first.next;
+	while(block) {
+		Block *next_block = block->next;
+		Default_Allocator->deallocate(block);
+		block = next_block;
+	}
+}
+
 void String_Builder::append_u8(u8 v) {
 	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
 }
@@ -652,12 +663,13 @@ string String_Builder::finish() {
 			memcpy(&result.data[offset], block->data, block->count);
 			offset += block->count;
 
-			this->allocator->deallocate(block->data);
+			Block *next_block = block->next;
 			if(block != &this->first) Default_Allocator->deallocate(block);
-
-			block = block->next;
+			block = next_block;
 		}
 	
+		this->first.next = NULL;
+
 		return result;
 	} else {
 		// There was only ever one block of data, meaning this block is already our complete
