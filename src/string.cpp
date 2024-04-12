@@ -1,3 +1,6 @@
+#include <intrin.h> // For _addcarry_u64...
+#include <fenv.h> // For feclearexcept...
+
 #include "string.h"
 #include "memutils.h"
 #include "os_specific.h"
@@ -156,6 +159,186 @@ b8 string_ends_with(string lhs, string rhs) {
 	if(rhs.count > lhs.count) return false;
 
 	return compare_strings(substring_view(lhs, lhs.count - rhs.count, lhs.count), rhs);
+}
+
+
+
+/* -------------------------------------------- String Conversion -------------------------------------------- */
+
+s64 string_to_int(string input, b8 *success) {
+    if(input.count == 0) {
+        *success = false;
+        return 0;
+    }
+
+    s64 sign = 1;
+    s64 radix = 10;
+    s64 number_start = 0;
+    b8 valid = true;
+    
+    //
+    // Parse a potential sign character.
+    //
+    if(input[number_start] == '-') {
+        sign = -1;
+        number_start += 1;
+    } else if(input[number_start] == '+') {
+        number_start += 1;
+    }
+
+    //
+    // Parse a potential radix specifier.
+    //
+    if(input.count >= 2 && input[number_start] == '0' && (input[number_start + 1] == 'x' || input[number_start + 1] == 'X')) {
+        radix = 16;
+        number_start += 2;
+    } else if(input.count >= 2 && input[number_start] == '0' && (input[number_start + 1] == 'b' || input[number_start + 1] == 'B')) {
+        radix = 2;
+        number_start += 2;
+    }
+
+    //
+    // Ignore leading zeros.
+    //
+    while(number_start < input.count && input[number_start] == '0') ++number_start;
+
+    //
+    // Parse each digit and sum the result together.
+    //
+    char character;
+    u64 character_decimal_value, overflow_flag;
+    u64 character_power = 1, result = 0;
+	s64 character_index = 0;
+    s64 character_count = input.count - number_start;
+        
+    while(valid && character_index < character_count) {
+        character = input[input.count - character_index - 1];
+
+        switch(radix) {
+        case 2:
+            if(character >= '0' && character <= '1') {
+                character_decimal_value = character - '0';
+            } else {
+                valid = false;
+            }
+            break;
+
+        case 10:
+            if(character >= '0' && character <= '9') {
+                character_decimal_value = character - '0';
+            } else {
+                valid = false;
+            }
+            break;
+
+        case 16:
+            if(character >= '0' && character <= '9') {
+                character_decimal_value = character - '0';
+            } else if(character >= 'a' && character <= 'f') {
+                character_decimal_value = character - 'a' + 10;
+            } else if(character >= 'A' && character <= 'F') {
+                character_decimal_value = character - 'A' + 10;
+            } else {
+                valid = false;
+            }
+            break;
+        }
+
+        if(!valid) break;
+        
+        character_decimal_value = _mulx_u64(character_decimal_value, character_power, &overflow_flag);
+        assert(!overflow_flag); // Assume 'decimal * power' can be represented properly.
+
+        overflow_flag = _addcarry_u64(0, result, character_decimal_value, &result);
+        if(overflow_flag) {
+            // 'result + decimal * power' did not fit into 64 bits.
+            valid = false;
+            break;
+        }
+
+        character_power = character_power * radix; // Assume 'character_power * radix' can be represented properly.
+
+		++character_index;
+	}
+
+	*success = valid;
+    return result * sign;
+}
+
+f64 string_to_double(string input, b8 *success) {
+    const f64 radix = 10;
+    f64 sign = 1;
+    b8 valid = true;
+    
+    s64 number_start = 0;
+    
+    //
+    // Parse a potential sign character.
+    //
+    if(input[number_start] == '-') {
+        sign = -1;
+        number_start += 1;
+    } else if(input[number_start] == '+') {
+        number_start += 1;
+    }
+
+    //
+    // Ignore leading zeros.
+    //
+    while(number_start < input.count && input[number_start] == '0') ++number_start;
+
+    //
+    // Find the dot seperating the whole from the fractional part.
+    //
+    s64 dot_index = search_string(input, '.');
+    
+    //
+    // Parse the whole part back to front.
+    //
+    char character;
+    s64 character_index = 0;
+    f64 character_decimal_value, character_power = 1, result = 0;
+    s64 whole_part_size = (dot_index != -1 ? dot_index : input.count);
+    
+    while(character_index + number_start < whole_part_size) {
+        character = input[whole_part_size - character_index - 1];
+        character_decimal_value = (f64) (character - '0') * character_power;
+
+        feclearexcept(FE_ALL_EXCEPT);
+        result += character_decimal_value;
+        if(fetestexcept(FE_OVERFLOW)) valid = false;
+
+        character_power = character_power * radix;
+        ++character_index;
+    }
+
+    if(dot_index != -1) {
+        //
+        // Parse the fractional part front to back.
+        //
+        character_power = 0.1;
+        character_index = dot_index + 1;
+        
+        while(character_index < input.count) {
+            character = input[character_index];
+            character_decimal_value = (f64) (character - '0') * character_power;
+
+            feclearexcept(FE_ALL_EXCEPT);
+            result += character_decimal_value;
+            if(fetestexcept(FE_OVERFLOW)) valid = false;
+
+            character_power = character_power / radix;
+            ++character_index;
+        }
+    }
+
+    *success = valid;
+	return result * sign;
+}
+
+f32 string_to_float(string input, b8 *success) {
+    f64 _f64 = string_to_double(input, success);
+    return (f32) _f64;
 }
 
 

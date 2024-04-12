@@ -1,5 +1,25 @@
 #include "foundation.h"
-#include "os_specific.h"
+#include "string.h"
+
+
+/* ----------------------------------------------- Ascii Files ----------------------------------------------- */
+
+struct Ascii_Parser {
+    string data;
+    s64 position;
+
+    void create_from_string(string data);
+    void create_from_buffer(u8 *data, s64 size);
+    void create_from_file(string file_path);
+    void destroy_file_data();
+
+    string read_string();
+    u8 read_u8();
+};
+
+
+
+/* ----------------------------------------------- Binary Files ----------------------------------------------- */
 
 struct Binary_Parser {
 	string data;

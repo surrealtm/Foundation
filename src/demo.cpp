@@ -3,24 +3,14 @@
 #include "fileio.h"
 
 int main() {
-    {
-        Binary_Writer writer;
-        writer.create("data/test.txt"_s, 1024);
-        writer.write_s64(5);
-        writer.write_u8(10);
-        writer.write_string("Hello World, how are you?"_s);
-        writer.destroy();
-    }
+    f64 result;
+    b8 valid;
+    result = string_to_double("+2350.001578"_s, &valid);
 
-    {
-        Binary_Parser parser;
-        parser.create_from_file("data/test.txt"_s);
-        s64 _s64 = parser.read_s64();
-        u8 _u8 = parser.read_u8();
-        string _string = parser.read_string();
-        parser.destroy_file_data();
-
-        printf("Data: %lld, %u, %.*s\n", _s64, _u8, _string.count, _string.data);
+    if(valid) {
+        printf("Result: %f\n", result);
+    } else {
+        printf("(Invalid)\n");
     }
     return 0;
 }

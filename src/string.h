@@ -23,7 +23,7 @@ struct string {
 	s64 count;
 	u8 *data;
 
-	u8 operator[](s64 index) { assert(index >= 0 && index < this->count); return this->data[index]; }
+	u8 &operator[](s64 index) { assert(index >= 0 && index < this->count); return this->data[index]; }
 };
 
 string operator "" _s(const char *literal, size_t size);
@@ -60,6 +60,14 @@ s64 search_string_reverse(string _string, u8 _char);
 b8 compare_strings(string lhs, string rhs);
 b8 string_starts_with(string lhs, string rhs);
 b8 string_ends_with(string lhs, string rhs);
+
+
+
+/* -------------------------------------------- String Conversion -------------------------------------------- */
+
+s64 string_to_int(string input, b8 *success);
+f64 string_to_double(string input, b8 *success);
+f32 string_to_float(string input, b8 *success);
 
 
 
@@ -109,6 +117,7 @@ struct String_Builder {
 
 	void create(Allocator *allocator);
 
+	// @Cleanup: Ah fuck it replace these with _type again...
 	void append(const char *s);
 	void append(char *s);
 	void append(string s);

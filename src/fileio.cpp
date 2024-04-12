@@ -1,5 +1,66 @@
 #include "fileio.h"
 #include "memutils.h"
+#include "os_specific.h"
+
+
+
+/* -------------------------------------------- Helper Procedures -------------------------------------------- */
+
+b8 __is_alpha_character(u8 c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_');
+}
+
+
+
+/* ----------------------------------------------- Ascii_Parser ----------------------------------------------- */
+
+void Ascii_Parser::create_from_string(string data) {
+    this->data = data;
+    this->position = 0;
+}
+
+void Ascii_Parser::create_from_buffer(u8 *data, s64 size) {
+    this->data = string_view(data, size);
+    this->position = 0;
+}
+
+void Ascii_Parser::create_from_file(string file_path) {
+    this->data = os_read_file(Default_Allocator, file_path);
+    this->position = 0;
+}
+
+void Ascii_Parser::destroy_file_data() {
+    deallocate_string(Default_Allocator, &this->data);
+}
+
+string Ascii_Parser::read_string() {
+    //
+    // Skip empty characters.
+    //
+    while(this->position < this->data.count && this->data[this->position] >= 0 && this->data[this->position] <= 32) {
+        ++this->position;
+    }
+
+    //
+    // Read in the string.
+    //
+    if(this->position == this->data.count) return ""_s;
+
+    s64 string_start = this->position;
+
+    while(this->position < this->data.count && __is_alpha_character(this->data[this->position])) {
+        ++this->position;
+    }
+
+    return string_view(&this->data[string_start], this->position - string_start);
+}
+
+u8 Ascii_Parser::read_u8() {
+    string _string = this->read_string();
+    b8 success;
+	u8 value = string_to_int(_string, &success);
+	return value;
+}
 
 
 
