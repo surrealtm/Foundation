@@ -183,7 +183,7 @@ struct Resizable_Array {
 	struct Iterator {
         T *pointer;
         
-		bool operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
+		b8 operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
         Iterator &operator++() { ++this->pointer; return *this; }
         
         T *operator*()  { return this->pointer; }
@@ -195,18 +195,19 @@ struct Resizable_Array {
 	s64 count     = 0;
 	s64 allocated = 0;
 	
-	void maybe_grow() {
-		if(this->allocated == 0) {
+	void maybe_grow(bool force = false) {
+		if(!this->data) {
 			this->allocated = Resizable_Array::INITIAL_SIZE;
 			this->data      = (T *) this->allocator->allocate(this->allocated * sizeof(T));
-		} else if(this->count == this->allocated) {
+		} else if(force || this->count == this->allocated) {
 			this->allocated *= 2;
 		
 			if(!this->allocator->_reallocate_procedure) {
 				// Not all allocators actually provide a reallocation strategy (e.g. Memory Arenas). In that case,
-				// allocate new memory manually, copy the existing data and if the allocator does have a deallocation
-				// strategy, free the previous pointer. If the allocator does not have a deallocation, then it is
-				// most likely some sort of scratch allocator that frees all memory at once.
+				// allocate new memory manually, copy the existing data and if the allocator does have a
+                // deallocation strategy, free the previous pointer. If the allocator does not have a
+                // deallocation, then it is most likely some sort of scratch allocator that frees all memory at
+                // once.
 				T *new_pointer = (T *) this->allocator->allocate(this->allocated * sizeof(T));
 				memcpy(new_pointer, this->data, this->count * sizeof(T));
 				if(this->allocator->_deallocate_procedure) this->allocator->deallocate(this->data);
@@ -224,9 +225,10 @@ struct Resizable_Array {
 
 			if(!this->allocator->_reallocate_procedure) {
 				// Not all allocators actually provide a reallocation strategy (e.g. Memory Arenas). In that case,
-				// allocate new memory manually, copy the existing data and if the allocator does have a deallocation
-				// strategy, free the previous pointer. If the allocator does not have a deallocation, then it is
-				// most likely some sort of scratch allocator that frees all memory at once.
+				// allocate new memory manually, copy the existing data and if the allocator does have a
+                // deallocation strategy, free the previous pointer. If the allocator does not have a
+                // deallocation, then it is most likely some sort of scratch allocator that frees all memory at
+                // once.
 				T *new_pointer = (T *) this->allocator->allocate(this->allocated * sizeof(T));
 				memcpy(new_pointer, this->data, this->count * sizeof(T));
 				if(this->allocator->_deallocate_procedure) this->allocator->deallocate(this->data);
@@ -250,13 +252,32 @@ struct Resizable_Array {
 		++this->count;
 	}
 
+    void insert(s64 index, T const &data) {
+		assert(index >= 0 && index <= this->count);
+        this->maybe_grow();
+        if(index < this->count) memcpy(&this->data[index + 1], &this->data[index], (this->count - index) * sizeof(T));
+        this->data[index] = data;
+        ++this->count;
+    }
+    
+    void reserve(s64 count) {
+		assert(count >= 0);
+        if(this->allocated == 0) this->allocated = Resizable_Array::INITIAL_SIZE;
+        s64 least_size = this->allocated + count;
+        while(this->allocated < least_size) this->allocated *= 2;
+        this->maybe_grow(true);
+    }
+    
 	void remove(s64 index) {
+		assert(index >= 0 && index < this->count);
 		memcpy(&this->data[index], &this->data[index + 1], (this->count - index) * sizeof(T));
 		--this->count;
 		this->maybe_shrink();
 	}
 
 	void remove_range(s64 first_to_remove, s64 last_to_remove) {
+		assert(first_to_remove >= 0 && first_to_remove < this->count);
+		assert(last_to_remove >= 0 && last_to_remove < this->count);
 		memcpy(&this->data[first_to_remove], &this->data[last_to_remove + 1], (this->count - last_to_remove - 1) * sizeof(T));
 		this->count -= (last_to_remove - first_to_remove) + 1;
 		this->maybe_shrink();
