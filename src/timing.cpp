@@ -14,7 +14,6 @@
 #define __TIMING_PRINT_EXCL_OFFSET 100
 #define __TIMING_PRINT_COUN_OFFSET 120
 
-#define _tmPrintPaddingTo(target, current) printf("%-*s", ((target) - (current)), "")
 #define _tmPrintRepeated(char, count) for(s64 i = 0; i < count; ++i) printf("%c", char);
 
 struct _tm_Timeline_Entry {
@@ -54,6 +53,21 @@ struct Internal_Timing_Keeper {
 static Internal_Timing_Keeper __timing;
 
 
+
+static
+int _tmPrintPaddingTo(s64 target, s64 current) {
+    int total = 0;
+
+    if(target >= current) {
+        total = printf("%-*s", (s32) (target - current), "");
+    } else {
+        for(s64 i = 0; i < (current - target) + 2; ++i) printf("\b");
+        printf("  ");
+        total = target - current;
+    }
+
+    return total;
+}
 
 static
 void _tmInternalDestroySummaryTable(b8 reallocate) {
@@ -125,7 +139,7 @@ Hardware_Time _tmInternalCalculateHardwareTimeOfChildren(_tm_Timeline_Entry *ent
 static
 Time_Unit _tmInternalGetBestTimeUnit(Hardware_Time hwtime) {
     Time_Unit unit = Nanoseconds;
-    while(unit < Minutes && os_convert_hardware_time(hwtime, unit) > 1000) unit = (Time_Unit) (unit + 1);
+    while(unit < Minutes && os_convert_hardware_time(hwtime, unit) >= 1000) unit = (Time_Unit) (unit + 1);
     return unit;
 }
 

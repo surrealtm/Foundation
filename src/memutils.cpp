@@ -111,6 +111,8 @@ void *heap_allocate(void *data /* = null */, u64 size) {
 	pointer = malloc(size);
 #endif
 
+    memset(pointer, 0, size);
+    
 	return pointer;
 }
 
@@ -130,7 +132,9 @@ void heap_deallocate(void *data /* = null */, void *pointer) {
 }
 
 void *heap_reallocate(void *data /* = null */, void *old_pointer, u64 new_size) {
-	return realloc(old_pointer, new_size);
+	void *pointer = realloc(old_pointer, new_size);
+    memset(pointer, 0, new_size);
+    return pointer;
 }
 
 u64 heap_query_allocation_size(void *data /* = null */, void *pointer) {
