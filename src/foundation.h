@@ -49,7 +49,8 @@ constexpr f32 MAX_F32 = 3.40282347e38F;
 constexpr f32 MIN_F32 = -3.40282347e38F;
 
 #if FOUNDATION_WIN32
-# define PRIu64 "lld"
+# define PRIu64 "llu"
+# define PRId64 "lld"
 # define PRIx64 "llx"
 # define LITTLE_ENDIAN true
 #else
@@ -62,8 +63,15 @@ static_assert(sizeof(u32) == 4 && sizeof(s32) == 4, "Invalid size for u32 / s32.
 static_assert(sizeof(u64) == 8 && sizeof(s64) == 8, "Invalid size for u64 / s64.");
 static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.");
 
+
+
+/* ---------------------------------------------- Macro Helpers ---------------------------------------------- */
+
 #define __INTERNAL_STRINGIFY(EXP) #EXP
 #define STRINGIFY(EXP) __INTERNAL_STRINGIFY(EXP)
+
+#define __INTERNAL_CONCAT(x,y) x##y
+#define CONCAT(x,y) __INTERNAL_CONCAT(x,y)
 
 #define report_error(format, ...) os_write_to_console(__FILE__ "," STRINGIFY(__LINE__) ": " format, __VA_ARGS__)
 
@@ -72,6 +80,31 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 #define min(lhs, rhs) ((lhs) < (rhs) ? (lhs) : (rhs))
 #define max(lhs, rhs) ((lhs) > (rhs) ? (lhs) : (rhs))
 
+
+
+/* ----------------------------------------------- Defer Helper ----------------------------------------------- */
+
+template<typename T>
+struct ExitScope {
+    T lambda;
+    ExitScope(T lambda):lambda(lambda){}
+    ~ExitScope(){lambda();}
+    ExitScope(const ExitScope&);
+  private:
+    ExitScope& operator =(const ExitScope&);
+};
+ 
+class ExitScopeHelp {
+  public:
+    template<typename T>
+        ExitScope<T> operator+(T t){ return t;}
+};
+ 
+#define defer const auto& CONCAT(defer__, __LINE__) = ExitScopeHelp() + [&]()
+
+
+
+/* ---------------------------------------------- Standard Units ---------------------------------------------- */
 
 enum Time_Unit {
     Nanoseconds,

@@ -292,7 +292,7 @@ struct Resizable_Array {
 	}
 
     Iterator begin() { return Iterator { this->data }; }
-	Iterator end() { return Iterator { this->data + this->count + 1 }; }
+	Iterator end() { return Iterator { this->data + this->count }; }
 };
 
 template<typename T>

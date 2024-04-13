@@ -1,7 +1,7 @@
 #pragma once
 
 #include "foundation.h"
-#include "string.h"
+#include "strings.h"
 
 struct Allocator;
 

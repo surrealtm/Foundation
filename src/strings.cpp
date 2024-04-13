@@ -1,9 +1,10 @@
-#include <intrin.h> // For _addcarry_u64...
-#include <fenv.h> // For feclearexcept...
-
-#include "string.h"
+#include "strings.h"
 #include "memutils.h"
 #include "os_specific.h"
+
+#include <intrin.h> // For _addcarry_u64...
+#include <fenv.h> // For feclearexcept...
+#include <string.h> // For strcmp
 
 string operator "" _s(const char *literal, size_t size) {
 	string _string;
@@ -50,6 +51,10 @@ char *to_cstring(Allocator *allocator, string _string) {
 
 void free_cstring(Allocator *allocator, char *cstring) {
 	allocator->deallocate(cstring);
+}
+
+b8 compare_cstrings(char const *lhs, char const *rhs) {
+    return strcmp(lhs, rhs) == 0;
 }
 
 
@@ -159,6 +164,38 @@ b8 string_ends_with(string lhs, string rhs) {
 	if(rhs.count > lhs.count) return false;
 
 	return compare_strings(substring_view(lhs, lhs.count - rhs.count, lhs.count), rhs);
+}
+
+
+u64 string_hash(string input) {
+    // fnv1a_64 hash
+    u64 prime = 1099511628211; 
+    u64 offset = 14695981039346656037U;
+    
+    u64 hash = offset;
+    
+    for(s64 i = 0; i < input.count; ++i) {
+        hash ^= input.data[i];
+        hash *= prime;
+    }
+    
+    return hash;
+}
+
+u64 string_hash(char const *input) {
+    // fnv1a_64 hash
+    u64 prime = 1099511628211; 
+    u64 offset = 14695981039346656037U;
+    
+    u64 hash = offset;
+
+    while(*input) {
+        hash ^= *input;
+        hash *= prime;
+        ++input;
+    }
+    
+    return hash;
 }
 
 

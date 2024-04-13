@@ -37,6 +37,7 @@ s64 cstring_length(const char *cstring);
 string from_cstring(Allocator *allocator, char *cstring);
 char *to_cstring(Allocator *allocator, string _string);
 void free_cstring(Allocator *allocator, char *cstring);
+b8 compare_cstrings(char const *lhs, char const *rhs);
 
 
 
@@ -61,6 +62,8 @@ b8 compare_strings(string lhs, string rhs);
 b8 string_starts_with(string lhs, string rhs);
 b8 string_ends_with(string lhs, string rhs);
 
+u64 string_hash(string input);
+u64 string_hash(char const *input);
 
 
 /* -------------------------------------------- String Conversion -------------------------------------------- */

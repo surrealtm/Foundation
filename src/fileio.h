@@ -1,5 +1,5 @@
 #include "foundation.h"
-#include "string.h"
+#include "strings.h"
 
 
 /* ----------------------------------------------- Ascii Files ----------------------------------------------- */
