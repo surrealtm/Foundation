@@ -14,6 +14,8 @@
 #define __TIMING_PRINT_EXCL_OFFSET 100
 #define __TIMING_PRINT_COUN_OFFSET 120
 
+#define __TIMING_MAX_COLORS 32
+
 #define _tmPrintRepeated(char, count) for(s64 i = 0; i < count; ++i) printf("%c", char);
 
 struct _tm_Timeline_Entry {
@@ -26,6 +28,8 @@ struct _tm_Timeline_Entry {
     char const *source_string;
     Hardware_Time hwtime_start;
     Hardware_Time hwtime_end;
+    
+    u8 color_index;
 };
 
 struct _tm_Summary_Entry {
@@ -39,6 +43,10 @@ struct _tm_Summary_Entry {
     s64 count;
 };
 
+struct _tm_Color {
+    u8 r = 100, g = 100, b = 200;
+};
+
 struct _tm_State {
     Resizable_Array<_tm_Timeline_Entry> timeline;
     s64 head_index = MAX_S64;
@@ -49,6 +57,8 @@ struct _tm_State {
     
     _tm_Summary_Entry *summary_table = null;
     s64 summary_table_size = 0;
+
+    _tm_Color colors[__TIMING_MAX_COLORS];
 
     Resizable_Array<_tm_Summary_Entry*> sorted_summary;
 };
@@ -311,6 +321,10 @@ void _tmInternalBuildSortedSummary(Timing_Output_Sorting sorting) {
 
 /* -------------------------------------------- API Implementation -------------------------------------------- */
 
+void _tmSetColor(int color_index, u8 r, u8 g, u8 b) {
+    __timing.colors[color_index] = { r, g, b };
+}
+
 void _tmBegin() {
     _tmReset();
 }
@@ -327,7 +341,7 @@ void _tmDestroy() {
     __timing.sorted_summary.clear();
 }
 
-void _tmEnter(char const *procedure_name, char const *source_string) {    
+void _tmEnter(char const *procedure_name, char const *source_string, int color_index) {    
     s64 parent_index = __timing.head_index;
     __timing.head_index = __timing.timeline.count;
 
@@ -363,6 +377,7 @@ void _tmEnter(char const *procedure_name, char const *source_string) {
     entry->next_index        = MAX_S64;
     entry->first_child_index = MAX_S64;
     entry->last_child_index  = MAX_S64;
+    entry->color_index       = color_index;
     entry->hwtime_end        = 0;
     entry->hwtime_start      = os_get_hardware_time();
 }
@@ -481,6 +496,9 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
         data.timeline[i].relative_end    = (source->hwtime_end   - __timing.total_hwtime_start) / total_time;
         data.timeline[i].time_in_seconds = os_convert_hardware_time(source->hwtime_end - source->hwtime_start, Seconds);
         data.timeline[i].depth           = _tmInternalCalculateStackDepth(source);
+        data.timeline[i].r = __timing.colors[source->color_index].r;
+        data.timeline[i].g = __timing.colors[source->color_index].g;
+        data.timeline[i].b = __timing.colors[source->color_index].b;
     }
 
     //

@@ -4,11 +4,11 @@
 // Timing Macros.
 //
 
-#define tmBegin()    _tmBegin()
-#define tmFunction() _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__));  defer {_tmExit(); }
-#define tmFinish()   _tmFinish()
-#define tmZone(name) _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__));  defer {_tmExit(); }
-
+#define tmBegin()           _tmBegin()
+#define tmFunction(color)   _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__), color);  defer {_tmExit(); }
+#define tmFinish()          _tmFinish()
+#define tmZone(name, color) _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color);  defer {_tmExit(); }
+#define tmSetColor(index, r, g, b) _tmSetColor(index, r, g, b)
 
 //
 // Flags to modify the default output behaviour into the console.
@@ -39,6 +39,7 @@ struct Timing_Timeline_Entry {
     f64 relative_start, relative_end; // Relative to the entire time span, meaning in the interval [0,1]
     f64 time_in_seconds;
     s64 depth; // The vertical depth of the entry, representing the call stack depth
+    u8 r, g, b;
 };
 
 struct Timing_Summary_Entry {
@@ -62,10 +63,11 @@ struct Timing_Data {
 // Timing API. You should probably use the macros provided above.
 //
 
+void _tmSetColor(int index, u8 r, u8 g, u8 b);
 void _tmBegin();
 void _tmReset();
 void _tmDestroy();
-void _tmEnter(char const *procedure_name, char const *source_string);
+void _tmEnter(char const *procedure_name, char const *source_string, int color_index);
 void _tmExit();
 void _tmFinish();
 
