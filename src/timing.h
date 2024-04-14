@@ -6,11 +6,19 @@
 // Timing Macros.
 //
 
-#define tmBegin()           _tmBegin()
-#define tmFunction(color)   _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__), color);  defer {_tmExit(); }
-#define tmFinish()          _tmFinish()
-#define tmZone(name, color) _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color);  defer {_tmExit(); }
-#define tmSetColor(index, r, g, b) _tmSetColor(index, r, g, b)
+#if FOUNDATION_ENABLE_TIMING
+# define tmBegin()                  _tmBegin()
+# define tmFunction(color)          _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
+# define tmFinish()                 _tmFinish()
+# define tmZone(name, color)        _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
+# define tmSetColor(index, r, g, b) _tmSetColor(index, r, g, b)
+#else
+# define tmBegin()
+# define tmFunction(color)
+# define tmFinish()
+# define tmZone(name, color)
+# define tmSetColor(index, r, g, b)
+#endif
 
 //
 // Flags to modify the default output behaviour into the console.
@@ -38,16 +46,15 @@ enum Timing_Output_Sorting {
 
 struct Timing_Timeline_Entry {
     char const *name;
-    f64 relative_start, relative_end; // Relative to the entire time span, meaning in the interval [0,1]
-    f64 time_in_seconds;
+    s64 start_in_nanoseconds, end_in_nanoseconds;
     s64 depth; // The vertical depth of the entry, representing the call stack depth
     u8 r, g, b;
 };
 
 struct Timing_Summary_Entry {
     char const *name;
-    f64 inclusive_time_in_seconds;
-    f64 exclusive_time_in_seconds;
+    s64 inclusive_time_in_nanoseconds;
+    s64 exclusive_time_in_nanoseconds;
     s64 count;
 };
 
@@ -57,7 +64,7 @@ struct Timing_Data {
     Timing_Summary_Entry *summary;
     s64 summary_count;
 
-    f64 total_time_in_seconds; // To make it easier to port
+    s64 total_time_in_nanoseconds;
 };
 
 

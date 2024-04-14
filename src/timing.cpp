@@ -483,7 +483,7 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
     data.timeline = (Timing_Timeline_Entry *) Default_Allocator->allocate(data.timeline_count * sizeof(Timing_Timeline_Entry));
     data.summary  = (Timing_Summary_Entry *)  Default_Allocator->allocate(data.summary_count  * sizeof(Timing_Summary_Entry));
 
-    data.total_time_in_seconds = os_convert_hardware_time(__timing.total_hwtime_end - __timing.total_hwtime_start, Seconds);
+    data.total_time_in_nanoseconds = (s64) os_convert_hardware_time(__timing.total_hwtime_end - __timing.total_hwtime_start, Nanoseconds);
     
     //
     // Set up the timeline entries.
@@ -491,11 +491,10 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
     
     for(s64 i = 0; i < data.timeline_count; ++i) {
         auto *source = &__timing.timeline[i];
-        data.timeline[i].name            = source->procedure_name;
-        data.timeline[i].relative_start  = (source->hwtime_start - __timing.total_hwtime_start) / total_time;
-        data.timeline[i].relative_end    = (source->hwtime_end   - __timing.total_hwtime_start) / total_time;
-        data.timeline[i].time_in_seconds = os_convert_hardware_time(source->hwtime_end - source->hwtime_start, Seconds);
-        data.timeline[i].depth           = _tmInternalCalculateStackDepth(source);
+        data.timeline[i].name                 = source->procedure_name;
+        data.timeline[i].start_in_nanoseconds = (s64) os_convert_hardware_time(source->hwtime_start - __timing.total_hwtime_start, Nanoseconds);
+        data.timeline[i].end_in_nanoseconds   = (s64) os_convert_hardware_time(source->hwtime_end   - __timing.total_hwtime_start, Nanoseconds);
+        data.timeline[i].depth                = _tmInternalCalculateStackDepth(source);
         data.timeline[i].r = __timing.colors[source->color_index].r;
         data.timeline[i].g = __timing.colors[source->color_index].g;
         data.timeline[i].b = __timing.colors[source->color_index].b;
@@ -507,10 +506,10 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
 
     for(s64 i = 0; i < data.summary_count; ++i) {
         auto *source = __timing.sorted_summary[i];
-        data.summary[i].name                      = source->procedure_name;
-        data.summary[i].inclusive_time_in_seconds = os_convert_hardware_time(source->total_inclusive_hwtime, Seconds);
-        data.summary[i].exclusive_time_in_seconds = os_convert_hardware_time(source->total_exclusive_hwtime, Seconds);
-        data.summary[i].count                     = source->count;
+        data.summary[i].name                          = source->procedure_name;
+        data.summary[i].inclusive_time_in_nanoseconds = (s64) os_convert_hardware_time(source->total_inclusive_hwtime, Nanoseconds);
+        data.summary[i].exclusive_time_in_nanoseconds = (s64) os_convert_hardware_time(source->total_exclusive_hwtime, Nanoseconds);
+        data.summary[i].count                         = source->count;
     }
     
     return data;
