@@ -80,6 +80,15 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 #define min(lhs, rhs) ((lhs) < (rhs) ? (lhs) : (rhs))
 #define max(lhs, rhs) ((lhs) > (rhs) ? (lhs) : (rhs))
 
+#define BITWISE(T)                                                      \
+    inline T  operator| (T a, T b)  { return (T)((int) a | (int) b); }; \
+    inline T  operator& (T a, T b)  { return (T)((int) a & (int) b); }; \
+    inline T  operator^ (T a, T b)  { return (T)((int) a ^ (int) b); }; \
+    inline T  operator~ (T a)       { return (T)(~((int) a)); };        \
+    inline T &operator|=(T &a, T b) { a = a | b; return a; };           \
+    inline T &operator&=(T &a, T b) { a = a & b; return a; };           \
+    inline T &operator^=(T &a, T b) { a = a ^ b; return a; };   
+
 
 
 /* ----------------------------------------------- Defer Helper ----------------------------------------------- */
@@ -89,15 +98,12 @@ struct ExitScope {
     T lambda;
     ExitScope(T lambda):lambda(lambda){}
     ~ExitScope(){lambda();}
-    ExitScope(const ExitScope&);
-  private:
-    ExitScope& operator =(const ExitScope&);
 };
  
 class ExitScopeHelp {
   public:
     template<typename T>
-        ExitScope<T> operator+(T t){ return t;}
+    ExitScope<T> operator+(T t){ return t;}
 };
  
 #define defer const auto& CONCAT(defer__, __LINE__) = ExitScopeHelp() + [&]()

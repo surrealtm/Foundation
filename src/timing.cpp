@@ -39,18 +39,21 @@ struct _tm_Summary_Entry {
     s64 count;
 };
 
-struct Internal_Timing_Keeper {
+struct _tm_State {
     Resizable_Array<_tm_Timeline_Entry> timeline;
     s64 head_index = MAX_S64;
     s64 root_index = MAX_S64; // The current root function (the function without a parent in the profiling mechanism).
 
+    s64 total_hwtime_start;
+    s64 total_hwtime_end;
+    
     _tm_Summary_Entry *summary_table = null;
     s64 summary_table_size = 0;
 
     Resizable_Array<_tm_Summary_Entry*> sorted_summary;
 };
 
-static Internal_Timing_Keeper __timing;
+static _tm_State __timing;
 
 
 
@@ -63,7 +66,7 @@ int _tmPrintPaddingTo(s64 target, s64 current) {
     } else {
         for(s64 i = 0; i < (current - target) + 2; ++i) printf("\b");
         printf("  ");
-        total = target - current;
+        total = (s32) (target - current);
     }
 
     return total;
@@ -71,8 +74,6 @@ int _tmPrintPaddingTo(s64 target, s64 current) {
 
 static
 void _tmInternalDestroySummaryTable(b8 reallocate) {
-    __timing.sorted_summary.clear();
-
     //
     // If the summary table is currently empty, then we don't need to clean anything up.
     //
@@ -81,8 +82,6 @@ void _tmInternalDestroySummaryTable(b8 reallocate) {
             __timing.summary_table_size = (s64) ceil((f64) __timing.timeline.count / (f64) 3);
             __timing.summary_table = (_tm_Summary_Entry *) Default_Allocator->allocate(__timing.summary_table_size * sizeof(_tm_Summary_Entry));
             memset(__timing.summary_table, 0, __timing.summary_table_size * sizeof(_tm_Summary_Entry));
-
-            __timing.sorted_summary.reserve(__timing.summary_table_size);
         }
 
         return;
@@ -113,7 +112,6 @@ void _tmInternalDestroySummaryTable(b8 reallocate) {
         }
 
         memset(__timing.summary_table, 0, __timing.summary_table_size * sizeof(_tm_Summary_Entry));
-        __timing.sorted_summary.reserve(__timing.summary_table_size);
     } else {
         Default_Allocator->deallocate(__timing.summary_table);
         __timing.summary_table_size = 0;
@@ -134,6 +132,18 @@ Hardware_Time _tmInternalCalculateHardwareTimeOfChildren(_tm_Timeline_Entry *ent
     }
 
     return result;
+}
+
+static
+s64 _tmInternalCalculateStackDepth(_tm_Timeline_Entry *entry) {
+    s64 depth = 0;
+
+    while(entry->parent_index != MAX_S64) {
+        entry = &__timing.timeline[entry->parent_index];
+        ++depth;
+    }
+    
+    return depth;
 }
 
 static
@@ -212,7 +222,7 @@ s64 _tmFindInsertionSortIndex(_tm_Summary_Entry *entry, Timing_Output_Sorting so
 }
 
 static
-void _tmInternalBuildSummaryTable(Timing_Output_Sorting sorting) {
+void _tmInternalBuildSummaryTable() {
     //
     // (Re-)allocate the summary table if necessary.
     //
@@ -272,6 +282,14 @@ void _tmInternalBuildSummaryTable(Timing_Output_Sorting sorting) {
             bucket->count                   = 1;
         }
     }
+}
+
+void _tmInternalBuildSortedSummary(Timing_Output_Sorting sorting) {
+    //
+    // Clear out and prepare the summary array.
+    //
+    __timing.sorted_summary.clear();
+    __timing.sorted_summary.reserve(__timing.summary_table_size);
 
     //
     // Do an insertion sort for all summary entries into the sorted
@@ -293,14 +311,20 @@ void _tmInternalBuildSummaryTable(Timing_Output_Sorting sorting) {
 
 /* -------------------------------------------- API Implementation -------------------------------------------- */
 
+void _tmBegin() {
+    _tmReset();
+}
+
 void _tmReset() {
     __timing.timeline.clear();
     __timing.head_index = MAX_S64;
+    __timing.total_hwtime_start = os_get_hardware_time();
 }
 
 void _tmDestroy() {
     _tmReset();
     _tmInternalDestroySummaryTable(false);
+    __timing.sorted_summary.clear();
 }
 
 void _tmEnter(char const *procedure_name, char const *source_string) {    
@@ -353,9 +377,16 @@ void _tmExit() {
     __timing.head_index = entry->parent_index;    
 }
 
-void _tmFinishFrame(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
-    if(__timing.timeline.count == 0) return;
+void _tmFinish() {
+    __timing.total_hwtime_end = os_get_hardware_time();
+    _tmInternalBuildSummaryTable();
+}
 
+
+
+/* ---------------------------------------------- Timing Export ---------------------------------------------- */
+
+void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
     if(mode != TIMING_OUTPUT_None) {
         int line_size = 0;
         line_size += _tmPrintPaddingTo(__TIMING_PRINT_PROC_OFFSET, line_size);
@@ -384,8 +415,8 @@ void _tmFinishFrame(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         printf("\n");
     }
 
-    if(mode & TIMING_OUTPUT_Statistics) {
-        _tmInternalBuildSummaryTable(sorting);
+    if(mode & TIMING_OUTPUT_Summary) {
+        _tmInternalBuildSortedSummary(sorting);
 
         s32 half_length = (s32) (__TIMING_PRINT_COUN_OFFSET + cstring_length("Count") - cstring_length(" PROFILING STATISTICS ") + 1) / 2;
         _tmPrintRepeated('-', half_length);
@@ -416,8 +447,58 @@ void _tmFinishFrame(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         _tmPrintRepeated('-', half_length);
         printf(" PROFILING STATISTICS ");
         _tmPrintRepeated('-', half_length);
-        printf("\n");
+        printf("\n");    
+    }
+}
+
+Timing_Data tmData(Timing_Output_Sorting sorting) {
+    _tmInternalBuildSortedSummary(sorting);
+
+    Timing_Data data;
+
+    //
+    // Set up the data to return.
+    //
+    
+    data.timeline_count = __timing.timeline.count;
+    data.summary_count  = __timing.sorted_summary.count;
+    
+    f64 total_time = (f64) (__timing.total_hwtime_end - __timing.total_hwtime_start);
+    
+    data.timeline = (Timing_Timeline_Entry *) Default_Allocator->allocate(data.timeline_count * sizeof(Timing_Timeline_Entry));
+    data.summary  = (Timing_Summary_Entry *)  Default_Allocator->allocate(data.summary_count  * sizeof(Timing_Summary_Entry));
+
+    //
+    // Set up the timeline entries.
+    //
+    
+    for(s64 i = 0; i < data.timeline_count; ++i) {
+        auto *source = &__timing.timeline[i];
+        data.timeline[i].name            = source->procedure_name;
+        data.timeline[i].relative_start  = (source->hwtime_start - __timing.total_hwtime_start) / total_time;
+        data.timeline[i].relative_end    = (source->hwtime_end   - __timing.total_hwtime_start) / total_time;
+        data.timeline[i].time_in_seconds = os_convert_hardware_time(source->hwtime_end - source->hwtime_start, Seconds);
+        data.timeline[i].depth           = _tmInternalCalculateStackDepth(source);
+    }
+
+    //
+    // Set up the summary entries.
+    //
+
+    for(s64 i = 0; i < data.summary_count; ++i) {
+        auto *source = __timing.sorted_summary[i];
+        data.summary[i].name                      = source->procedure_name;
+        data.summary[i].inclusive_time_in_seconds = os_convert_hardware_time(source->total_inclusive_hwtime, Seconds);
+        data.summary[i].exclusive_time_in_seconds = os_convert_hardware_time(source->total_exclusive_hwtime, Seconds);
+        data.summary[i].count                     = source->count;
     }
     
-    _tmReset();
+    return data;
+}
+
+void tmFreeData(Timing_Data *data) {
+    Default_Allocator->deallocate(data->timeline);
+    data->timeline_count = 0;
+    Default_Allocator->deallocate(data->summary);
+    data->summary_count = 0;
 }
