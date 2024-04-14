@@ -1,3 +1,5 @@
+#pragma once
+
 template<typename T>
 struct v4 {
 	T x, y, z, w;

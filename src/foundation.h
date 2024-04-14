@@ -75,7 +75,7 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 
 #define report_error(format, ...) os_write_to_console(__FILE__ "," STRINGIFY(__LINE__) ": " format, __VA_ARGS__)
 
-#define align_to(value, alignment, type) ((type) (ceil(value / (f64) alignment) * alignment))
+#define align_to(value, alignment, type) ((type) (ceil((f64) (value) / (f64) (alignment)) * (alignment)))
 
 #define min(lhs, rhs) ((lhs) < (rhs) ? (lhs) : (rhs))
 #define max(lhs, rhs) ((lhs) > (rhs) ? (lhs) : (rhs))

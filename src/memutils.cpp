@@ -132,9 +132,26 @@ void heap_deallocate(void *data /* = null */, void *pointer) {
 }
 
 void *heap_reallocate(void *data /* = null */, void *old_pointer, u64 new_size) {
-	void *pointer = realloc(old_pointer, new_size);
-    memset(pointer, 0, new_size);
-    return pointer;
+	void *new_pointer;
+
+#if ENABLE_ALLOCATOR_STATISTICS
+	// We gave the user code an adjusted pointer, not what malloc actually returned to
+	// us. Free however requires that exact pointer malloc returned, so we need to
+	// readjust.
+	u64 extra_size = align_to(sizeof(u64), 16, u64);
+	old_pointer = (void *) ((u64) old_pointer - extra_size);
+	new_pointer = realloc(old_pointer, new_size + extra_size);
+
+	if(new_pointer) {
+		u64 *_u64 = (u64 *) new_pointer;
+		*_u64 = new_size;
+		new_pointer = (void *) ((u64) new_pointer + extra_size);
+	}
+#else
+	new_pointer = realloc(old_pointer, new_size);
+#endif
+
+    return new_pointer;
 }
 
 u64 heap_query_allocation_size(void *data /* = null */, void *pointer) {
@@ -202,10 +219,11 @@ void *Memory_Arena::push(u64 size) {
 
 	if(this->size + size > this->committed) {
         u64 commit_size = align_to(size, this->commit_size, u64);
+		assert(commit_size >= size);
 
-		if(this->committed + this->commit_size <= this->reserved) {
-			if(os_commit_memory((char *) this->base + this->committed, this->commit_size)) {
-				this->committed += this->commit_size;
+		if(this->committed + commit_size <= this->reserved) {
+			if(os_commit_memory((char *) this->base + this->committed, commit_size)) {
+				this->committed += commit_size;
 			} else {
 				this->destroy();
 				return null;
@@ -277,15 +295,15 @@ Allocator Memory_Arena::allocator() {
 Memory_Pool::Block *Memory_Pool::Block::next() {
 	if(this->offset_to_next == 0) return null;
 
-	return (Block *) ((char *) this + this->offset_to_next);
+	return (Block *) (((char *) this) + this->offset_to_next);
 }
 
 void *Memory_Pool::Block::data() {
-	return (char *) this + sizeof(Memory_Pool::Block);
+	return ((char *) this) + sizeof(Memory_Pool::Block);
 }
 
 bool Memory_Pool::Block::is_continuous_with(Block *block) {
-	return ((char *) this->data() + this->size_in_bytes) == (char *) block;
+	return (((char *) this->data()) + this->size_in_bytes) == (char *) block;
 }
 
 void Memory_Pool::Block::merge_with(Block *block) {
@@ -354,7 +372,13 @@ void *Memory_Pool::push(u64 size) {
 		// Mark this block as used now.
 		//
 		unused_block->used = true;
+
+		//
+		// Allocators guarantee zero initialization on allocate().
+		//
 		
+		memset(unused_block->data(), 0, size);
+
 #if ENABLE_ALLOCATOR_STATISTICS
 		unused_block->original_allocation_size = size;
 #endif
@@ -383,7 +407,7 @@ void *Memory_Pool::push(u64 size) {
 			this->arena->ensure_alignment(16);
 		
 		void *pointer = this->arena->push(sizeof(Memory_Pool::Block) + size);
-		
+        
 		Block *block = (Block *) pointer;
 		block->offset_to_next = 0;
 		block->size_in_bytes  = size;
@@ -460,7 +484,7 @@ void *Memory_Pool::reallocate(void *old_pointer, u64 new_size) {
     // the old one. If the new size is smaller, the current block could be split to free up space.
     u64 old_size = this->query_allocation_size(old_pointer);
     void *new_pointer = this->push(new_size);
-
+    
     memcpy(new_pointer, old_pointer, min(old_size, new_size));
     this->release(old_pointer);
     return new_pointer;

@@ -19,10 +19,10 @@
 #define _tmPrintRepeated(char, count) for(s64 i = 0; i < count; ++i) printf("%c", char);
 
 struct _tm_Timeline_Entry {
-    s64 parent_index;
-    s64 next_index;
-    s64 first_child_index;
-    s64 last_child_index;
+    s64 parent_index = MAX_S64;
+    s64 next_index = MAX_S64;
+    s64 first_child_index = MAX_S64;
+    s64 last_child_index = MAX_S64;
 
     char const *procedure_name;
     char const *source_string;

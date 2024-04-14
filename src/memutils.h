@@ -295,6 +295,7 @@ struct Resizable_Array {
 	T *push() {
 		this->maybe_grow();
 		T *pointer = &this->data[this->count];
+		*pointer = T();
 		++this->count;
 		return pointer;
 	}

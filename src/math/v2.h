@@ -1,3 +1,5 @@
+#pragma once
+
 template<typename T>
 struct v2 {
     T x, y;
