@@ -468,6 +468,8 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
     data.timeline = (Timing_Timeline_Entry *) Default_Allocator->allocate(data.timeline_count * sizeof(Timing_Timeline_Entry));
     data.summary  = (Timing_Summary_Entry *)  Default_Allocator->allocate(data.summary_count  * sizeof(Timing_Summary_Entry));
 
+    data.total_time_in_seconds = os_convert_hardware_time(__timing.total_hwtime_end - __timing.total_hwtime_start, Seconds);
+    
     //
     // Set up the timeline entries.
     //
