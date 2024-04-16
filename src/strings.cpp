@@ -26,7 +26,7 @@ s64 cstring_length(char *cstring) {
 	return length;
 }
 
-s64 cstring_length(const char *cstring) {
+s64 cstring_length(char const *cstring) {
 	s64 length = 0;
 	while(*cstring) {
 		++length;
@@ -35,11 +35,18 @@ s64 cstring_length(const char *cstring) {
 	return length;
 }
 
-string from_cstring(Allocator *allocator, char *cstring) {
+string from_cstring(Allocator *allocator, char const *cstring) {
 	string _string;
 	_string.count = cstring_length(cstring);
 	_string.data  = (u8 *) allocator->allocate(_string.count);
 	memcpy(_string.data, cstring, _string.count);
+	return _string;
+}
+
+string cstring_view(char const *cstring) {
+	string _string;
+	_string.count = cstring_length(cstring);
+	_string.data  = (u8 *) cstring;
 	return _string;
 }
 

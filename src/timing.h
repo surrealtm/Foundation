@@ -1,6 +1,7 @@
 #pragma once
 
 #include "foundation.h"
+#include "strings.h"
 
 //
 // Timing Macros.
@@ -45,14 +46,14 @@ enum Timing_Output_Sorting {
 //
 
 struct Timing_Timeline_Entry {
-    char const *name;
+    string name;
     s64 start_in_nanoseconds, end_in_nanoseconds;
     s64 depth; // The vertical depth of the entry, representing the call stack depth
     u8 r, g, b;
 };
 
 struct Timing_Summary_Entry {
-    char const *name;
+    string name;
     s64 inclusive_time_in_nanoseconds;
     s64 exclusive_time_in_nanoseconds;
     s64 count;

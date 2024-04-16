@@ -491,7 +491,7 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
     
     for(s64 i = 0; i < data.timeline_count; ++i) {
         auto *source = &__timing.timeline[i];
-        data.timeline[i].name                 = source->procedure_name;
+        data.timeline[i].name                 = cstring_view(source->procedure_name);
         data.timeline[i].start_in_nanoseconds = (s64) os_convert_hardware_time(source->hwtime_start - __timing.total_hwtime_start, Nanoseconds);
         data.timeline[i].end_in_nanoseconds   = (s64) os_convert_hardware_time(source->hwtime_end   - __timing.total_hwtime_start, Nanoseconds);
         data.timeline[i].depth                = _tmInternalCalculateStackDepth(source);
@@ -506,7 +506,7 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
 
     for(s64 i = 0; i < data.summary_count; ++i) {
         auto *source = __timing.sorted_summary[i];
-        data.summary[i].name                          = source->procedure_name;
+        data.summary[i].name                          = cstring_view(source->procedure_name);
         data.summary[i].inclusive_time_in_nanoseconds = (s64) os_convert_hardware_time(source->total_inclusive_hwtime, Nanoseconds);
         data.summary[i].exclusive_time_in_nanoseconds = (s64) os_convert_hardware_time(source->total_exclusive_hwtime, Nanoseconds);
         data.summary[i].count                         = source->count;

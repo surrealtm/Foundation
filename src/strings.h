@@ -33,8 +33,9 @@ string operator "" _s(const char *literal, size_t size);
 /* ------------------------------------------------ C Strings ------------------------------------------------ */
 
 s64 cstring_length(char *cstring);
-s64 cstring_length(const char *cstring);
-string from_cstring(Allocator *allocator, char *cstring);
+s64 cstring_length(char const *cstring);
+string from_cstring(Allocator *allocator, char const *cstring);
+string cstring_view(char const *cstring);
 char *to_cstring(Allocator *allocator, string _string);
 void free_cstring(Allocator *allocator, char *cstring);
 b8 compare_cstrings(char const *lhs, char const *rhs);
