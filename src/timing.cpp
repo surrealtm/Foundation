@@ -2,7 +2,8 @@
 #include "memutils.h"
 #include "os_specific.h"
 
-
+// @Cleanup: Start measuring self time, and report that somehow, so that we get a rought idea of how much
+// slower the profiled version is...
 
 /* ------------------------------------------ Internal Implementation ------------------------------------------ */
 

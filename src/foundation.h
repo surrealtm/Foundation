@@ -48,6 +48,8 @@ constexpr f64 MIN_F64 = -1.7976931348623157e308L;
 constexpr f32 MAX_F32 = 3.40282347e38F;
 constexpr f32 MIN_F32 = -3.40282347e38F;
 
+constexpr f32 F32_EPSILON = 1e-6f;
+
 #if FOUNDATION_WIN32
 # define PRIu64 "llu"
 # define PRId64 "lld"
