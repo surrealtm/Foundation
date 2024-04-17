@@ -66,6 +66,7 @@ struct Timing_Data {
     s64 summary_count;
 
     s64 total_time_in_nanoseconds;
+    s64 total_overhead_time_in_nanoseconds;
 };
 
 

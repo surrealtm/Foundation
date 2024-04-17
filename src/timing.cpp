@@ -2,10 +2,9 @@
 #include "memutils.h"
 #include "os_specific.h"
 
-// @Cleanup: Start measuring self time, and report that somehow, so that we get a rought idea of how much
-// slower the profiled version is...
-
 /* ------------------------------------------ Internal Implementation ------------------------------------------ */
+
+#define __TIMING_TRACK_OVERHEAD true
 
 #define __TIMING_INDENT_PER_PARENT 2
 #define __TIMING_INITIAL_INDENT    0
@@ -56,6 +55,7 @@ struct _tm_State {
     s64 total_hwtime_start;
     s64 total_hwtime_end;
     
+    s64 total_overhead_hwtime;
     _tm_Summary_Entry *summary_table = null;
     s64 summary_table_size = 0;
 
@@ -343,7 +343,12 @@ void _tmDestroy() {
     __timing.sorted_summary.clear();
 }
 
-void _tmEnter(char const *procedure_name, char const *source_string, int color_index) {    
+void _tmEnter(char const *procedure_name, char const *source_string, int color_index) {   
+#if __TIMING_TRACK_OVERHEAD
+    s64 overhead_start = os_get_hardware_time();
+#endif
+
+
     s64 parent_index = __timing.head_index;
     __timing.head_index = __timing.timeline.count;
 
@@ -382,9 +387,17 @@ void _tmEnter(char const *procedure_name, char const *source_string, int color_i
     entry->color_index       = color_index;
     entry->hwtime_end        = 0;
     entry->hwtime_start      = os_get_hardware_time();
+
+#if __TIMING_TRACK_OVERHEAD
+    __timing.total_overhead_hwtime += entry->hwtime_start - overhead_start;
+#endif
 }
 
 void _tmExit() {
+#if __TIMING_TRACK_OVERHEAD
+    s64 overhead_start = os_get_hardware_time();
+#endif
+
     Hardware_Time end = os_get_hardware_time();
 
     assert(__timing.head_index != MAX_S64);
@@ -392,6 +405,10 @@ void _tmExit() {
     entry->hwtime_end = end;
 
     __timing.head_index = entry->parent_index;    
+
+#if __TIMING_TRACK_OVERHEAD
+    __timing.total_overhead_hwtime += os_get_hardware_time() - overhead_start;
+#endif
 }
 
 void _tmFinish() {
@@ -486,7 +503,8 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
     data.summary  = (Timing_Summary_Entry *)  Default_Allocator->allocate(data.summary_count  * sizeof(Timing_Summary_Entry));
 
     data.total_time_in_nanoseconds = (s64) os_convert_hardware_time(__timing.total_hwtime_end - __timing.total_hwtime_start, Nanoseconds);
-    
+    data.total_overhead_time_in_nanoseconds = (s64) os_convert_hardware_time(__timing.total_overhead_hwtime, Nanoseconds);
+
     //
     // Set up the timeline entries.
     //
