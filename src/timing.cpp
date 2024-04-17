@@ -332,6 +332,7 @@ void _tmBegin() {
 void _tmReset() {
     __timing.timeline.clear();
     __timing.head_index = MAX_S64;
+    __timing.root_index = MAX_S64;
     __timing.total_hwtime_start = os_get_hardware_time();
 }
 
