@@ -21,6 +21,8 @@ void os_free_memory(void *base, u64 reserved_size);
 bool os_commit_memory(void *base, u64 commit_size);
 void os_decommit_memory(void *base, u64 decommit_size);
 
+u64 os_get_working_set_size();
+
 
 
 /* ------------------------------------------------- File IO ------------------------------------------------- */

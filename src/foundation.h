@@ -1,9 +1,9 @@
 #pragma once
 
-#include <assert.h>
-#include <math.h>
-#include <stdio.h>
-#include <memory.h>
+#include <assert.h> // For assert
+#include <math.h>   // For ceil, pow...
+#include <stdio.h>  // For printf
+#include <memory.h> // For memset, memcpy...
 
 typedef unsigned char      u8;
 typedef unsigned short     u16;

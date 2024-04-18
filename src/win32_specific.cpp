@@ -5,6 +5,7 @@
 #define WIN32_MEAN_AND_LEAN
 #include <wchar.h> // Apparently some fucking windows header requires this somethimes or something I don't even know I don't want to have to deal with this shit.
 #include <Windows.h>
+#include <psapi.h> // For getting memory usage
 
 
 
@@ -120,6 +121,14 @@ void os_decommit_memory(void *address, u64 decommit_size) {
 		report_error("Failed to decommit %" PRIu64 " bytes of memory: %s.", decommit_size, error);
 		win32_free_last_error_string(error);
 	}
+}
+
+u64 os_get_working_set_size() {
+    PROCESS_MEMORY_COUNTERS_EX counters = { 0 };
+    if(GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS *) &counters, sizeof(counters)))
+        return counters.PrivateUsage;
+    else
+        return 0;
 }
 
 
