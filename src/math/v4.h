@@ -20,6 +20,9 @@ typedef v4<signed int> v4i;
 template<typename T>
 v4<T> operator-(v4<T> const &v) { return v4<T>(-v.x, -v.y, -v.z, -v.w); }
 
+template<typename T>
+v4<T> operator+(v4<T> const &v) { return v; }
+
 
 
 /* ------------------------------------------- V4 Binary Operators ------------------------------------------- */

@@ -20,6 +20,9 @@ typedef v3<signed int> v3i;
 template<typename T>
 v3<T> operator-(v3<T> const &v) { return v3<T>(-v.x, -v.y, -v.z); }
 
+template<typename T>
+v3<T> operator+(v3<T> const &v) { return v; }
+
 
 
 /* ------------------------------------------- V3 Binary Operators ------------------------------------------- */

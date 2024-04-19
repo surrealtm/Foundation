@@ -20,6 +20,9 @@ typedef v2<signed int> v2i;
 template<typename T>
 v2<T> operator-(v2<T> const &v) { return v2<T>(-v.x, -v.y); }
 
+template<typename T>
+v2<T> operator+(v2<T> const &v) { return v; }
+
 
 
 /* ------------------------------------------- V2 Binary operators ------------------------------------------- */

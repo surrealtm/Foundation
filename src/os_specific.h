@@ -41,6 +41,7 @@ string os_get_working_directory();
 string os_get_executable_directory();
 
 
+
 /* -------------------------------------------------- Timing -------------------------------------------------- */
 
 Hardware_Time os_get_hardware_time();
