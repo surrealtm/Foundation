@@ -56,6 +56,8 @@ struct _tm_State {
     s64 total_hwtime_end;
     
     s64 total_overhead_hwtime;
+    s64 total_overhead_space;
+
     _tm_Summary_Entry *summary_table = null;
     s64 summary_table_size = 0;
 
@@ -414,6 +416,10 @@ void _tmExit() {
 void _tmFinish() {
     __timing.total_hwtime_end = os_get_hardware_time();
     _tmInternalBuildSummaryTable();
+
+#if __TIMING_TRACK_OVERHEAD
+    __timing.total_overhead_space = __timing.timeline.allocated * sizeof(_tm_Timeline_Entry) + __timing.summary_table_size * sizeof(_tm_Summary_Entry) + __timing.sorted_summary.allocated * sizeof(_tm_Summary_Entry);
+#endif
 }
 
 
@@ -421,7 +427,11 @@ void _tmFinish() {
 /* ---------------------------------------------- Timing Export ---------------------------------------------- */
 
 void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
+    if(__timing.timeline.count == 0) return;
+
     if(mode != TIMING_OUTPUT_None) {
+        printf("\n\n\n");
+
         int line_size = 0;
         line_size += _tmPrintPaddingTo(__TIMING_PRINT_PROC_OFFSET, line_size);
         line_size += printf("Procedure");
@@ -483,6 +493,30 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         _tmPrintRepeated('-', half_length);
         printf("\n");    
     }
+
+#if __TIMING_TRACK_OVERHEAD
+    {
+        Time_Unit time_unit = _tmInternalGetBestTimeUnit(__timing.total_overhead_hwtime);
+        f64 time = os_convert_hardware_time(__timing.total_overhead_hwtime, time_unit);
+        
+        f32 space;
+        Memory_Unit space_unit = get_best_memory_unit(__timing.total_overhead_space, &space);
+
+        s32 half_length = (s32) (__TIMING_PRINT_COUN_OFFSET + cstring_length("Count") - cstring_length(" PROFILING OVERHEAD ") + 1) / 2;
+        _tmPrintRepeated('-', half_length);
+        printf(" PROFILING OVERHEAD ");
+        _tmPrintRepeated('-', half_length);
+        printf("\n");    
+        
+        printf("  Time: %f%s\n", time, time_unit_suffix(time_unit));
+        printf("  Space: %f%s\n", space, memory_unit_suffix(space_unit));
+
+        _tmPrintRepeated('-', half_length);
+        printf(" PROFILING OVERHEAD ");
+        _tmPrintRepeated('-', half_length);
+        printf("\n");    
+    }
+#endif
 }
 
 Timing_Data tmData(Timing_Output_Sorting sorting) {
@@ -504,6 +538,7 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
 
     data.total_time_in_nanoseconds = (s64) os_convert_hardware_time(__timing.total_hwtime_end - __timing.total_hwtime_start, Nanoseconds);
     data.total_overhead_time_in_nanoseconds = (s64) os_convert_hardware_time(__timing.total_overhead_hwtime, Nanoseconds);
+    data.total_overhead_space_in_bytes = __timing.total_overhead_space;
 
     //
     // Set up the timeline entries.

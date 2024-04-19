@@ -7,7 +7,7 @@
 // Timing Macros.
 //
 
-#if FOUNDATION_ENABLE_TIMING
+#if FOUNDATION_DEVELOPER
 # define tmBegin()                  _tmBegin()
 # define tmFunction(color)          _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
 # define tmFinish()                 _tmFinish()
@@ -67,6 +67,7 @@ struct Timing_Data {
 
     s64 total_time_in_nanoseconds;
     s64 total_overhead_time_in_nanoseconds;
+    s64 total_overhead_space_in_bytes;
 };
 
 

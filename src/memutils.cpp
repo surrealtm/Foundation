@@ -69,8 +69,8 @@ void Allocator::debug_print(u32 indent) {
 	f32 working_set_decimal, peak_working_set_decimal;
 	Memory_Unit working_set_unit, peak_working_set_unit;
 
-	working_set_unit = convert_to_biggest_memory_unit(this->stats.working_set, &working_set_decimal);
-	peak_working_set_unit = convert_to_biggest_memory_unit(this->stats.peak_working_set, &peak_working_set_decimal);
+	working_set_unit = get_best_memory_unit(this->stats.working_set, &working_set_decimal);
+	peak_working_set_unit = get_best_memory_unit(this->stats.peak_working_set, &peak_working_set_decimal);
 	
 	printf("%-*s=== Allocator ===\n", indent, "");
 	printf("%-*s    Allocations:      %lld.\n", indent, "", this->stats.allocations);
@@ -260,11 +260,11 @@ void Memory_Arena::debug_print(u32 indent) {
 	f32 reserved_decimal, committed_decimal, size_decimal, commit_size_decimal, os_region_decimal;
 	Memory_Unit reserved_unit, committed_unit, size_unit, commit_size_unit, os_region_unit;
 
-	reserved_unit    = convert_to_biggest_memory_unit(this->reserved, &reserved_decimal);
-	committed_unit   = convert_to_biggest_memory_unit(this->committed, &committed_decimal);
-	size_unit        = convert_to_biggest_memory_unit(this->size, &size_decimal);
-	commit_size_unit = convert_to_biggest_memory_unit(this->commit_size, &commit_size_decimal);
-	os_region_unit   = convert_to_biggest_memory_unit(os_get_committed_region_size(this->base), &os_region_decimal);
+	reserved_unit    = get_best_memory_unit(this->reserved, &reserved_decimal);
+	committed_unit   = get_best_memory_unit(this->committed, &committed_decimal);
+	size_unit        = get_best_memory_unit(this->size, &size_decimal);
+	commit_size_unit = get_best_memory_unit(this->commit_size, &commit_size_decimal);
+	os_region_unit   = get_best_memory_unit(os_get_committed_region_size(this->base), &os_region_decimal);
 
 	printf("%-*s=== Memory Arena ===\n", indent, "");
 	printf("%-*s    Reserved:    %.3f%s.\n", indent, "", reserved_decimal, memory_unit_suffix(reserved_unit));
@@ -560,7 +560,7 @@ const char *memory_unit_suffix(Memory_Unit unit) {
 	return string;
 }
 
-Memory_Unit convert_to_biggest_memory_unit(s64 bytes, f32 *decimal) {
+Memory_Unit get_best_memory_unit(s64 bytes, f32 *decimal) {
 	Memory_Unit unit = Bytes;
 	*decimal = (f32) bytes;
 

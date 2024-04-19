@@ -445,7 +445,7 @@ struct Linked_List {
 };
 
 const char *memory_unit_suffix(Memory_Unit unit);
-Memory_Unit convert_to_biggest_memory_unit(s64 bytes, f32 *decimal);
+Memory_Unit get_best_memory_unit(s64 bytes, f32 *decimal);
 
 void byteswap2(void *value);
 void byteswap4(void *value);
