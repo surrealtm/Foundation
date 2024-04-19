@@ -497,6 +497,8 @@ u64 Memory_Pool::query_allocation_size(void *pointer) {
 		block = block->next();
 	}
 
+	if(block == null) return 0;
+
 	assert(block != null && block->data() == pointer);
 	assert(block->used);
 
