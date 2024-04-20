@@ -12,10 +12,12 @@
 #define __TM_PRINT_INCL_OFFSET 80
 #define __TM_PRINT_EXCL_OFFSET 100
 #define __TM_PRINT_COUN_OFFSET 120
+#define __TM_PRINT_MTPC_OFFSET 132
 #define __TM_MAX_COLORS        32
 #define __TM_MAX_THREADS       16
 
 #define _tmPrintRepeated(char, count) for(s64 i = 0; i < count; ++i) printf("%c", char);
+#define _tmPrintHeader() _tmPrintRepeated('-', half_length); printf("%.*s", header_length, header_buffer); _tmPrintRepeated('-', half_length); printf("\n");
 
 struct _tm_Timeline_Entry {
     s64 parent_index = MAX_S64;
@@ -47,6 +49,7 @@ struct _tm_Color {
 };
 
 struct _tm_Thread_State {
+    s64 thread_index; // Index into the _tm_State's thread array.
     u32 thread_id;
     
     Resizable_Array<_tm_Timeline_Entry> timeline; // @@Speed: Change this to a bucket list or something, to avoid having to copy everything again...
@@ -61,6 +64,7 @@ struct _tm_State {
     Mutex thread_array_mutex;
 
     _tm_Thread_State threads[__TM_MAX_THREADS];
+    _tm_Thread_State **thread_local_pointers[__TM_MAX_THREADS]; // Pointers to the thread_local pointers, so that we can clear out these pointers when timing gets reset.
     s64 thread_count = 0;
 
     _tm_Summary_Entry *summary_table = null;
@@ -368,10 +372,6 @@ void _tmSetColor(int color_index, u8 r, u8 g, u8 b) {
     _tm_state.colors[color_index] = { r, g, b };
 }
 
-void _tmBegin() {
-    _tmReset();
-}
-
 void _tmReset() {
     if(_tm_state.setup) {
         lock(&_tm_state.thread_array_mutex);
@@ -384,11 +384,16 @@ void _tmReset() {
             thread->head_index            = MAX_S64;
             thread->root_index            = MAX_S64;
             thread->total_overhead_hwtime = 0;
+
+            *_tm_state.thread_local_pointers[i] = null;
+            _tm_state.thread_local_pointers[i]  = null;
         }
 
         _tm_state.thread_count = 0;
         unlock(&_tm_state.thread_array_mutex);
     }
+
+    _tm_state.total_hwtime_start = os_get_hardware_time();
 }
 
 void _tmDestroy() {
@@ -398,9 +403,6 @@ void _tmDestroy() {
         for(s64 i = 0; i < _tm_state.thread_count; ++i) {
             _tm_Thread_State *thread = &_tm_state.threads[i];
             thread->timeline.clear();
-            thread->head_index            = MAX_S64;
-            thread->root_index            = MAX_S64;
-            thread->total_overhead_hwtime = 0;
         }
         
         _tmInternalDestroySummaryTable(false);
@@ -409,7 +411,7 @@ void _tmDestroy() {
         _tm_state.thread_count = 0;
         _tm_state.setup = false;
         unlock(&_tm_state.thread_array_mutex);
-        if(_tm_state.setup) destroy_mutex(&_tm_state.thread_array_mutex); // Make sure another thread didn't delete this under our feet.
+        destroy_mutex(&_tm_state.thread_array_mutex); // Make sure another thread didn't delete this under our feet.
     }
 }
 
@@ -425,7 +427,6 @@ void _tmEnter(char const *procedure_name, char const *source_string, int color_i
     if(!setup_value_before) {
         create_mutex(&_tm_state.thread_array_mutex);
         _tm_state.setup = true;
-        _tm_state.total_hwtime_start = os_get_hardware_time();
     }
 
     //
@@ -436,6 +437,7 @@ void _tmEnter(char const *procedure_name, char const *source_string, int color_i
 
         lock(&_tm_state.thread_array_mutex);
         _tm_thread = &_tm_state.threads[_tm_state.thread_count];
+        _tm_state.thread_local_pointers[_tm_state.thread_count] = &_tm_thread;
         ++_tm_state.thread_count;
         unlock(&_tm_state.thread_array_mutex);
 
@@ -525,6 +527,8 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         line_size += printf("Exclusive");
         line_size += _tmPrintPaddingTo(__TM_PRINT_COUN_OFFSET, line_size);                        
         line_size += printf("Count");
+        line_size += _tmPrintPaddingTo(__TM_PRINT_MTPC_OFFSET, line_size);                        
+        line_size += printf("MTPC");
         printf("\n");
     }
 
@@ -540,19 +544,11 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
 
         if(mode & TIMING_OUTPUT_Timeline) {
             s32 header_length = sprintf_s(header_buffer, " THREAD TIMELINE - %d ", thread->thread_id);            
-            s32 half_length = (s32) (__TM_PRINT_COUN_OFFSET + cstring_length("Count") - header_length + 1) / 2;
+            s32 half_length = (s32) (__TM_PRINT_MTPC_OFFSET + 10 - header_length + 1) / 2;
 
-            _tmPrintRepeated('-', half_length);
-            printf("%.*s", header_length, header_buffer);
-            _tmPrintRepeated('-', half_length);
-            printf("\n");
-        
+            _tmPrintHeader();
             _tmInternalPrintTimelineEntry(thread, &thread->timeline[0], __TM_INITIAL_INDENT);
-    
-            _tmPrintRepeated('-', half_length);
-            printf("%.*s", header_length, header_buffer);
-            _tmPrintRepeated('-', half_length);
-            printf("\n");
+            _tmPrintHeader();
             printf("\n\n");
         }
 
@@ -566,20 +562,22 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         _tmInternalBuildSortedSummary(sorting);
 
         s32 header_length = sprintf_s(header_buffer, " PROFILING SUMMARY ");            
-        s32 half_length = (s32) (__TM_PRINT_COUN_OFFSET + cstring_length("Count") - header_length + 1) / 2;
+        s32 half_length = (s32) (__TM_PRINT_MTPC_OFFSET + 10 - header_length + 1) / 2;
             
-        _tmPrintRepeated('-', half_length);
-        printf("%.*s", header_length, header_buffer);
-        _tmPrintRepeated('-', half_length);
-        printf("\n");
-
+        _tmPrintHeader();
+        
         for(_tm_Summary_Entry **iterator : _tm_state.sorted_summary) {
             _tm_Summary_Entry *entry = *iterator;
+
+            f64 mhwtpc = (f64) entry->total_inclusive_hwtime / (f64) entry->count;
+
             Time_Unit inclusive_unit = _tmInternalGetBestTimeUnit(entry->total_inclusive_hwtime);
             Time_Unit exclusive_unit = _tmInternalGetBestTimeUnit(entry->total_exclusive_hwtime);
+            Time_Unit mtpc_unit      = _tmInternalGetBestTimeUnit(mhwtpc);
                 
             f64 inclusive_time = os_convert_hardware_time(entry->total_inclusive_hwtime, inclusive_unit);
             f64 exclusive_time = os_convert_hardware_time(entry->total_exclusive_hwtime, exclusive_unit);
+            f64 mtpc_time      = os_convert_hardware_time(mhwtpc, mtpc_unit);
 
             int line_size = 0;
             line_size += _tmPrintPaddingTo(__TM_PRINT_PROC_OFFSET, line_size);
@@ -590,13 +588,12 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
             line_size += printf("%f%s", exclusive_time, time_unit_suffix(exclusive_unit));
             line_size += _tmPrintPaddingTo(__TM_PRINT_COUN_OFFSET, line_size);
             line_size += printf("%" PRId64, entry->count);
+            line_size += _tmPrintPaddingTo(__TM_PRINT_MTPC_OFFSET, line_size);
+            line_size += printf("%f%s", mtpc_time, time_unit_suffix(mtpc_unit));
             printf("\n");
         }
 
-        _tmPrintRepeated('-', half_length);
-        printf("%.*s", header_length, header_buffer);
-        _tmPrintRepeated('-', half_length);
-        printf("\n");    
+        _tmPrintHeader();    
     }
 
 #if __TM_TRACK_OVERHEAD
@@ -607,19 +604,12 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
     Memory_Unit space_unit = get_best_memory_unit(total_overhead_space, &space);
 
     s32 header_length = sprintf_s(header_buffer, " PROFILING OVERHEAD ");            
-    s32 half_length = (s32) (__TM_PRINT_COUN_OFFSET + cstring_length("Count") - header_length + 1) / 2;
-    _tmPrintRepeated('-', half_length);
-    printf("%.*s", header_length, header_buffer);
-    _tmPrintRepeated('-', half_length);
-    printf("\n");    
-        
+    s32 half_length = (s32) (__TM_PRINT_MTPC_OFFSET + 10 - header_length + 1) / 2;
+    
+    _tmPrintHeader();
     printf("  Time: %f%s\n", time, time_unit_suffix(time_unit));
     printf("  Space: %f%s\n", space, memory_unit_suffix(space_unit));
-
-    _tmPrintRepeated('-', half_length);
-    printf("%.*s", header_length, header_buffer);
-    _tmPrintRepeated('-', half_length);
-    printf("\n");    
+    _tmPrintHeader();
 #endif
 }
 

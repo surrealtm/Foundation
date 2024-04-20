@@ -46,6 +46,7 @@ string os_get_executable_directory();
 
 Hardware_Time os_get_hardware_time();
 f64 os_convert_hardware_time(Hardware_Time input, Time_Unit unit);
+f64 os_convert_hardware_time(f64 input, Time_Unit unit);
 void os_sleep(f64 seconds);
 
 

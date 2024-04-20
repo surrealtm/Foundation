@@ -10,16 +10,16 @@
 #define TM_DEFAULT_COLOR (-1)
 
 #if FOUNDATION_DEVELOPER
-# define tmBegin()                  _tmBegin()
+# define tmBegin()                  _tmReset()
 # define tmFunction(color)          _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
-# define tmFinish()                 _tmFinish()
 # define tmZone(name, color)        _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
+# define tmFinish()                 _tmFinish()
 # define tmSetColor(index, r, g, b) _tmSetColor(index, r, g, b)
 #else
 # define tmBegin()
 # define tmFunction(color)
-# define tmFinish()
 # define tmZone(name, color)
+# define tmFinish()
 # define tmSetColor(index, r, g, b)
 #endif
 
@@ -34,8 +34,6 @@ enum Timing_Output_Mode {
 };
 
 BITWISE(Timing_Output_Mode);
-
-// @Incomplete: Also output MTPC!!
 
 enum Timing_Output_Sorting {
     TIMING_OUTPUT_Unsorted          = 0x0,
@@ -82,7 +80,6 @@ struct Timing_Data {
 //
 
 void _tmSetColor(int index, u8 r, u8 g, u8 b);
-void _tmBegin();
 void _tmReset();
 void _tmDestroy();
 void _tmEnter(char const *procedure_name, char const *source_string, int color_index);
