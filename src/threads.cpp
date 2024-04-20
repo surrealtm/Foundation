@@ -146,13 +146,15 @@ void resume_thread(Thread *thread) {
 }
 
 void thread_wait_if_suspended(Thread *thread) {
-    if(thread->state != THREAD_STATE_Suspended) return;
+    if(thread->state != THREAD_STATE_Suspended && thread->state != THREAD_STATE_Suspending) return;
 
 #if FOUNDATION_WIN32
     Thread_Win32_State *win32 = (Thread_Win32_State *) thread->platform_data;
     if(!win32->setup) return;
 
     EnterCriticalSection(&win32->mutex);
+    if(thread->state == THREAD_STATE_Suspending) thread->state = THREAD_STATE_Suspended;
+
     while(thread->state == THREAD_STATE_Suspended) {
         SleepConditionVariableCS(&win32->signal, &win32->mutex, INFINITE);
     }
@@ -167,6 +169,13 @@ void thread_wait_if_suspended(Thread *thread) {
 void thread_sleep(f32 seconds) {
 #if FOUNDATION_WIN32
     Sleep((DWORD) (seconds * 1000.0f));
+#endif
+}
+
+
+u32 thread_get_id() {
+#if FOUNDATION_WIN32
+    return GetCurrentThreadId();
 #endif
 }
 
@@ -199,5 +208,15 @@ void unlock(Mutex *mutex) {
 #if FOUNDATION_WIN32
     Mutex_Win32_State *win32 = (Mutex_Win32_State *) mutex->platform_data;
     LeaveCriticalSection(&win32->handle);
+#endif
+}
+
+
+
+/* ------------------------------------------------ Atomic API ------------------------------------------------ */
+
+u64 interlocked_compare_exchange(u64 volatile *dst, u64 src, u64 cmp) {
+#if FOUNDATION_WIN32
+    return InterlockedCompareExchange(dst, src, cmp);
 #endif
 }

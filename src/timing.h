@@ -7,6 +7,8 @@
 // Timing Macros.
 //
 
+#define TM_DEFAULT_COLOR (-1)
+
 #if FOUNDATION_DEVELOPER
 # define tmBegin()                  _tmBegin()
 # define tmFunction(color)          _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }

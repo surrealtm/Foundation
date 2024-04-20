@@ -183,6 +183,7 @@ struct Resizable_Array {
 	struct Iterator {
         T *pointer;
         
+		b8 operator==(Iterator const &it) const { return this->pointer == it.pointer; }
 		b8 operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
         Iterator &operator++() { ++this->pointer; return *this; }
         
@@ -308,6 +309,13 @@ struct Resizable_Array {
 		return value;
 	}
 
+    T pop_first() {
+        assert(this->count > 0);
+        T value = this->data[0];
+        this->remove(0);
+        return value;
+    }
+    
 	T &operator[](s64 index) {
 		assert(index >= 0 && index < this->count);
 		return this->data[index];

@@ -43,6 +43,8 @@ void suspend_thread(Thread *thread);
 void resume_thread(Thread *thread);
 void thread_wait_if_suspended(Thread *thread);
 
+u32 thread_get_id();
+void thread_sleep(f32 seconds);
 
 
 /* ------------------------------------------------ Mutex API ------------------------------------------------ */
@@ -57,3 +59,9 @@ void create_mutex(Mutex *mutex);
 void destroy_mutex(Mutex *mutex);
 void lock(Mutex *mutex);
 void unlock(Mutex *mutex);
+
+
+
+/* ------------------------------------------------ Atomic API ------------------------------------------------ */
+
+u64 interlocked_compare_exchange(u64 volatile *dst, u64 src, u64 cmp);

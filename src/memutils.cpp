@@ -225,11 +225,11 @@ void *Memory_Arena::push(u64 size) {
 			if(os_commit_memory((char *) this->base + this->committed, commit_size)) {
 				this->committed += commit_size;
 			} else {
-				this->destroy();
+				report_error("The Memory_Arena failed to commit memory (%" PRIu64 "b requested).", commit_size);
 				return null;
 			}
 		} else {
-			report_error("The Memory_Arena ran out of reserved space (" PRIu64 "b reserved, " PRIu64 "b committed).", this->reserved, this->committed);
+			report_error("The Memory_Arena ran out of reserved space (%" PRIu64 "b reserved, %" PRIu64 "b committed, with %" PRIu64 "b requested).", this->reserved, this->committed, size);
 			return null;
 		}
 	}
