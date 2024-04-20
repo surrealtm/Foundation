@@ -35,6 +35,8 @@ enum Timing_Output_Mode {
 
 BITWISE(Timing_Output_Mode);
 
+// @Incomplete: Also output MTPC!!
+
 enum Timing_Output_Sorting {
     TIMING_OUTPUT_Unsorted          = 0x0,
     TIMING_OUTPUT_Sort_By_Count     = 0x1,
@@ -62,8 +64,10 @@ struct Timing_Summary_Entry {
 };
 
 struct Timing_Data {
-    Timing_Timeline_Entry *timeline;
-    s64 timeline_count;
+    Timing_Timeline_Entry **timelines;
+    s64 *timelines_entry_count;
+    s64 timelines_count;
+    
     Timing_Summary_Entry *summary;
     s64 summary_count;
 

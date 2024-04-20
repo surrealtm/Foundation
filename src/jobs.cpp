@@ -4,11 +4,10 @@
 
 // This helper just ensures that the 'count' value is seen as volatile, so that
 // the compiler doesn't optimize this busy-loop out.
+static
 void __internal_job_wait_until_job_queue_empty(volatile s64 *count) {
     while(*count) {}
 }
-
-
 
 static
 u32 internal_worker_thread(Job_Worker *worker) {
@@ -56,7 +55,11 @@ u32 internal_worker_thread(Job_Worker *worker) {
     return 0;
 }
 
+
+
 void create_job_system(Job_System *system, s64 worker_count) {
+    tmFunction(TM_DEFAULT_COLOR);
+
     //
     // Initialize the job queue.
     //
@@ -78,6 +81,8 @@ void create_job_system(Job_System *system, s64 worker_count) {
 }
 
 void destroy_job_system(Job_System *system, Job_System_Shutdown_Mode shutdown_mode) {    
+    tmFunction(TM_DEFAULT_COLOR);
+
     //
     // Busy wait until all jobs are started.
     //
@@ -107,6 +112,8 @@ void destroy_job_system(Job_System *system, Job_System_Shutdown_Mode shutdown_mo
 }
 
 void spawn_job(Job_System *system, Job_Declaration declaration) {
+    tmFunction(TM_DEFAULT_COLOR);
+
     //
     // Add the job declaration to the queue.
     //

@@ -54,14 +54,6 @@ struct _tm_Thread_State {
     s64 root_index = MAX_S64; // The current root function (the function without a parent in the profiling mechanism).
 
     s64 total_overhead_hwtime;
-    s64 total_overhead_space;
-
-    _tm_Summary_Entry *summary_table = null;
-    s64 summary_table_size = 0;
-
-    s64 nocheckin_some_stupid_value = 12345;
-
-    Resizable_Array<_tm_Summary_Entry*> sorted_summary;
 };
 
 struct _tm_State {
@@ -70,6 +62,11 @@ struct _tm_State {
 
     _tm_Thread_State threads[__TM_MAX_THREADS];
     s64 thread_count = 0;
+
+    _tm_Summary_Entry *summary_table = null;
+    s64 summary_table_size = 0;
+
+    Resizable_Array<_tm_Summary_Entry*> sorted_summary;
 
     _tm_Color colors[__TM_MAX_COLORS];
 
@@ -173,15 +170,30 @@ void _tmInternalPrintTimelineEntry(_tm_Thread_State *thread, _tm_Timeline_Entry 
 
 
 static
-void _tmInternalDestroySummaryTable(_tm_Thread_State *thread, b8 reallocate) {
+void _tmInternalDestroySummaryTable(b8 reallocate) {
+    //
+    // Calculate the total amount of timeline entries, to get an estimation of
+    // how many summary entries we will have.
+    //
+    s64 total_timeline_count = 0;
+    s64 summary_table_size_estimation = 0;
+
+    if(reallocate) {
+        for(s64 i = 0; i < _tm_state.thread_count; ++i) {
+            total_timeline_count += _tm_state.threads[i].timeline.count;
+        }
+
+        summary_table_size_estimation = (s64) ceil((f64) total_timeline_count / 3.0);
+    }
+
     //
     // If the summary table is currently empty, then we don't need to clean anything up.
     //
-    if(thread->summary_table_size == 0) {
+    if(_tm_state.summary_table_size == 0) {
         if(reallocate) {
-            thread->summary_table_size = (s64) ceil((f64) thread->timeline.count / (f64) 3);
-            thread->summary_table = (_tm_Summary_Entry *) Default_Allocator->allocate(thread->summary_table_size * sizeof(_tm_Summary_Entry));
-            memset(thread->summary_table, 0, thread->summary_table_size * sizeof(_tm_Summary_Entry));
+            _tm_state.summary_table_size = summary_table_size_estimation;
+            _tm_state.summary_table = (_tm_Summary_Entry *) Default_Allocator->allocate(_tm_state.summary_table_size * sizeof(_tm_Summary_Entry));
+            memset(_tm_state.summary_table, 0, _tm_state.summary_table_size * sizeof(_tm_Summary_Entry));
         }
 
         return;
@@ -190,8 +202,8 @@ void _tmInternalDestroySummaryTable(_tm_Thread_State *thread, b8 reallocate) {
     //
     // Destroy the single allocated entries inside each bucket.
     //
-    for(s64 i = 0; i < thread->summary_table_size; ++i) {
-        auto bucket = thread->summary_table[i].next; // The first entry is not allocated.
+    for(s64 i = 0; i < _tm_state.summary_table_size; ++i) {
+        auto bucket = _tm_state.summary_table[i].next; // The first entry is not allocated.
         
         while(bucket) {
             auto next = bucket->next;
@@ -204,28 +216,27 @@ void _tmInternalDestroySummaryTable(_tm_Thread_State *thread, b8 reallocate) {
     // Destroy (and maybe reallocate) the actual summary table.
     //
     if(reallocate) {        
-        s64 size_estimation = (s64) ceil((f64) thread->timeline.count / (f64) 3);
-        if(fabs(1 - (f64) size_estimation / (f64) thread->summary_table_size) > 0.5) {
-            Default_Allocator->deallocate(thread->summary_table);
-            thread->summary_table_size = size_estimation;
-            thread->summary_table = (_tm_Summary_Entry *) Default_Allocator->allocate(thread->summary_table_size * sizeof(_tm_Summary_Entry));
+        if(fabs(1 - (f64) summary_table_size_estimation / (f64) _tm_state.summary_table_size) > 0.5) {
+            Default_Allocator->deallocate(_tm_state.summary_table);
+            _tm_state.summary_table_size = summary_table_size_estimation;
+            _tm_state.summary_table = (_tm_Summary_Entry *) Default_Allocator->allocate(_tm_state.summary_table_size * sizeof(_tm_Summary_Entry));
         }
 
-        memset(thread->summary_table, 0, thread->summary_table_size * sizeof(_tm_Summary_Entry));
+        memset(_tm_state.summary_table, 0, _tm_state.summary_table_size * sizeof(_tm_Summary_Entry));
     } else {
-        Default_Allocator->deallocate(thread->summary_table);
-        thread->summary_table_size = 0;
+        Default_Allocator->deallocate(_tm_state.summary_table);
+        _tm_state.summary_table_size = 0;
     }
 }
 
 static
-s64 _tmFindInsertionSortIndex(_tm_Thread_State *thread, _tm_Summary_Entry *entry, Timing_Output_Sorting sorting) {
-    s64 index = thread->sorted_summary.count; // Insert at the end of the array by default.
+s64 _tmFindInsertionSortIndex(_tm_Summary_Entry *entry, Timing_Output_Sorting sorting) {
+    s64 index = _tm_state.sorted_summary.count; // Insert at the end of the array by default.
 
     switch(sorting) {
     case TIMING_OUTPUT_Sort_By_Count:
-        for(s64 i = 0; i < thread->sorted_summary.count; ++i) {
-            if(thread->sorted_summary[i]->count < entry->count) {
+        for(s64 i = 0; i < _tm_state.sorted_summary.count; ++i) {
+            if(_tm_state.sorted_summary[i]->count < entry->count) {
                 index = i;
                 break;
             }
@@ -233,8 +244,8 @@ s64 _tmFindInsertionSortIndex(_tm_Thread_State *thread, _tm_Summary_Entry *entry
         break;
 
     case TIMING_OUTPUT_Sort_By_Inclusive:
-        for(s64 i = 0; i < thread->sorted_summary.count; ++i) {
-            if(thread->sorted_summary[i]->total_inclusive_hwtime < entry->total_inclusive_hwtime) {
+        for(s64 i = 0; i < _tm_state.sorted_summary.count; ++i) {
+            if(_tm_state.sorted_summary[i]->total_inclusive_hwtime < entry->total_inclusive_hwtime) {
                 index = i;
                 break;
             }
@@ -242,8 +253,8 @@ s64 _tmFindInsertionSortIndex(_tm_Thread_State *thread, _tm_Summary_Entry *entry
         break;
 
     case TIMING_OUTPUT_Sort_By_Exclusive:
-        for(s64 i = 0; i < thread->sorted_summary.count; ++i) {
-            if(thread->sorted_summary[i]->total_exclusive_hwtime < entry->total_exclusive_hwtime) {
+        for(s64 i = 0; i < _tm_state.sorted_summary.count; ++i) {
+            if(_tm_state.sorted_summary[i]->total_exclusive_hwtime < entry->total_exclusive_hwtime) {
                 index = i;
                 break;
             }
@@ -255,44 +266,59 @@ s64 _tmFindInsertionSortIndex(_tm_Thread_State *thread, _tm_Summary_Entry *entry
 }
 
 static
-void _tmInternalBuildSummaryTable(_tm_Thread_State *thread) {
+void _tmInternalBuildSummaryTable() {
     //
     // (Re-)allocate the summary table if necessary.
     //
-    _tmInternalDestroySummaryTable(thread, true);
+    _tmInternalDestroySummaryTable(true);
 
     //
     // Start inserting each entry into the summary table.
     //
-    for(_tm_Timeline_Entry *entry : thread->timeline) {
-        u64 hash = string_hash(entry->procedure_name);
-        if(hash == 0) hash = 1;
+    for(s64 i = 0; i < _tm_state.thread_count; ++i) {
+        _tm_Thread_State *thread = &_tm_state.threads[i];
+        for(_tm_Timeline_Entry *entry : thread->timeline) {
+            u64 hash = string_hash(entry->procedure_name);
+            if(hash == 0) hash = 1;
 
-        u64 bucket_index = hash % thread->summary_table_size;
+            u64 bucket_index = hash % _tm_state.summary_table_size;
         
-        auto *bucket = &thread->summary_table[bucket_index];
-        if(bucket->hash != 0) {
-            _tm_Summary_Entry *previous = null;
+            auto *bucket = &_tm_state.summary_table[bucket_index];
+            if(bucket->hash != 0) {
+                _tm_Summary_Entry *previous = null;
             
-            while(bucket != null && bucket->hash != hash) {
-                previous = bucket;
-                bucket = bucket->next;
-            }
+                while(bucket != null && bucket->hash != hash) {
+                    previous = bucket;
+                    bucket = bucket->next;
+                }
 
-            if(bucket) {
-                //
-                // An entry for this procedure already exists, add the stats onto it.
-                //
-                assert(compare_cstrings(bucket->procedure_name, entry->procedure_name)); // Check for hash collisions
-                bucket->total_inclusive_hwtime += entry->hwtime_end - entry->hwtime_start;
-                bucket->total_exclusive_hwtime += (entry->hwtime_end - entry->hwtime_start) - _tmInternalCalculateHardwareTimeOfChildren(thread, entry);
-                bucket->count                   += 1;
+                if(bucket) {
+                    //
+                    // An entry for this procedure already exists, add the stats onto it.
+                    //
+                    assert(compare_cstrings(bucket->procedure_name, entry->procedure_name)); // Check for hash collisions
+                    bucket->total_inclusive_hwtime += entry->hwtime_end - entry->hwtime_start;
+                    bucket->total_exclusive_hwtime += (entry->hwtime_end - entry->hwtime_start) - _tmInternalCalculateHardwareTimeOfChildren(thread, entry);
+                    bucket->count                   += 1;
+                } else {
+                    //
+                    // No entry for this procedure exists yet, create a new one.
+                    //
+                    assert(previous != null);
+                    bucket = (_tm_Summary_Entry *) Default_Allocator->allocate(sizeof(_tm_Summary_Entry));
+                    bucket->next                    = null;
+                    bucket->hash                    = hash;
+                    bucket->procedure_name          = entry->procedure_name;
+                    bucket->source_string           = entry->source_string;
+                    bucket->total_inclusive_hwtime  = entry->hwtime_end - entry->hwtime_start;
+                    bucket->total_exclusive_hwtime  = (entry->hwtime_end - entry->hwtime_start) - _tmInternalCalculateHardwareTimeOfChildren(thread, entry);
+                    bucket->count                   = 1;
+                    previous->next                  = bucket;
+                }
             } else {
                 //
-                // No entry for this procedure exists yet, create a new one.
+                // No entry for this procedure exists yet, create a new one as the first entry in this bucket.
                 //
-                assert(previous != null);
-                bucket = (_tm_Summary_Entry *) Default_Allocator->allocate(sizeof(_tm_Summary_Entry));
                 bucket->next                    = null;
                 bucket->hash                    = hash;
                 bucket->procedure_name          = entry->procedure_name;
@@ -300,57 +326,38 @@ void _tmInternalBuildSummaryTable(_tm_Thread_State *thread) {
                 bucket->total_inclusive_hwtime  = entry->hwtime_end - entry->hwtime_start;
                 bucket->total_exclusive_hwtime  = (entry->hwtime_end - entry->hwtime_start) - _tmInternalCalculateHardwareTimeOfChildren(thread, entry);
                 bucket->count                   = 1;
-                previous->next                  = bucket;
             }
-        } else {
-            //
-            // No entry for this procedure exists yet, create a new one as the first entry in this bucket.
-            //
-            bucket->next                    = null;
-            bucket->hash                    = hash;
-            bucket->procedure_name          = entry->procedure_name;
-            bucket->source_string           = entry->source_string;
-            bucket->total_inclusive_hwtime  = entry->hwtime_end - entry->hwtime_start;
-            bucket->total_exclusive_hwtime  = (entry->hwtime_end - entry->hwtime_start) - _tmInternalCalculateHardwareTimeOfChildren(thread, entry);
-            bucket->count                   = 1;
         }
     }
 }
 
 static
-void _tmInternalBuildSortedSummary(_tm_Thread_State *thread, Timing_Output_Sorting sorting) {
+void _tmInternalBuildSortedSummary(Timing_Output_Sorting sorting) {
     //
     // Actually build the summary table.
     //
-    _tmInternalBuildSummaryTable(thread);
+    _tmInternalBuildSummaryTable();
 
     //
     // Clear out and prepare the summary array.
     //
-    thread->sorted_summary.clear();
-    thread->sorted_summary.reserve(thread->summary_table_size);
+    _tm_state.sorted_summary.clear();
+    _tm_state.sorted_summary.reserve(_tm_state.summary_table_size);
 
     //
     // Do an insertion sort for all summary entries into the sorted
     // summary list.
     //
-    for(s64 i = 0; i < thread->summary_table_size; ++i) {
-        auto *bucket = &thread->summary_table[i];
+    for(s64 i = 0; i < _tm_state.summary_table_size; ++i) {
+        auto *bucket = &_tm_state.summary_table[i];
         if(bucket->hash == 0) continue;
 
         while(bucket) {
-            s64 insertion_index = _tmFindInsertionSortIndex(thread, bucket, sorting);
-            thread->sorted_summary.insert(insertion_index, bucket);
+            s64 insertion_index = _tmFindInsertionSortIndex(bucket, sorting);
+            _tm_state.sorted_summary.insert(insertion_index, bucket);
             bucket = bucket->next;
         }
     }
-}
-
-static
-void _tmInternalCalculateSpaceOverhead(_tm_Thread_State *thread) {
-#if __TM_TRACK_OVERHEAD
-    thread->total_overhead_space = thread->timeline.allocated * sizeof(_tm_Timeline_Entry) + thread->summary_table_size * sizeof(_tm_Summary_Entry) + thread->sorted_summary.allocated * sizeof(_tm_Summary_Entry);
-#endif
 }
 
 
@@ -374,11 +381,9 @@ void _tmReset() {
             // reallocation later on, in case the amount of summaries doesn't change.
             _tm_Thread_State *thread = &_tm_state.threads[i];
             thread->timeline.clear();
-            thread->sorted_summary.clear();
             thread->head_index            = MAX_S64;
             thread->root_index            = MAX_S64;
             thread->total_overhead_hwtime = 0;
-            thread->total_overhead_space  = 0;
         }
 
         _tm_state.thread_count = 0;
@@ -392,15 +397,15 @@ void _tmDestroy() {
     
         for(s64 i = 0; i < _tm_state.thread_count; ++i) {
             _tm_Thread_State *thread = &_tm_state.threads[i];
-            _tmInternalDestroySummaryTable(thread, false);
             thread->timeline.clear();
-            thread->sorted_summary.clear();
             thread->head_index            = MAX_S64;
             thread->root_index            = MAX_S64;
             thread->total_overhead_hwtime = 0;
-            thread->total_overhead_space  = 0;
         }
-
+        
+        _tmInternalDestroySummaryTable(false);
+        _tm_state.sorted_summary.clear();
+            
         _tm_state.thread_count = 0;
         _tm_state.setup = false;
         unlock(&_tm_state.thread_array_mutex);
@@ -523,11 +528,13 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         printf("\n");
     }
 
+    s64 total_overhead_space  = _tm_state.summary_table_size * sizeof(_tm_Summary_Entry) + _tm_state.sorted_summary.allocated * sizeof(_tm_Summary_Entry*);
+    s64 total_overhead_hwtime = 0;
+    
     char header_buffer[256];
     
     for(s64 i = 0; i < _tm_state.thread_count; ++i) {
         _tm_Thread_State *thread = &_tm_state.threads[i];
-        _tmInternalCalculateSpaceOverhead(thread);
         
         if(thread->timeline.count == 0) continue;
 
@@ -546,130 +553,148 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
             printf("%.*s", header_length, header_buffer);
             _tmPrintRepeated('-', half_length);
             printf("\n");
-        }
-
-        if(mode & TIMING_OUTPUT_Summary) {
-            _tmInternalBuildSortedSummary(thread, sorting);
-
-            s32 header_length = sprintf_s(header_buffer, " THREAD STATISTICS - %d ", thread->thread_id);            
-            s32 half_length = (s32) (__TM_PRINT_COUN_OFFSET + cstring_length("Count") - header_length + 1) / 2;
-            
-            _tmPrintRepeated('-', half_length);
-            printf("%.*s", header_length, header_buffer);
-            _tmPrintRepeated('-', half_length);
-            printf("\n");
-
-            for(_tm_Summary_Entry **iterator : thread->sorted_summary) {
-                _tm_Summary_Entry *entry = *iterator;
-                Time_Unit inclusive_unit = _tmInternalGetBestTimeUnit(entry->total_inclusive_hwtime);
-                Time_Unit exclusive_unit = _tmInternalGetBestTimeUnit(entry->total_exclusive_hwtime);
-                
-                f64 inclusive_time = os_convert_hardware_time(entry->total_inclusive_hwtime, inclusive_unit);
-                f64 exclusive_time = os_convert_hardware_time(entry->total_exclusive_hwtime, exclusive_unit);
-
-                int line_size = 0;
-                line_size += _tmPrintPaddingTo(__TM_PRINT_PROC_OFFSET, line_size);
-                line_size += printf("%s, %s", entry->procedure_name, entry->source_string);
-                line_size += _tmPrintPaddingTo(__TM_PRINT_INCL_OFFSET, line_size);
-                line_size += printf("%f%s", inclusive_time, time_unit_suffix(inclusive_unit));
-                line_size += _tmPrintPaddingTo(__TM_PRINT_EXCL_OFFSET, line_size);
-                line_size += printf("%f%s", exclusive_time, time_unit_suffix(exclusive_unit));
-                line_size += _tmPrintPaddingTo(__TM_PRINT_COUN_OFFSET, line_size);
-                line_size += printf("%" PRId64, entry->count);
-                printf("\n");
-            }
-
-            _tmPrintRepeated('-', half_length);
-            printf("%.*s", header_length, header_buffer);
-            _tmPrintRepeated('-', half_length);
-            printf("\n");    
+            printf("\n\n");
         }
 
 #if __TM_TRACK_OVERHEAD
-        {
-            Time_Unit time_unit = _tmInternalGetBestTimeUnit(thread->total_overhead_hwtime);
-            f64 time = os_convert_hardware_time(thread->total_overhead_hwtime, time_unit);
-        
-            f32 space;
-            Memory_Unit space_unit = get_best_memory_unit(thread->total_overhead_space, &space);
-
-            s32 header_length = sprintf_s(header_buffer, " THREAD OVERHEAD - %d ", thread->thread_id);            
-            s32 half_length = (s32) (__TM_PRINT_COUN_OFFSET + cstring_length("Count") - header_length + 1) / 2;
-            _tmPrintRepeated('-', half_length);
-            printf("%.*s", header_length, header_buffer);
-            _tmPrintRepeated('-', half_length);
-            printf("\n");    
-        
-            printf("  Time: %f%s\n", time, time_unit_suffix(time_unit));
-            printf("  Space: %f%s\n", space, memory_unit_suffix(space_unit));
-
-            _tmPrintRepeated('-', half_length);
-            printf("%.*s", header_length, header_buffer);
-            _tmPrintRepeated('-', half_length);
-            printf("\n");    
-        }
-#endif
-
-        printf("\n\n");
+        total_overhead_hwtime += thread->total_overhead_hwtime;
+        total_overhead_space  += thread->timeline.allocated * sizeof(_tm_Timeline_Entry);
+#endif        
     }
+
+    if(mode & TIMING_OUTPUT_Summary) {
+        _tmInternalBuildSortedSummary(sorting);
+
+        s32 header_length = sprintf_s(header_buffer, " PROFILING SUMMARY ");            
+        s32 half_length = (s32) (__TM_PRINT_COUN_OFFSET + cstring_length("Count") - header_length + 1) / 2;
+            
+        _tmPrintRepeated('-', half_length);
+        printf("%.*s", header_length, header_buffer);
+        _tmPrintRepeated('-', half_length);
+        printf("\n");
+
+        for(_tm_Summary_Entry **iterator : _tm_state.sorted_summary) {
+            _tm_Summary_Entry *entry = *iterator;
+            Time_Unit inclusive_unit = _tmInternalGetBestTimeUnit(entry->total_inclusive_hwtime);
+            Time_Unit exclusive_unit = _tmInternalGetBestTimeUnit(entry->total_exclusive_hwtime);
+                
+            f64 inclusive_time = os_convert_hardware_time(entry->total_inclusive_hwtime, inclusive_unit);
+            f64 exclusive_time = os_convert_hardware_time(entry->total_exclusive_hwtime, exclusive_unit);
+
+            int line_size = 0;
+            line_size += _tmPrintPaddingTo(__TM_PRINT_PROC_OFFSET, line_size);
+            line_size += printf("%s, %s", entry->procedure_name, entry->source_string);
+            line_size += _tmPrintPaddingTo(__TM_PRINT_INCL_OFFSET, line_size);
+            line_size += printf("%f%s", inclusive_time, time_unit_suffix(inclusive_unit));
+            line_size += _tmPrintPaddingTo(__TM_PRINT_EXCL_OFFSET, line_size);
+            line_size += printf("%f%s", exclusive_time, time_unit_suffix(exclusive_unit));
+            line_size += _tmPrintPaddingTo(__TM_PRINT_COUN_OFFSET, line_size);
+            line_size += printf("%" PRId64, entry->count);
+            printf("\n");
+        }
+
+        _tmPrintRepeated('-', half_length);
+        printf("%.*s", header_length, header_buffer);
+        _tmPrintRepeated('-', half_length);
+        printf("\n");    
+    }
+
+#if __TM_TRACK_OVERHEAD
+    Time_Unit time_unit = _tmInternalGetBestTimeUnit(total_overhead_hwtime);
+    f64 time = os_convert_hardware_time(total_overhead_hwtime, time_unit);
+        
+    f32 space;
+    Memory_Unit space_unit = get_best_memory_unit(total_overhead_space, &space);
+
+    s32 header_length = sprintf_s(header_buffer, " PROFILING OVERHEAD ");            
+    s32 half_length = (s32) (__TM_PRINT_COUN_OFFSET + cstring_length("Count") - header_length + 1) / 2;
+    _tmPrintRepeated('-', half_length);
+    printf("%.*s", header_length, header_buffer);
+    _tmPrintRepeated('-', half_length);
+    printf("\n");    
+        
+    printf("  Time: %f%s\n", time, time_unit_suffix(time_unit));
+    printf("  Space: %f%s\n", space, memory_unit_suffix(space_unit));
+
+    _tmPrintRepeated('-', half_length);
+    printf("%.*s", header_length, header_buffer);
+    _tmPrintRepeated('-', half_length);
+    printf("\n");    
+#endif
 }
 
 Timing_Data tmData(Timing_Output_Sorting sorting) {
-    Timing_Data data;
+    Timing_Data data = { 0 };
 
     //
-    // Set up the data to return.
+    // Prepare the exported data.
     //
-    
-    _tm_Thread_State *thread = &_tm_state.threads[0]; // @Incomplete.
-    _tmInternalCalculateSpaceOverhead(thread);
-    _tmInternalBuildSortedSummary(thread, sorting);
-
-    data.timeline_count = thread->timeline.count;
-    data.summary_count  = thread->sorted_summary.count;
-    
-    f64 total_time = (f64) (_tm_state.total_hwtime_end - _tm_state.total_hwtime_start);
-    
-    data.timeline = (Timing_Timeline_Entry *) Default_Allocator->allocate(data.timeline_count * sizeof(Timing_Timeline_Entry));
-    data.summary  = (Timing_Summary_Entry *)  Default_Allocator->allocate(data.summary_count  * sizeof(Timing_Summary_Entry));
-
+    _tmInternalBuildSortedSummary(sorting);
+    data.total_overhead_space_in_bytes += _tm_state.summary_table_size * sizeof(_tm_Summary_Entry) + _tm_state.sorted_summary.allocated * sizeof(_tm_Summary_Entry*);
+    data.total_overhead_time_in_nanoseconds = 0;
     data.total_time_in_nanoseconds = (s64) os_convert_hardware_time(_tm_state.total_hwtime_end - _tm_state.total_hwtime_start, Nanoseconds);
-    data.total_overhead_time_in_nanoseconds = (s64) os_convert_hardware_time(thread->total_overhead_hwtime, Nanoseconds);
-    data.total_overhead_space_in_bytes = thread->total_overhead_space;
-
-    //
-    // Set up the timeline entries.
-    //
     
-    for(s64 i = 0; i < data.timeline_count; ++i) {
-        auto *source = &thread->timeline[i];
-        data.timeline[i].name                 = cstring_view(source->procedure_name);
-        data.timeline[i].start_in_nanoseconds = (s64) os_convert_hardware_time(source->hwtime_start - _tm_state.total_hwtime_start, Nanoseconds);
-        data.timeline[i].end_in_nanoseconds   = (s64) os_convert_hardware_time(source->hwtime_end   - _tm_state.total_hwtime_start, Nanoseconds);
-        data.timeline[i].depth                = _tmInternalCalculateStackDepth(thread, source);
-        data.timeline[i].r = _tm_state.colors[source->color_index].r;
-        data.timeline[i].g = _tm_state.colors[source->color_index].g;
-        data.timeline[i].b = _tm_state.colors[source->color_index].b;
+    //
+    // Build the exported summary data.
+    //
+    data.summary_count = _tm_state.sorted_summary.count;
+    data.summary = (Timing_Summary_Entry *) Default_Allocator->allocate(data.summary_count * sizeof(Timing_Summary_Entry));
+    
+    for(s64 i = 0; i < data.summary_count; ++i) {
+        auto *source      = _tm_state.sorted_summary[i];
+        auto *destination = &data.summary[i];
+        destination->name                          = cstring_view(source->procedure_name);
+        destination->inclusive_time_in_nanoseconds = (s64) os_convert_hardware_time(source->total_inclusive_hwtime, Nanoseconds);
+        destination->exclusive_time_in_nanoseconds = (s64) os_convert_hardware_time(source->total_exclusive_hwtime, Nanoseconds);
+        destination->count                         = source->count;
     }
 
     //
-    // Set up the summary entries.
+    // Build the exported timeline for every thread.
     //
+    data.timelines_count = _tm_state.thread_count;
+    data.timelines_entry_count = (s64 *) Default_Allocator->allocate(data.timelines_count * sizeof(s64));
+    data.timelines = (Timing_Timeline_Entry **) Default_Allocator->allocate(data.timelines_count * sizeof(Timing_Timeline_Entry *));
 
-    for(s64 i = 0; i < data.summary_count; ++i) {
-        auto *source = thread->sorted_summary[i];
-        data.summary[i].name                          = cstring_view(source->procedure_name);
-        data.summary[i].inclusive_time_in_nanoseconds = (s64) os_convert_hardware_time(source->total_inclusive_hwtime, Nanoseconds);
-        data.summary[i].exclusive_time_in_nanoseconds = (s64) os_convert_hardware_time(source->total_exclusive_hwtime, Nanoseconds);
-        data.summary[i].count                         = source->count;
+    for(s64 i = 0; i < _tm_state.thread_count; ++i) {
+        _tm_Thread_State *thread = &_tm_state.threads[i];
+
+        data.timelines_entry_count[i] = thread->timeline.count;
+        data.timelines[i] = (Timing_Timeline_Entry *) Default_Allocator->allocate(data.timelines_entry_count[i] * sizeof(Timing_Timeline_Entry));
+
+        data.total_overhead_time_in_nanoseconds += (s64) os_convert_hardware_time(thread->total_overhead_hwtime, Nanoseconds);
+        data.total_overhead_space_in_bytes += thread->timeline.allocated * sizeof(_tm_Timeline_Entry);
+
+        for(s64 j = 0; j < data.timelines_entry_count[i]; ++j) {
+            _tm_Timeline_Entry *source = &thread->timeline[j];
+            Timing_Timeline_Entry *destination = &data.timelines[i][j];
+        
+            destination->name                 = cstring_view(source->procedure_name);
+            destination->start_in_nanoseconds = (s64) os_convert_hardware_time(source->hwtime_start - _tm_state.total_hwtime_start, Nanoseconds);
+            destination->end_in_nanoseconds   = (s64) os_convert_hardware_time(source->hwtime_end   - _tm_state.total_hwtime_start, Nanoseconds);
+            destination->depth                = _tmInternalCalculateStackDepth(thread, source);
+            destination->r = _tm_state.colors[source->color_index].r;
+            destination->g = _tm_state.colors[source->color_index].g;
+            destination->b = _tm_state.colors[source->color_index].b;
+        }
     }
     
     return data;
 }
 
 void tmFreeData(Timing_Data *data) {
-    Default_Allocator->deallocate(data->timeline);
-    data->timeline_count = 0;
+    for(s64 i = 0; i < data->timelines_count; ++i) {
+        Default_Allocator->deallocate(data->timelines[i]);
+    }
+
+    Default_Allocator->deallocate(data->timelines_entry_count);
+    data->timelines_entry_count = null;
+
+    Default_Allocator->deallocate(data->timelines);
+    data->timelines = null;
+    
+    data->timelines_count = 0;
+
     Default_Allocator->deallocate(data->summary);
     data->summary_count = 0;
 }
