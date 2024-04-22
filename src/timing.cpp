@@ -573,7 +573,7 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
 
             Time_Unit inclusive_unit = _tmInternalGetBestTimeUnit(entry->total_inclusive_hwtime);
             Time_Unit exclusive_unit = _tmInternalGetBestTimeUnit(entry->total_exclusive_hwtime);
-            Time_Unit mtpc_unit      = _tmInternalGetBestTimeUnit(mhwtpc);
+            Time_Unit mtpc_unit      = _tmInternalGetBestTimeUnit((Hardware_Time) mhwtpc);
                 
             f64 inclusive_time = os_convert_hardware_time(entry->total_inclusive_hwtime, inclusive_unit);
             f64 exclusive_time = os_convert_hardware_time(entry->total_exclusive_hwtime, exclusive_unit);

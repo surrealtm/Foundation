@@ -59,11 +59,11 @@ string concatenate_strings(Allocator *allocator, string lhs, string rhs);
 s64 search_string(string _string, u8 _char); // Returns -1 if the character is not found.
 s64 search_string_reverse(string _string, u8 _char);
 
-b8 compare_strings(string lhs, string rhs);
+b8 strings_equal(const string &lhs, const string &rhs);
 b8 string_starts_with(string lhs, string rhs);
 b8 string_ends_with(string lhs, string rhs);
 
-u64 string_hash(string input);
+u64 string_hash(const string &input);
 u64 string_hash(char const *input);
 
 
