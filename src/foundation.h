@@ -18,7 +18,7 @@ typedef signed long long s64;
 typedef float  f32;
 typedef double f64;
 
-typedef unsigned char b8;
+typedef bool b8;
 
 #define null 0
 
@@ -59,6 +59,7 @@ constexpr f32 F32_EPSILON = 1e-6f;
 # error "This platform is not supported."
 #endif
 
+static_assert(sizeof(b8)  == 1,                     "Invalid size for b8.");
 static_assert(sizeof(u8)  == 1 && sizeof(s8)  == 1, "Invalid size for u8 / s8.");
 static_assert(sizeof(u16) == 2 && sizeof(s16) == 2, "Invalid size for u16 / s16.");
 static_assert(sizeof(u32) == 4 && sizeof(s32) == 4, "Invalid size for u32 / s32.");
