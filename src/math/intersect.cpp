@@ -100,7 +100,7 @@ Triangle_Intersection_Result ray_triangle_intersection(const v3<f32> &ray_origin
     f32 determinant = v3_dot_v3(edge1, pvector);
 
     if(determinant < F32_EPSILON) {
-        // Ray either goes through backfaced triangle or lies on triangle plane.
+        // Ray is parallel to the triangle plane.
         result.intersection = false;
         return result;
     }
@@ -120,9 +120,10 @@ Triangle_Intersection_Result ray_triangle_intersection(const v3<f32> &ray_origin
     }
 
     f32 inverse_determinant = 1.f / determinant;
-    result.distance = v3_dot_v3(edge2, qvector);
-    result.u        = u * inverse_determinant; // Normalize to [0:1]
-    result.v        = v * inverse_determinant; // Normalize to [0:1]
+    result.intersection     = true;
+    result.distance         = v3_dot_v3(edge2, qvector) * inverse_determinant;
+    result.u                = u * inverse_determinant; // Normalize to [0:1]
+    result.v                = v * inverse_determinant; // Normalize to [0:1]
     return result;
 }
 
@@ -140,29 +141,31 @@ Triangle_Intersection_Result ray_double_sided_triangle_intersection(const v3<f32
     f32 determinant = v3_dot_v3(edge1, pvector);
 
     if(determinant > -F32_EPSILON && determinant < F32_EPSILON) {
-        // Ray lies on triangle plane.
-        result.intersection = false;
-        return result;
-    }
-    
-    v3<f32> tvector = ray_origin - p0;
-    f32 u = v3_dot_v3(tvector, pvector);
-    if(u < 0.0f || u > determinant) {
-        result.intersection = false;
-        return result;
-    }
-
-    v3<f32> qvector = v3_cross_v3(tvector, edge1);
-    f32 v = v3_dot_v3(ray_direction, qvector);
-    if(v < 0.0f || u + v > determinant) {
+        // Ray is parallel to the triangle plane.
         result.intersection = false;
         return result;
     }
 
     f32 inverse_determinant = 1.f / determinant;
-    result.distance = v3_dot_v3(edge2, qvector);
-    result.u        = u * inverse_determinant;
-    result.v        = v * inverse_determinant;
+    
+    v3<f32> tvector = ray_origin - p0;
+    f32 u = v3_dot_v3(tvector, pvector) * inverse_determinant;
+    if(u < 0.0f || u > 1.0f) {
+        result.intersection = false;
+        return result;
+    }
+
+    v3<f32> qvector = v3_cross_v3(tvector, edge1);
+    f32 v = v3_dot_v3(ray_direction, qvector) * inverse_determinant;
+    if(v < 0.0f || u + v > 1.0f) {
+        result.intersection = false;
+        return result;
+    }
+
+    result.intersection     = true;
+    result.distance         = v3_dot_v3(edge2, qvector) * inverse_determinant;
+    result.u                = u;
+    result.v                = v;
     return result;
 }
 
