@@ -86,7 +86,7 @@ void os_free_memory(void *base, u64 reserved_size) {
 	assert(base != null);
 	assert(reserved_size != 0);
 
-	bool result = VirtualFree(base, 0, MEM_RELEASE);
+	b8 result = VirtualFree(base, 0, MEM_RELEASE);
 
 	if(!result) {
 		char *error = win32_last_error_to_string();
@@ -95,7 +95,7 @@ void os_free_memory(void *base, u64 reserved_size) {
 	}
 }
 
-bool os_commit_memory(void *address, u64 commit_size) {
+b8 os_commit_memory(void *address, u64 commit_size) {
 	assert(address != null);
 	assert(commit_size != 0);
 
@@ -114,7 +114,7 @@ void os_decommit_memory(void *address, u64 decommit_size) {
 	assert(address != null);
 	assert(decommit_size != 0);
 
-	bool result = VirtualFree(address, decommit_size, MEM_DECOMMIT); // This should just decommit parts of the virtual address space, we'll free it later in os_free_memory.
+	b8 result = VirtualFree(address, decommit_size, MEM_DECOMMIT); // This should just decommit parts of the virtual address space, we'll free it later in os_free_memory.
 
 	if(!result) {
 		char *error = win32_last_error_to_string();
@@ -163,7 +163,7 @@ void os_free_file_content(Allocator *allocator, string *file_content) {
 }
 
 b8 os_write_file(string file_path, string file_content, b8 append) {
-	bool success = false;
+	b8 success = false;
 	char *cstring = to_cstring(Default_Allocator, file_path);
 
 	HANDLE file_handle = CreateFileA(cstring, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, null, append ? OPEN_ALWAYS : CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, null);

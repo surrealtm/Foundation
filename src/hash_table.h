@@ -16,8 +16,9 @@ struct Hash_Table {
     typedef u64(*Hash_Table_Hash_Procedure)(K const &k);
     typedef b8(*Hash_Table_Comparison_Procedure)(K const &lhs, K const &rhs);
     
-    s64 count;
-    s64 bucket_count;
+    s64 count; // The total number of valid entries currently in the table.
+    s64 bucket_count; // This internally gets rounded up to the next power of two, so that we can use the buket mask.
+    s64 bucket_mask; // Masks all the lower bits to map a hash value into the bucket array.
     b8 *bucket_occupied; // We don't explicitely allocate the first entry of each bucket (meaning: The bucket array contains the actual entries, not pointers to the first entries). To know whether an entry actually "exists", we require a boolean value. The next entries in each bucket are allocated, therefore implicitely indicating whether they exist or not.
     Hash_Table_Entry<K, V> *buckets;
     Hash_Table_Hash_Procedure hash;
@@ -32,6 +33,7 @@ struct Hash_Table {
     void remove(K const &k);
     V *query(K const &k);
 
+    u64 find_bucket_index(K const &k);
     Hash_Table_Entry<K, V> *find_entry(K const &k, u64 bucket_index);
 };
 

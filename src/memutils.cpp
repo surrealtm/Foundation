@@ -302,7 +302,7 @@ void *Memory_Pool::Block::data() {
 	return ((char *) this) + sizeof(Memory_Pool::Block);
 }
 
-bool Memory_Pool::Block::is_continuous_with(Block *block) {
+b8 Memory_Pool::Block::is_continuous_with(Block *block) {
 	return (((char *) this->data()) + this->size_in_bytes) == (char *) block;
 }
 

@@ -142,7 +142,7 @@ struct Memory_Pool {
 
 		Block *next();
 		void *data();
-		bool is_continuous_with(Block *block);
+		b8 is_continuous_with(Block *block);
 		void merge_with(Block *block);
 	};
 
@@ -196,146 +196,37 @@ struct Resizable_Array {
 	s64 count     = 0;
 	s64 allocated = 0;
 	
-	void maybe_grow(bool force = false) {
-		if(!this->data) {
-			this->allocated = Resizable_Array::INITIAL_SIZE;
-			this->data      = (T *) this->allocator->allocate(this->allocated * sizeof(T));
-		} else if(force || this->count == this->allocated) {
-			this->allocated *= 2;
-		
-			if(!this->allocator->_reallocate_procedure) {
-				// Not all allocators actually provide a reallocation strategy (e.g. Memory Arenas). In that case,
-				// allocate new memory manually, copy the existing data and if the allocator does have a
-                // deallocation strategy, free the previous pointer. If the allocator does not have a
-                // deallocation, then it is most likely some sort of scratch allocator that frees all memory at
-                // once.
-				T *new_pointer = (T *) this->allocator->allocate(this->allocated * sizeof(T));
-				memcpy(new_pointer, this->data, this->count * sizeof(T));
-				if(this->allocator->_deallocate_procedure) this->allocator->deallocate(this->data);
-				this->data = new_pointer;	
-			} else {
-				this->data = (T *) this->allocator->reallocate(this->data, this->allocated * sizeof(T));
-			}
-		}
-	}
-
-	void maybe_shrink() {
-		if(this->count < this->allocated / 2 - 1 && this->allocated >= Resizable_Array::INITIAL_SIZE * 2) {
-		    // If the array is less-than-half full, shrink the array
-	        this->allocated /= 2;
-
-			if(!this->allocator->_reallocate_procedure) {
-				// Not all allocators actually provide a reallocation strategy (e.g. Memory Arenas). In that case,
-				// allocate new memory manually, copy the existing data and if the allocator does have a
-                // deallocation strategy, free the previous pointer. If the allocator does not have a
-                // deallocation, then it is most likely some sort of scratch allocator that frees all memory at
-                // once.
-				T *new_pointer = (T *) this->allocator->allocate(this->allocated * sizeof(T));
-				memcpy(new_pointer, this->data, this->count * sizeof(T));
-				if(this->allocator->_deallocate_procedure) this->allocator->deallocate(this->data);
-				this->data = new_pointer;	
-			} else {
-				this->data = (T *) this->allocator->reallocate(this->data, this->allocated * sizeof(T));
-			}
-		}
-	}
-
-	void clear() {
-		this->allocator->deallocate(this->data);
-		this->count = 0;
-		this->allocated = 0;
-		this->data = null;
-	}
-
-	void add(T const &data) {
-		this->maybe_grow();
-		this->data[this->count] = data;
-		++this->count;
-	}
-
-    void insert(s64 index, T const &data) {
-		assert(index >= 0 && index <= this->count);
-        this->maybe_grow();
-        if(index < this->count) memcpy(&this->data[index + 1], &this->data[index], (this->count - index) * sizeof(T));
-        this->data[index] = data;
-        ++this->count;
-    }
+	void maybe_grow(b8 force = false);
+	void maybe_shrink();
+	void clear();
+    void reserve(s64 count);
+    void add(T const &data);
+    void insert(s64 index, T const &data);
+	void remove(s64 index);
+	void remove_range(s64 first, s64 last);
+    void remove_value(T const &value);
+    T *push();
+	T pop();
+    T pop_first();
     
-    void reserve(s64 count) {
-		assert(count >= 0);
-        if(this->allocated == 0) this->allocated = Resizable_Array::INITIAL_SIZE;
-        s64 least_size = this->allocated + count;
-        while(this->allocated < least_size) this->allocated *= 2;
-        this->maybe_grow(true);
-    }
-    
-	void remove(s64 index) {
-		assert(index >= 0 && index < this->count);
-		memcpy(&this->data[index], &this->data[index + 1], (this->count - index) * sizeof(T));
-		--this->count;
-		this->maybe_shrink();
-	}
-
-	void remove_range(s64 first_to_remove, s64 last_to_remove) {
-		assert(first_to_remove >= 0 && first_to_remove < this->count);
-		assert(last_to_remove >= 0 && last_to_remove < this->count);
-		memcpy(&this->data[first_to_remove], &this->data[last_to_remove + 1], (this->count - last_to_remove - 1) * sizeof(T));
-		this->count -= (last_to_remove - first_to_remove) + 1;
-		this->maybe_shrink();
-	}
-
-	void remove_by_value(T const &value) {
-		for(s64 i = 0; i < this->count; ++i) {
-			if(this->data[i] == value) {
-				this->remove(i);
-				break;
-			}
-		}
-	}
-
-	T *push() {
-		this->maybe_grow();
-		T *pointer = &this->data[this->count];
-		*pointer = T();
-		++this->count;
-		return pointer;
-	}
-
-	T pop() {
-		assert(this->count > 0);
-		T value = this->data[this->count - 1];
-		--this->count;
-		this->maybe_shrink();
-		return value;
-	}
-
-    T pop_first() {
-        assert(this->count > 0);
-        T value = this->data[0];
-        this->remove(0);
-        return value;
-    }
-    
-	T &operator[](s64 index) {
-		assert(index >= 0 && index < this->count);
-		return this->data[index];
-	}
+	T &operator[](s64 index);
 
     Iterator begin() { return Iterator { this->data }; }
-	Iterator end() { return Iterator { this->data + this->count }; }
+	Iterator end()   { return Iterator { this->data + this->count }; }
+};
+
+template<typename T>
+struct Linked_List_Node {
+    Linked_List_Node<T> *next;
+    T data;    
 };
 
 template<typename T>
 struct Linked_List {
-	struct Node {
-		Node *next;
-		T data;
-	};
-
 	struct Iterator {
-        Node *pointer;
+        Linked_List_Node<T> *pointer;
         
-		bool operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
+		b8 operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
         Iterator &operator++() { this->pointer = this->pointer->next; return *this; }
         
         T *operator*()  { return &this->pointer->data; }
@@ -343,113 +234,27 @@ struct Linked_List {
     };
 
 	Allocator *allocator = Default_Allocator;
-	Node *head = null;
-	Node *tail = null;
+	Linked_List_Node<T> *head = null;
+	Linked_List_Node<T> *tail = null;
 	s64 count  = 0;
 
-	Node *make_node(T const &value) {
-		Node *node = (Node *) this->allocator->allocate(sizeof(Node));
-		node->next = null;
-		node->data = value;
-		return node;
-	}
+	Linked_List_Node<T> *make_node(T const &value);
 
-	void add(T const &value) {
-		Node *node = this->make_node(value);
-		
-		if(this->head) {
-			this->tail->next = node;
-			this->tail = node;
-		} else {
-			this->head = node;
-			this->tail = this->head;
-		}
-
-		++this->count;
-	}
-
-	void remove(Node *node) {
-		if(!node) return;
-
-		if(node != this->head) {
-			Node *previous = this->head;
-
-			while(previous && previous->next != node) {
-				previous = previous->next;
-			}
-
-			assert(previous != null);
-			previous->next = node->next;
-
-			if(this->tail == node) this->tail = previous;
-		} else {
-			this->head = this->head->next;
-		}
-
-		--this->count;
-	}
-
-	void remove(T const &value) {
-		Node *node = this->head;
-
-		while(node && node->value != value) {
-			node = node->next;
-		}
-
-		this->remove(node);
-	}
-
-	void remove(s64 index) {
-		assert(index >= 0 && index < this->count);
-		
-		Node *node = this->head;
-
-		while(index > 0) {
-			node = node->next;
-			--index;
-		}
-
-		this->remove(node);
-	}
-
-	T *push() {
-		this->add(T{});
-		return &this->tail->data;
-	}
-
-	T pop() {
-		assert(this->count > 0);
-
-		Node *previous = this->head;
-
-		while(previous && previous->next) {
-			previous = previous->next;
-		}
-
-		T value = this->tail->data;
-		this->tail = previous;
-		return value;
-	}
+	void add(T const &value);
+	void remove_node(Linked_List_Node<T> *node);
+	void remove_value(T const &value);
+	void remove(s64 index);
+	T *push();
+	T pop();
+    T pop_first();
+    
+	T &operator[](s64 index);
 
 	T *first() { return &this->head->data; }
-
-	T *last() { return &this->tail->data; }
-
-	T &operator[](s64 index) {
-		assert(index >= 0 && index < this->count);
-
-		Node *node = this->head;
-
-		while(index > 0) {
-			node = node->next;
-			--index;
-		}
-
-		return node->data;
-	}
+	T *last()  { return &this->tail->data; }
 
     Iterator begin() { return Iterator { this->head }; }
-	Iterator end() { return Iterator { null }; }
+	Iterator end()   { return Iterator { null }; }
 };
 
 const char *memory_unit_suffix(Memory_Unit unit);
@@ -458,3 +263,7 @@ Memory_Unit get_best_memory_unit(s64 bytes, f32 *decimal);
 void byteswap2(void *value);
 void byteswap4(void *value);
 void byteswap8(void *value);
+
+// Because C++ is a terrible language, we need to supply the template definitions in the header file for
+// instantiation to work correctly... This feels horrible but still better than just inlining the code I guess.
+#include "memutils.inl"
