@@ -169,6 +169,18 @@ Triangle_Intersection_Result ray_double_sided_triangle_intersection(const v3<f32
     return result;
 }
 
+b8 ray_triangle_intersection(const v3<f32> &ray_origin, const v3<f32> &ray_direction, const v3<f32> &p0, const v3<f32> &p1, const v3<f32> &p2, f32 *distance) {
+    Triangle_Intersection_Result result = ray_triangle_intersection(ray_origin, ray_direction, p0, p1, p2);
+    *distance = result.distance;
+    return result.intersection;
+}
+
+b8 ray_double_sidedtriangle_intersection(const v3<f32> &ray_origin, const v3<f32> &ray_direction, const v3<f32> &p0, const v3<f32> &p1, const v3<f32> &p2, f32 *distance) {
+    Triangle_Intersection_Result result = ray_double_sided_triangle_intersection(ray_origin, ray_direction, p0, p1, p2);
+    *distance = result.distance;
+    return result.intersection;
+}
+
 
 void calculate_barycentric_coefficients(const v3<f32> &p0, const v3<f32> &p1, const v3<f32> &p2, const v3<f32> &point, f32 *u, f32 *v, f32 *w) {
     //
