@@ -5,8 +5,6 @@
 
 struct Allocator;
 
-typedef s64 Hardware_Time;
-
 void os_write_to_console(const char *format, ...);
 s64 os_search_path_for_directory_slash_reverse(string file_path);
 
@@ -49,6 +47,7 @@ f64 os_convert_hardware_time(Hardware_Time input, Time_Unit unit);
 f64 os_convert_hardware_time(f64 input, Time_Unit unit);
 void os_sleep(f64 seconds);
 
+u64 os_get_current_cpu_cycle();
 
 
 /* --------------------------------------------- Bit Manipulation --------------------------------------------- */

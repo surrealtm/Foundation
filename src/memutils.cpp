@@ -575,6 +575,20 @@ Memory_Unit get_best_memory_unit(s64 bytes, f32 *decimal) {
 	return unit;
 }
 
+f64 convert_to_memory_unit(s64 bytes, Memory_Unit target_unit) {
+	f64 decimal;
+
+	switch(target_unit) {
+	case Bytes:      decimal = (f64) bytes; break;
+	case Kilobytes:  decimal = (f64) bytes / 1000.0; break;
+	case Megabytes:  decimal = (f64) bytes / 1000000.0; break;
+	case Gigabytes:  decimal = (f64) bytes / 1000000000.0; break;
+	case Terrabytes: decimal = (f64) bytes / 1000000000000.0; break;
+	}
+
+	return decimal;
+}
+
 
 void byteswap2(void *value) {
 	u8 *bytes = (u8 *) value;

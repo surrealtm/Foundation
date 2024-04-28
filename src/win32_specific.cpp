@@ -324,6 +324,11 @@ void os_sleep(f64 seconds) {
 }
 
 
+u64 os_get_current_cpu_cycle() {
+	return __rdtsc();
+}
+
+
 
 /* --------------------------------------------- Bit Manipulation --------------------------------------------- */
 

@@ -259,6 +259,7 @@ struct Linked_List {
 
 const char *memory_unit_suffix(Memory_Unit unit);
 Memory_Unit get_best_memory_unit(s64 bytes, f32 *decimal);
+f64 convert_to_memory_unit(s64 bytes, Memory_Unit target_unit);
 
 void byteswap2(void *value);
 void byteswap4(void *value);

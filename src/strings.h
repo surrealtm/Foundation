@@ -67,6 +67,7 @@ u64 string_hash(const string &input);
 u64 string_hash(char const *input);
 
 
+
 /* -------------------------------------------- String Conversion -------------------------------------------- */
 
 s64 string_to_int(string input, b8 *success);
