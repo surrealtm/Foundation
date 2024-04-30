@@ -9,10 +9,10 @@ f32 calculate_triangle_area(const v3<f32> &p0, const v3<f32> &p1, const v3<f32> 
 
 b8 ray_plane_intersection(const v3<f32> &ray_origin, const v3<f32> &ray_direction, const v3<f32> &plane_point, const v3<f32> &plane_normal, f32 *distance) {
     f32 denom = v3_dot_v3(plane_normal, ray_direction);
-    if(denom < -0.0f) {
+    if(denom < -F32_EPSILON) {
         v3<f32> p0l0 = plane_point - ray_origin;
         *distance = v3_dot_v3(p0l0, plane_normal) / denom; 
-        return *distance >= 0;
+        return *distance >= 0.f;
     }
 
     return false;
@@ -21,7 +21,7 @@ b8 ray_plane_intersection(const v3<f32> &ray_origin, const v3<f32> &ray_directio
 b8 ray_double_sided_plane_intersection(const v3<f32> &ray_origin, const v3<f32> &ray_direction, const v3<f32> &plane_point, const v3<f32> &plane_normal, f32 *distance) {
     f32 denom = v3_dot_v3(plane_normal, ray_direction);
 
-    if(fabsf(denom) > 0.0f) {
+    if(fabsf(denom) > F32_EPSILON) {
         v3<f32> p0l0 = plane_point - ray_origin;
         *distance = v3_dot_v3(p0l0, plane_normal) / denom; 
         return true;
@@ -175,10 +175,31 @@ b8 ray_triangle_intersection(const v3<f32> &ray_origin, const v3<f32> &ray_direc
     return result.intersection;
 }
 
-b8 ray_double_sidedtriangle_intersection(const v3<f32> &ray_origin, const v3<f32> &ray_direction, const v3<f32> &p0, const v3<f32> &p1, const v3<f32> &p2, f32 *distance) {
+b8 ray_double_sided_triangle_intersection(const v3<f32> &ray_origin, const v3<f32> &ray_direction, const v3<f32> &p0, const v3<f32> &p1, const v3<f32> &p2, f32 *distance) {
     Triangle_Intersection_Result result = ray_double_sided_triangle_intersection(ray_origin, ray_direction, p0, p1, p2);
     *distance = result.distance;
     return result.intersection;
+}
+
+
+b8 point_inside_triangle(const v2<f32> &point, const v2<f32> &p0, const v2<f32> &p1, const v2<f32> &p2) {
+    //
+    // https://stackoverflow.com/questions/2049582/how-to-determine-if-a-point-is-in-a-2d-triangle
+    //
+#define sign(p0, p1, p2) ((p0.x - p2.x) * (p1.y - p2.y) - (p1.x - p2.x) * (p0.y - p2.y))
+    
+    f32 d0 = sign(point, p0, p1);
+    f32 d1 = sign(point, p1, p2);
+    f32 d2 = sign(point, p2, p0);
+
+#undef sign
+
+    // Handle cases in which the point lies on the edge of a triangle, in which case we may
+    // get very small positive or negative numbers.
+    b8 negative = (d0 < -F32_EPSILON) || (d1 < -F32_EPSILON) || (d2 < -F32_EPSILON);
+    b8 positive = (d0 >  F32_EPSILON) || (d1 >  F32_EPSILON) || (d2 >  F32_EPSILON);
+
+    return !(negative && positive);
 }
 
 
@@ -188,13 +209,13 @@ void calculate_barycentric_coefficients(const v3<f32> &p0, const v3<f32> &p1, co
     // https://users.csc.calpoly.edu/~zwood/teaching/csc471/2017F/barycentric.pdf
     //
     v3<f32> n = v3_cross_v3(p1 - p0, p2 - p0);
-    f32 inverse_n2 = 1.f / v3_dot_v3(n, n);
+    f32 inverse_determinant = 1.f / v3_dot_v3(n, n);
     
     v3<f32> t0 = v3_cross_v3(p2 - p1, point - p1);
     v3<f32> t1 = v3_cross_v3(p0 - p2, point - p2);
     v3<f32> t2 = v3_cross_v3(p1 - p0, point - p0);
 
-    *u = v3_dot_v3(n, t0) * inverse_n2;
-    *v = v3_dot_v3(n, t1) * inverse_n2;
-    *w = v3_dot_v3(n, t2) * inverse_n2;
+    *u = clamp(v3_dot_v3(n, t0) * inverse_determinant, 0, 1);
+    *v = clamp(v3_dot_v3(n, t1) * inverse_determinant, 0, 1);
+    *w = clamp(1.f - *u - *v, 0, 1);
 }

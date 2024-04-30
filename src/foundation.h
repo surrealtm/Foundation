@@ -51,6 +51,7 @@ constexpr f32 MAX_F32 = 3.40282347e38F;
 constexpr f32 MIN_F32 = -3.40282347e38F;
 
 constexpr f32 F32_EPSILON = 1e-5f;
+constexpr f64 F64_EPSILON = 1e-8f;
 
 #if FOUNDATION_WIN32
 # define PRIu64 "llu"
@@ -86,6 +87,8 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 
 #define min(lhs, rhs) ((lhs) < (rhs) ? (lhs) : (rhs))
 #define max(lhs, rhs) ((lhs) > (rhs) ? (lhs) : (rhs))
+
+#define clamp(value, min, max) (((value) < (min)) ? (min) : ((value) > (max) ? (max) : value))
 
 #define BITWISE(T)                                                      \
     inline T  operator| (T a, T b)  { return (T)((int) a | (int) b); }; \
