@@ -202,11 +202,13 @@ typename Chained_Hash_Table<K, V>::Entry *Chained_Hash_Table<K, V>::find_entry(K
     return entry;
 }
 
+#if FOUNDATION_DEVELOPER
 template<typename K, typename V>
 f64 Chained_Hash_Table<K, V>::expected_number_of_collisions() {
     // https://blogs.asarkar.com/assets/docs/algorithms-curated/Probability%20Calculations%20in%20Hashing.pdf
     return (f64) this->count - (f64) this->bucket_count + (f64) this->bucket_count * pow(1.0 - (1.0 / (f64) this->bucket_count), (f64) this->count);
 }
+#endif
 
 
 
@@ -335,11 +337,14 @@ V *Probed_Hash_Table<K, V>::query(K const &k) {
     return &this->buckets[current_slot].value;
 }
 
+
+#if FOUNDATION_DEVELOPER
 template<typename K, typename V>
 f64 Probed_Hash_Table<K, V>::expected_number_of_collisions() {
     // https://blogs.asarkar.com/assets/docs/algorithms-curated/Probability%20Calculations%20in%20Hashing.pdf
     return (f64) this->count - (f64) this->bucket_count + (f64) this->bucket_count * pow(1.0 - (1.0 / (f64) this->bucket_count), (f64) this->count);
 }
+#endif
 
 
 

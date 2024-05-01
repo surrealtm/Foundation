@@ -120,7 +120,7 @@ string substring(Allocator *allocator, string input, s64 start, s64 end) {
 }
 
 string substring_view(string input, s64 start, s64 end) {
-	assert(start >= 0 && start < input.count && end >= 0 && end < input.count);
+	assert(start >= 0 && start < input.count && end >= 0 && end <= input.count);
 	string output;
 	output.count = end - start;
 	output.data  = input.data + start;
@@ -158,7 +158,7 @@ s64 search_string_reverse(string _string, u8 _char) {
 b8 strings_equal(const string &lhs, const string &rhs) {
 	if(lhs.count != rhs.count) return false;
 
-	return memcmp(lhs.data, rhs.data, lhs.count);
+	return memcmp(lhs.data, rhs.data, lhs.count) == 0;
 }
 
 b8 string_starts_with(string lhs, string rhs) {

@@ -250,6 +250,22 @@ b8 os_directory_exists(string file_path) {
 }
 
 
+
+/* ------------------------------------------------ File Paths ------------------------------------------------ */
+
+b8 os_looks_like_absolute_file_path(string file_path) {
+	return file_path.count > 2 && file_path[1] == ':' && (file_path[2] == '/' || file_path[2] == '\\');
+}
+
+string os_convert_to_absolute_file_path(Allocator *allocator, string file_path) {
+    char *cstring = to_cstring(Default_Allocator, file_path);
+	u32 buffer_size = GetFullPathNameA(cstring, 0, NULL, NULL);
+    string result = allocate_string(allocator, buffer_size);
+    GetFullPathNameA(cstring, result.count, (LPSTR) result.data, NULL);
+	free_cstring(Default_Allocator, cstring);
+    return result;
+}
+
 void os_set_working_directory(string file_path) {
     char *cstring = to_cstring(Default_Allocator, file_path);
     SetCurrentDirectoryA(cstring);
@@ -269,11 +285,6 @@ string os_get_executable_directory() {
     s64 folder_length = os_search_path_for_directory_slash_reverse(path_view);
     if(folder_length == -1) folder_length = path_view.count;
     return make_string(Default_Allocator, path, folder_length);
-}
-
-
-b8 os_looks_like_absolute_file_path(string file_path) {
-	return file_path.count > 2 && file_path[1] == ':' && (file_path[2] == '/' || file_path[2] == '\\');
 }
 
 

@@ -34,11 +34,17 @@ b8 os_delete_directory(string file_path);
 b8 os_file_exists(string file_path);
 b8 os_directory_exists(string file_path);
 
+
+
+/* ------------------------------------------------ File Paths ------------------------------------------------ */
+
+b8 os_looks_like_absolute_file_path(string file_path);
+string os_convert_to_absolute_file_path(Allocator *allocator, string file_path);
+
+
 void os_set_working_directory(string file_path);
 string os_get_working_directory();
 string os_get_executable_directory();
-
-b8 os_looks_like_absolute_file_path(string file_path);
 
 
 
