@@ -32,6 +32,7 @@ typedef void*(*Reallocate_Procedure)(void *data, void *old_pointer, u64 new_size
 typedef void(*Reset_Allocator_Procedure)(void *data);
 typedef u64(*Query_Allocation_Size_Procedure)(void *data, void *pointer);
 
+#if ENABLE_ALLOCATOR_STATISTICS
 /* The allocator statistics provide insight into the memory usage of the application.
  * They display the activity of an allocator, show the total memory consumption and help
  * find memory leaks by counting allocations and deallocations. They do cause a little
@@ -44,6 +45,20 @@ struct Allocator_Stats {
 	u64 peak_working_set; // The highest recorded working set.
 };
 
+/* User level code can also install callbacks on an allocator to get notified of every
+ * single memory allocation done. This can provide even more information about memory
+ * management, if needed. */
+struct Allocator;
+
+struct Allocator_Callbacks {
+	void(*allocation_callback)(Allocator *allocator, const void *user_pointer, void *data, u64 bytes) = null;
+	void(*deallocation_callback)(Allocator *allocator, const void *user_pointer, void *data, u64 bytes) = null;
+	void(*reallocation_callback)(Allocator *allocator, const void *user_pointer, void *old_data, u64 old_size, void *new_data, u64 new_size) = null;
+	void(*clear_callback)(Allocator *allocator, const void *user_pointer) = null;
+    const void *user_pointer = null;
+};
+#endif
+
 struct Allocator {
 	void *data; // The pointer to the underlying allocation strategy
 	Allocate_Procedure   _allocate_procedure;
@@ -54,6 +69,7 @@ struct Allocator {
 
 #if ENABLE_ALLOCATOR_STATISTICS
 	Allocator_Stats stats;
+	Allocator_Callbacks callbacks;
 #endif
 
 

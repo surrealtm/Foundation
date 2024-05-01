@@ -52,6 +52,7 @@ void os_sleep(f64 seconds);
 u64 os_get_current_cpu_cycle();
 
 
+
 /* --------------------------------------------- Bit Manipulation --------------------------------------------- */
 
 u64 os_highest_bit_set(u64 value);

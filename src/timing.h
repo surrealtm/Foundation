@@ -15,12 +15,14 @@
 # define tmZone(name, color)        _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
 # define tmFinish()                 _tmFinish()
 # define tmSetColor(index, r, g, b) _tmSetColor(index, r, g, b)
+# define tmDestroy()                _tmDestroy()
 #else
 # define tmBegin()
 # define tmFunction(color)
 # define tmZone(name, color)
 # define tmFinish()
 # define tmSetColor(index, r, g, b)
+# define tmDestroy()
 #endif
 
 //

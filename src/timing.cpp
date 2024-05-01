@@ -403,6 +403,12 @@ void _tmDestroy() {
         for(s64 i = 0; i < _tm_state.thread_count; ++i) {
             _tm_Thread_State *thread = &_tm_state.threads[i];
             thread->timeline.clear();
+            thread->head_index            = MAX_S64;
+            thread->root_index            = MAX_S64;
+            thread->total_overhead_hwtime = 0;
+            
+            *_tm_state.thread_local_pointers[i] = null;
+            _tm_state.thread_local_pointers[i]  = null;
         }
         
         _tmInternalDestroySummaryTable(false);
@@ -668,7 +674,9 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
             destination->b = _tm_state.colors[source->color_index].b;
         }
     }
-    
+
+    _tmDestroy();
+
     return data;
 }
 
@@ -676,15 +684,15 @@ void tmFreeData(Timing_Data *data) {
     for(s64 i = 0; i < data->timelines_count; ++i) {
         Default_Allocator->deallocate(data->timelines[i]);
     }
-
+    
     Default_Allocator->deallocate(data->timelines_entry_count);
     data->timelines_entry_count = null;
 
     Default_Allocator->deallocate(data->timelines);
     data->timelines = null;
-    
     data->timelines_count = 0;
-
+    
     Default_Allocator->deallocate(data->summary);
+    data->summary = null;
     data->summary_count = 0;
 }

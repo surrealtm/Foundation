@@ -15,9 +15,16 @@ void *Allocator::allocate(u64 size) {
 	++this->stats.allocations;
 	this->stats.working_set += size;
 	if(this->stats.working_set > this->stats.peak_working_set) this->stats.peak_working_set = this->stats.working_set;
+
 #endif
 
-	return this->_allocate_procedure(this->data, size);
+	void *pointer = this->_allocate_procedure(this->data, size);
+
+#if ENABLE_ALLOCATOR_STATISTICS
+	if(this->callbacks.allocation_callback)  this->callbacks.allocation_callback(this, this->callbacks.user_pointer, pointer, size);
+#endif
+
+	return pointer;
 }
 
 void Allocator::deallocate(void *pointer) {
@@ -27,6 +34,8 @@ void Allocator::deallocate(void *pointer) {
 	++this->stats.deallocations;
 	u64 size = this->_query_allocation_size_procedure(this->data, pointer);
 	this->stats.working_set -= size;
+
+	if(this->callbacks.deallocation_callback) this->callbacks.deallocation_callback(this, this->callbacks.user_pointer, pointer, size);
 #endif
 
 	this->_deallocate_procedure(this->data, pointer);
@@ -34,20 +43,30 @@ void Allocator::deallocate(void *pointer) {
 
 void *Allocator::reallocate(void *old_pointer, u64 new_size) {
 	if(old_pointer == null) return null; // Silently ignore "null" deallocations
-	
+
 #if ENABLE_ALLOCATOR_STATISTICS
 	++this->stats.reallocations;
-	u64 previous_size = this->_query_allocation_size_procedure(this->data, old_pointer);
-	this->stats.working_set += (new_size - previous_size);
+	u64 old_size = this->_query_allocation_size_procedure(this->data, old_pointer);
+	this->stats.working_set += (new_size - old_size);
 	if(this->stats.working_set > this->stats.peak_working_set) this->stats.peak_working_set = this->stats.working_set;
 #endif
 
-	return this->_reallocate_procedure(this->data, old_pointer, new_size);
+	void *new_pointer = this->_reallocate_procedure(this->data, old_pointer, new_size);
+
+#if ENABLE_ALLOCATOR_STATISTICS
+	if(this->callbacks.reallocation_callback) this->callbacks.reallocation_callback(this, this->callbacks.user_pointer, old_pointer, old_size, new_pointer, new_size);
+#endif
+
+	return new_pointer;
 }
 
 void Allocator::reset() {
 	this->_reset_procedure(this->data);
 	this->reset_stats();
+
+#if ENABLE_ALLOCATOR_STATISTICS
+	if(this->callbacks.clear_callback) this->callbacks.clear_callback(this, this->callbacks.user_pointer);
+#endif
 }
 
 void Allocator::reset_stats() {
