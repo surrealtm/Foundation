@@ -60,7 +60,7 @@ u64 os_get_committed_region_size(void *base) {
 	SIZE_T result = VirtualQuery(base, &information, sizeof(information));
 	if(!result) {
 		char *error = win32_last_error_to_string();
-		report_error("Failed to query committed region size: %s.", error);
+		foundation_error("Failed to query committed region size: %s.", error);
 		win32_free_last_error_string(error);
 		return 0;
 	}
@@ -75,7 +75,7 @@ void *os_reserve_memory(u64 reserved_size) {
 
 	if(!base) {
 		char *error = win32_last_error_to_string();
-		report_error("Failed to reserve %" PRIu64 " bytes of memory: %s.", reserved_size, error);
+		foundation_error("Failed to reserve %" PRIu64 " bytes of memory: %s.", reserved_size, error);
 		win32_free_last_error_string(error);
 	}
 
@@ -90,7 +90,7 @@ void os_free_memory(void *base, u64 reserved_size) {
 
 	if(!result) {
 		char *error = win32_last_error_to_string();
-		report_error("Failed to free %" PRIu64 " bytes of memory: %s.", reserved_size, error);
+		foundation_error("Failed to free %" PRIu64 " bytes of memory: %s.", reserved_size, error);
 		win32_free_last_error_string(error);
 	}
 }
@@ -103,7 +103,7 @@ b8 os_commit_memory(void *address, u64 commit_size) {
 
 	if(!result) {
 		char *error = win32_last_error_to_string();
-		report_error("Failed to commit %" PRIu64 " bytes of memory: %s.", commit_size, error);
+		foundation_error("Failed to commit %" PRIu64 " bytes of memory: %s.", commit_size, error);
 		win32_free_last_error_string(error);
 	}
 
@@ -118,7 +118,7 @@ void os_decommit_memory(void *address, u64 decommit_size) {
 
 	if(!result) {
 		char *error = win32_last_error_to_string();
-		report_error("Failed to decommit %" PRIu64 " bytes of memory: %s.", decommit_size, error);
+		foundation_error("Failed to decommit %" PRIu64 " bytes of memory: %s.", decommit_size, error);
 		win32_free_last_error_string(error);
 	}
 }
@@ -269,6 +269,11 @@ string os_get_executable_directory() {
     s64 folder_length = os_search_path_for_directory_slash_reverse(path_view);
     if(folder_length == -1) folder_length = path_view.count;
     return make_string(Default_Allocator, path, folder_length);
+}
+
+
+b8 os_looks_like_absolute_file_path(string file_path) {
+	return file_path.count > 2 && file_path[1] == ':' && (file_path[2] == '/' || file_path[2] == '\\');
 }
 
 

@@ -16,7 +16,7 @@
 #define __TM_MAX_COLORS        32
 #define __TM_MAX_THREADS       16
 
-#define _tmPrintRepeated(char, count) for(s64 i = 0; i < count; ++i) printf("%c", char);
+#define _tmPrintRepeated(char, count) for(s64 __j = 0; __j < count; ++__j) printf("%c", char);
 #define _tmPrintHeader() _tmPrintRepeated('-', half_length); printf("%.*s", header_length, header_buffer); _tmPrintRepeated('-', half_length); printf("\n");
 
 struct _tm_Timeline_Entry {
@@ -36,7 +36,7 @@ struct _tm_Timeline_Entry {
 struct _tm_Summary_Entry {
     _tm_Summary_Entry *next = null;
     
-    s64 hash;
+    u64 hash;
     char const *procedure_name;
     char const *source_string;
     Hardware_Time total_inclusive_hwtime;
@@ -479,7 +479,7 @@ void _tmEnter(char const *procedure_name, char const *source_string, int color_i
     entry->next_index        = MAX_S64;
     entry->first_child_index = MAX_S64;
     entry->last_child_index  = MAX_S64;
-    entry->color_index       = color_index >= 0 ? color_index : (__TM_MAX_COLORS - 1);
+    entry->color_index       = color_index >= 0 ? (u8) color_index : (__TM_MAX_COLORS - 1);
     entry->hwtime_end        = 0;
     entry->hwtime_start      = os_get_hardware_time();
 

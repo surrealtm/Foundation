@@ -129,7 +129,7 @@ f64 Ascii_Parser::read_f64() {
 
 /* ----------------------------------------------- Ascii_Writer ----------------------------------------------- */
 
-void Ascii_Writer::create(string file_path, s64 buffer_size) {
+void Ascii_Writer::create(string file_path, s64 /*buffer_size*/) {
     this->file_path = copy_string(Default_Allocator, file_path);
 	this->builder.create(Default_Allocator);
 }

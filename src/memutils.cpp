@@ -87,7 +87,7 @@ void Allocator::debug_print(u32 indent) {
 
 /* ---------------------------------------------- Heap Allocator ---------------------------------------------- */
 
-void *heap_allocate(void *data /* = null */, u64 size) {
+void *heap_allocate(void * /*data = null */, u64 size) {
 	void *pointer = null;
 
 #if ENABLE_ALLOCATOR_STATISTICS
@@ -100,7 +100,7 @@ void *heap_allocate(void *data /* = null */, u64 size) {
 	u64 extra_size = align_to(sizeof(u64), 16, u64); // Stuff like SIMD sometimes requires 16-byte alignment...
 	pointer = malloc(extra_size + size);
 	if(!pointer) {
-		report_error("A call to malloc failed for the requested size of '%lld'.", size);
+		foundation_error("A call to malloc failed for the requested size of '%lld'.", size);
 		return null;
 	}
 
@@ -116,7 +116,7 @@ void *heap_allocate(void *data /* = null */, u64 size) {
 	return pointer;
 }
 
-void heap_deallocate(void *data /* = null */, void *pointer) {
+void heap_deallocate(void * /*data = null */, void *pointer) {
 	if(!pointer) return;
 
 #if ENABLE_ALLOCATOR_STATISTICS
@@ -131,7 +131,7 @@ void heap_deallocate(void *data /* = null */, void *pointer) {
 #endif
 }
 
-void *heap_reallocate(void *data /* = null */, void *old_pointer, u64 new_size) {
+void *heap_reallocate(void * /*data = null */, void *old_pointer, u64 new_size) {
 	void *new_pointer;
 
 #if ENABLE_ALLOCATOR_STATISTICS
@@ -154,7 +154,7 @@ void *heap_reallocate(void *data /* = null */, void *old_pointer, u64 new_size) 
     return new_pointer;
 }
 
-u64 heap_query_allocation_size(void *data /* = null */, void *pointer) {
+u64 heap_query_allocation_size(void * /*data = null */, void *pointer) {
 	u64 size;
 
 #if ENABLE_ALLOCATOR_STATISTICS
@@ -162,7 +162,7 @@ u64 heap_query_allocation_size(void *data /* = null */, void *pointer) {
 	u64 *_u64 = (u64 *) ((u64) pointer - extra_size);
 	size = *_u64;
 #else
-	report_error("ENABLE_ALLOCATOR_STATISTICS is off, heap_query_allocation_size is unsupported.");
+	foundation_error("ENABLE_ALLOCATOR_STATISTICS is off, heap_query_allocation_size is unsupported.");
 	size = 0;
 #endif
 
@@ -225,11 +225,11 @@ void *Memory_Arena::push(u64 size) {
 			if(os_commit_memory((char *) this->base + this->committed, commit_size)) {
 				this->committed += commit_size;
 			} else {
-				report_error("The Memory_Arena failed to commit memory (%" PRIu64 "b requested).", commit_size);
+				foundation_error("The Memory_Arena failed to commit memory (%" PRIu64 "b requested).", commit_size);
 				return null;
 			}
 		} else {
-			report_error("The Memory_Arena ran out of reserved space (%" PRIu64 "b reserved, %" PRIu64 "b committed, with %" PRIu64 "b requested).", this->reserved, this->committed, size);
+			foundation_error("The Memory_Arena ran out of reserved space (%" PRIu64 "b reserved, %" PRIu64 "b committed, with %" PRIu64 "b requested).", this->reserved, this->committed, size);
 			return null;
 		}
 	}
@@ -449,7 +449,7 @@ void Memory_Pool::release(void *pointer) {
 
 	if(!block || block->data() != pointer) {
 		// The pointer is invalid, it does not correspond to a block.
-		report_error("Attempted to release pointer from Memory_Pool which does not correspond to a block.");
+		foundation_error("Attempted to release pointer from Memory_Pool which does not correspond to a block.");
 		return;
 	}
 

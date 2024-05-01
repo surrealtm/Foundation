@@ -24,30 +24,30 @@ typedef bool b8;
 
 typedef s64 Hardware_Time;
 
-constexpr s64 MAX_S64 = 0x7fffffffffffffff;
-constexpr s64 MIN_S64 = (s64) 0x8000000000000000;
+constexpr s64 MAX_S64 = 9223372036854775807LL;
+constexpr s64 MIN_S64 = 9223372036854775808LL; // This is a negative number, C++ is just shit!!
 constexpr u64 MAX_U64 = 0xffffffffffffffff;
 constexpr u64 MIN_U64 = 0;
 
-constexpr s32 MAX_S32 = 0x7fffffff;
-constexpr s32 MIN_S32 = (s32) 0x80000000;
-constexpr u32 MAX_U32 = 0xffffffff;
-constexpr u32 MIN_U32 = 0;
+constexpr s32 MAX_S32 =  2147483647;
+constexpr s32 MIN_S32 = -2147483648;
+constexpr u32 MAX_U32 =  0xffffffff;
+constexpr u32 MIN_U32 =  0;
 
-constexpr s16 MAX_S16 = 0x7fff;
-constexpr s16 MIN_S16 = (s16) 0x8000;
-constexpr u16 MAX_U16 = 0xffff;
-constexpr u16 MIN_U16 = 0;
+constexpr s16 MAX_S16 =  32767;
+constexpr s16 MIN_S16 = -32768;
+constexpr u16 MAX_U16 =  0xffff;
+constexpr u16 MIN_U16 =  0;
 
-constexpr s8 MAX_S8 = 0x7f;
-constexpr s8 MIN_S8 = (s8) 0x80;
-constexpr u8 MAX_U8 = 0xff;
-constexpr u8 MIN_U8 = 0;
+constexpr s8 MAX_S8 =  127;
+constexpr s8 MIN_S8 = -128;
+constexpr u8 MAX_U8 =  0xff;
+constexpr u8 MIN_U8 =  0;
 
-constexpr f64 MAX_F64 = 1.7976931348623157e308L;
+constexpr f64 MAX_F64 =  1.7976931348623157e308L;
 constexpr f64 MIN_F64 = -1.7976931348623157e308L;
 
-constexpr f32 MAX_F32 = 3.40282347e38F;
+constexpr f32 MAX_F32 =  3.40282347e38F;
 constexpr f32 MIN_F32 = -3.40282347e38F;
 
 constexpr f32 F32_EPSILON = 1e-5f;
@@ -81,7 +81,7 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 
 #define ARRAY_SIZE(_array) (sizeof(_array) / sizeof((_array)[0]))
 
-#define report_error(format, ...) os_write_to_console(__FILE__ "," STRINGIFY(__LINE__) ": " format, __VA_ARGS__)
+#define foundation_error(format, ...) os_write_to_console(__FILE__ "," STRINGIFY(__LINE__) ": " format, __VA_ARGS__)
 
 #define align_to(value, alignment, type) ((type) (ceil((f64) (value) / (f64) (alignment)) * (alignment)))
 

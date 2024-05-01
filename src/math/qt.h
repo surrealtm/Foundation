@@ -100,9 +100,9 @@ qt<T> qt_from_angle_axis(v3<T> const &axis, T angle) {
 
 template<typename T>
 qt<T> qt_from_euler_turns(v3<T> const &euler_turns) {
-    T rx = turns_to_radians(euler_turns.x / 2);
-    T ry = turns_to_radians(euler_turns.y / 2);
-    T rz = turns_to_radians(euler_turns.z / 2);
+    T rx = (euler_turns.x / 2) * static_cast<T>(6.283185307179586); // Turns to radians
+    T ry = (euler_turns.y / 2) * static_cast<T>(6.283185307179586); // Turns to radians
+    T rz = (euler_turns.z / 2) * static_cast<T>(6.283185307179586); // Turns to radians
 
     T cx = static_cast<T>(cos(rx));
     T cy = static_cast<T>(cos(ry));
