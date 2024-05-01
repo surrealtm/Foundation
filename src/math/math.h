@@ -16,7 +16,7 @@ static inline
 b8 fuzzy_equals(f32 lhs, f32 rhs) { return (lhs - rhs) <= 1e-5f && (lhs - rhs) >= -1e-5f; }
 
 static inline
-b8 fuzzy_equals(f64 lhs, f64 rhs) { return (lhs - rhs) <= 1e-8f && (lhs - rhs) >= -1e-8f; }
+b8 fuzzy_equals(f64 lhs, f64 rhs) { return (lhs - rhs) <= 1e-8 && (lhs - rhs) >= -1e-8; }
 
 #include "v2.h"
 #include "v3.h"

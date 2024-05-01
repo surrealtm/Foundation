@@ -1,5 +1,7 @@
 #pragma once
 
+#define NOMINMAX
+
 #include <assert.h> // For assert
 #include <math.h>   // For ceil, pow...
 #include <stdio.h>  // For printf

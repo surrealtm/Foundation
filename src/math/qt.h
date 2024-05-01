@@ -75,13 +75,13 @@ v3<T> qt_rotate(qt<T> const &q, v3<T> const &v) {
     T u_dot_u = q.x * q.x + q.y * q.y + q.z * q.z;
     T u_dot_v = q.x * v.x + q.y * v.y + q.z * v.z;
 
-    v3<T> u_cross_v = v3f(q.y * v.z - q.z * v.y,
-                          q.z * v.x - q.x * v.z,
-                          q.x * v.y - q.y * v.x);
+    v3<T> u_cross_v = v3<T>(q.y * v.z - q.z * v.y,
+                            q.z * v.x - q.x * v.z,
+                            q.x * v.y - q.y * v.x);
 
-    v3<T> rotated = v3f(2 * u_dot_v * q.x + (w_squared - u_dot_u) * v.x + 2 * q.w * u_cross_v.x,
-                        2 * u_dot_v * q.y + (w_squared - u_dot_u) * v.y + 2 * q.w * u_cross_v.y,
-                        2 * u_dot_v * q.z + (w_squared - u_dot_u) * v.z + 2 * q.w * u_cross_v.z);
+    v3<T> rotated = v3<T>(2 * u_dot_v * q.x + (w_squared - u_dot_u) * v.x + 2 * q.w * u_cross_v.x,
+                          2 * u_dot_v * q.y + (w_squared - u_dot_u) * v.y + 2 * q.w * u_cross_v.y,
+                          2 * u_dot_v * q.z + (w_squared - u_dot_u) * v.z + 2 * q.w * u_cross_v.z);
 
     return rotated;
 }
