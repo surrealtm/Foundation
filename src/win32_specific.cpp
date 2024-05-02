@@ -261,7 +261,7 @@ string os_convert_to_absolute_file_path(Allocator *allocator, string file_path) 
     char *cstring = to_cstring(Default_Allocator, file_path);
 	u32 buffer_size = GetFullPathNameA(cstring, 0, NULL, NULL);
     string result = allocate_string(allocator, buffer_size);
-    GetFullPathNameA(cstring, result.count, (LPSTR) result.data, NULL);
+    GetFullPathNameA(cstring, buffer_size, (LPSTR) result.data, NULL);
 	free_cstring(Default_Allocator, cstring);
     return result;
 }

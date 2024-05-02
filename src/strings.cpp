@@ -51,8 +51,9 @@ string cstring_view(char const *cstring) {
 }
 
 char *to_cstring(Allocator *allocator, string _string) {
-	char *cstring = (char *) allocator->allocate(_string.count);
+	char *cstring = (char *) allocator->allocate(_string.count + 1);
 	memcpy(cstring, _string.data, _string.count);
+    cstring[_string.count] = 0;
 	return cstring;
 }
 

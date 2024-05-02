@@ -111,19 +111,15 @@ void Chained_Hash_Table<K, V>::destroy() {
 
 template<typename K, typename V>
 void Chained_Hash_Table<K, V>::add(K const &k, V const &v) {
-    u64 bucket_index = this->find_bucket_index(k);
-    
-    auto *existing_entry = this->find_entry(k, bucket_index);
-    if(existing_entry) {
-        existing_entry->value = v;
-        return;
-    }
+    assert(!this->query(k));
 
-    assert(bucket_index >= 0 && (s64) bucket_index < this->bucket_count);
+    u64 hash = this->hash(k);
+    u64 bucket_index = hash & this->bucket_mask;
 
     if(this->bucket_occupied[bucket_index]) {
         Entry *entry = (Entry *) this->allocator->allocate(sizeof(Entry));
         entry->next  = this->buckets[bucket_index].next;
+        entry->hash  = hash;
         entry->key   = k;
         entry->value = v;
         this->buckets[bucket_index].next = entry;
@@ -133,6 +129,7 @@ void Chained_Hash_Table<K, V>::add(K const &k, V const &v) {
 #endif
     } else {
         this->buckets[bucket_index].next    = null;
+        this->buckets[bucket_index].hash    = hash;
         this->buckets[bucket_index].key     = k;
         this->buckets[bucket_index].value   = v;
         this->bucket_occupied[bucket_index] = true;
@@ -147,13 +144,14 @@ void Chained_Hash_Table<K, V>::add(K const &k, V const &v) {
 
 template<typename K, typename V>
 void Chained_Hash_Table<K, V>::remove(K const &k) {   
-    u64 bucket_index = this->find_bucket_index(k);
+    u64 hash = this->hash(k);
+    u64 bucket_index = hash & this->bucket_mask;
 
     if(!this->bucket_occupied[bucket_index]) return;
 
     Entry *previous = null;
     Entry *entry = &this->buckets[bucket_index];
-    while(entry && !this->compare(entry->key, k)) {
+    while(entry && (entry->hash != hash || !this->compare(entry->key, k))) {
         previous = entry;
         entry = entry->next;
     }
@@ -180,26 +178,14 @@ void Chained_Hash_Table<K, V>::remove(K const &k) {
 
 template<typename K, typename V>
 V *Chained_Hash_Table<K, V>::query(K const &k) {
-    u64 bucket_index = this->find_bucket_index(k);
-    Entry *entry = this->find_entry(k, bucket_index);
-    return entry ? &entry->value : null;
-}
-
-template<typename K, typename V>
-u64 Chained_Hash_Table<K, V>::find_bucket_index(K const &k) {
-    return this->hash(k) & this->bucket_mask;
-}
-
-template<typename K, typename V>
-typename Chained_Hash_Table<K, V>::Entry *Chained_Hash_Table<K, V>::find_entry(K const &k, u64 bucket_index) {
-    assert(bucket_index >= 0 && (s64) bucket_index < this->bucket_count);
-
+    u64 hash = this->hash(k);
+    u64 bucket_index = hash & this->bucket_mask;
     if(!this->bucket_occupied[bucket_index]) return null;
 
     auto *entry = &this->buckets[bucket_index];
-    while(entry && !this->compare(entry->key, k)) entry = entry->next;
-
-    return entry;
+    while(entry && (entry->hash != hash || !this->compare(entry->key, k))) entry = entry->next;
+    
+    return entry ? &entry->value : null;
 }
 
 #if FOUNDATION_DEVELOPER
@@ -283,7 +269,10 @@ template<typename K, typename V>
 void Probed_Hash_Table<K, V>::add(K const &k, V const &v) {
     if(this->count == this->bucket_count) return;
 
-    u64 slot = this->hash(k) & this->bucket_mask;
+    assert(!this->query(k));
+    
+    u64 hash = this->hash(k);
+    u64 slot = hash & this->bucket_mask;
 
     while(this->buckets[slot].state == HASH_TABLE_ENTRY_Used) {
 #if FOUNDATION_DEVELOPER
@@ -294,6 +283,7 @@ void Probed_Hash_Table<K, V>::add(K const &k, V const &v) {
     }
 
     this->buckets[slot].state = HASH_TABLE_ENTRY_Used;
+    this->buckets[slot].hash  = hash;
     this->buckets[slot].key   = k;
     this->buckets[slot].value = v;
 
@@ -306,10 +296,11 @@ void Probed_Hash_Table<K, V>::add(K const &k, V const &v) {
 
 template<typename K, typename V>
 void Probed_Hash_Table<K, V>::remove(K const &k) {
-    u64 preferred_slot = this->hash(k) & this->bucket_mask;
-    u64 current_slot = preferred_slot;
+    u64 hash           = this->hash(k);
+    u64 preferred_slot = hash & this->bucket_mask;
+    u64 current_slot   = preferred_slot;
 
-    while(this->buckets[current_slot].state != HASH_TABLE_ENTRY_Used || !this->compare(this->buckets[current_slot].key, k)) {
+    while(this->buckets[current_slot].state != HASH_TABLE_ENTRY_Used || this->buckets[current_slot].hash != hash || !this->compare(this->buckets[current_slot].key, k)) {
         current_slot = (current_slot + 1) & this->bucket_mask;
         
         if(current_slot == preferred_slot) return;
@@ -325,10 +316,11 @@ void Probed_Hash_Table<K, V>::remove(K const &k) {
 
 template<typename K, typename V>
 V *Probed_Hash_Table<K, V>::query(K const &k) {
-    u64 preferred_slot = this->hash(k) & this->bucket_mask;
-    u64 current_slot = preferred_slot;
+    u64 hash           = this->hash(k);
+    u64 preferred_slot = hash & this->bucket_mask;
+    u64 current_slot   = preferred_slot;
 
-    while(this->buckets[current_slot].state != HASH_TABLE_ENTRY_Used || !this->compare(this->buckets[current_slot].key, k)) {
+    while(this->buckets[current_slot].state != HASH_TABLE_ENTRY_Used || this->buckets[current_slot].hash != hash || !this->compare(this->buckets[current_slot].key, k)) {
         current_slot = (current_slot + 1) & this->bucket_mask;
         
         if(current_slot == preferred_slot) return null;

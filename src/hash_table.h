@@ -17,6 +17,7 @@ struct Chained_Hash_Table {
 
     struct Entry {
         Entry *next;
+        u64 hash;
         K key;
         V value;
     };
@@ -43,9 +44,6 @@ struct Chained_Hash_Table {
     void remove(K const &k);
     V *query(K const &k);
 
-    u64 find_bucket_index(K const &k);
-    Entry *find_entry(K const &k, u64 bucket_index);
-
 #if FOUNDATION_DEVELOPER
     f64 expected_number_of_collisions();
 #endif
@@ -64,6 +62,7 @@ struct Probed_Hash_Table {
 
     struct Entry {
         Entry_State state;
+        u64 hash;
         K key;
         V value;
     };
