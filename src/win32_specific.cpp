@@ -11,6 +11,7 @@
 
 /* ---------------------------------------------- Win32 Helpers ---------------------------------------------- */
 
+static
 char *win32_last_error_to_string() {
 	DWORD error = GetLastError();
 	if(!error) return null;
@@ -23,18 +24,87 @@ char *win32_last_error_to_string() {
 	return messageBuffer;
 }
 
+static
 void win32_free_last_error_string(char *string) {
 	if(string) LocalFree(string);
 }
 
-s64 os_search_path_for_directory_slash_reverse(string file_path) {
-    for(s64 i = file_path.count - 1; i >= 0; --i) {
-        if(file_path.data[i] == '\\' || file_path.data[i] == '/') return i;
-    }
 
-    return -1;
+
+/* --------------------------------------------------- Misc --------------------------------------------------- */
+
+void os_debug_break() {
+    DebugBreak();
 }
 
+
+
+/* ---------------------------------------------- Console Output ---------------------------------------------- */
+
+b8 os_are_console_text_colors_supported() {
+    b8 supported;
+
+    u32 mode;
+    if(GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mode)) {
+        supported = (mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) && (mode & ENABLE_PROCESSED_OUTPUT);
+    } else {
+        supported = false;
+    }
+
+    return supported;
+}
+
+void os_set_console_text_color(Console_Color_Code color) {
+    u32 buffer_length;
+    char buffer[6];
+    buffer[0] = 0x1b; // ESC
+    buffer[1] = 0x5b; // [
+
+    // @Incomplete: What the fuck is happening here???
+    
+    switch(color) {
+    case CONSOLE_COLOR_Dark_Red:
+        buffer[2] = '3';
+        buffer[3] = '1';
+        buffer_length = 4;
+        break;
+    case CONSOLE_COLOR_Dark_Green:
+        buffer[2] = '3';
+        buffer[3] = '2';
+        buffer_length = 4;
+        break;
+    case CONSOLE_COLOR_Dark_Blue:
+        buffer[2] = '3';
+        buffer[3] = '4';
+        buffer_length = 4;
+        break;
+    case CONSOLE_COLOR_Red:
+        buffer[2] = '9';
+        buffer[3] = '1';
+        buffer_length = 4;
+        break;
+    case CONSOLE_COLOR_Cyan:
+        buffer[2] = '9';
+        buffer[3] = '6';
+        buffer_length = 4;
+        break;
+    case CONSOLE_COLOR_White:
+        buffer[2] = '9';
+        buffer[3] = '7';
+        buffer_length = 4;
+        break;        
+    case CONSOLE_COLOR_Default:
+    default:
+        buffer[2] = '0';
+        buffer_length = 3;
+        break;
+    }
+
+    buffer[buffer_length] = 'm';
+    ++buffer_length;
+
+    printf("%.*s", buffer_length, buffer); // Don't mess with the internal printf thingy...
+}
 
 void os_write_to_console(const char *format, ...) {
     va_list args;
@@ -265,6 +335,15 @@ string os_convert_to_absolute_file_path(Allocator *allocator, string file_path) 
 	free_cstring(Default_Allocator, cstring);
     return result;
 }
+
+s64 os_search_path_for_directory_slash_reverse(string file_path) {
+    for(s64 i = file_path.count - 1; i >= 0; --i) {
+        if(file_path.data[i] == '\\' || file_path.data[i] == '/') return i;
+    }
+
+    return -1;
+}
+
 
 void os_set_working_directory(string file_path) {
     char *cstring = to_cstring(Default_Allocator, file_path);

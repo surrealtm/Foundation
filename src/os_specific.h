@@ -5,8 +5,28 @@
 
 struct Allocator;
 
+
+/* --------------------------------------------------- Misc --------------------------------------------------- */
+
+void os_debug_break();
+
+
+
+/* ---------------------------------------------- Console Output ---------------------------------------------- */
+
+enum Console_Color_Code {
+    CONSOLE_COLOR_Dark_Red,
+    CONSOLE_COLOR_Dark_Green,
+    CONSOLE_COLOR_Dark_Blue,
+    CONSOLE_COLOR_Red,
+    CONSOLE_COLOR_Cyan,
+    CONSOLE_COLOR_White,
+    CONSOLE_COLOR_Default,
+};
+
+b8 os_are_console_text_colors_supported();
+void os_set_console_text_color(Console_Color_Code color);
 void os_write_to_console(const char *format, ...);
-s64 os_search_path_for_directory_slash_reverse(string file_path);
 
 
 
@@ -40,7 +60,7 @@ b8 os_directory_exists(string file_path);
 
 b8 os_looks_like_absolute_file_path(string file_path);
 string os_convert_to_absolute_file_path(Allocator *allocator, string file_path);
-
+s64 os_search_path_for_directory_slash_reverse(string file_path);
 
 void os_set_working_directory(string file_path);
 string os_get_working_directory();
