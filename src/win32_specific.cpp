@@ -30,6 +30,14 @@ void win32_free_last_error_string(char *string) {
 	if(string) LocalFree(string);
 }
 
+static
+char *win32_copy_cstring(const char *cstring) {
+    s64 length = strlen(cstring);
+    char *ptr = (char *) malloc(length + 1);
+    strcpy_s(ptr, length + 1, cstring);
+    return ptr;
+}
+
 
 
 /* --------------------------------------------------- Misc --------------------------------------------------- */
@@ -383,7 +391,6 @@ Hardware_Time os_get_hardware_time() {
 f64 os_convert_hardware_time(Hardware_Time time, Time_Unit unit) {
     if(!__win32_performance_frequency_set) __win32_performance_frequency_set = QueryPerformanceFrequency(&__win32_performance_frequency);
 
-
     f64 resolution_factor;
 
     switch(unit) {
@@ -431,8 +438,14 @@ u64 os_get_current_cpu_cycle() {
 Stack_Trace os_get_stack_trace() {
     const s64 max_frames_to_capture = 256; // We don't know in advance how many frames there are going to be (and we don't want to iterate twice), so just preallocate a max number.
 
+    //
+    // We don't use allocators here to have as little overhead as possible, and
+    // because we may actually have a stack overflow when calling this procedure
+    // inside an allocator callback...
+    //
+
     Stack_Trace trace;
-    trace.frames = (Stack_Trace::Stack_Frame *) Default_Allocator->allocate(max_frames_to_capture * sizeof(Stack_Trace::Stack_Frame));
+    trace.frames = (Stack_Trace::Stack_Frame *) malloc(max_frames_to_capture * sizeof(Stack_Trace::Stack_Frame));
     trace.frame_count = 0;
 
     HANDLE process = GetCurrentProcess();
@@ -471,8 +484,8 @@ Stack_Trace os_get_stack_trace() {
         DWORD line_displacement;
 
         if(SymGetSymFromAddr64(process, stack_frame.AddrPC.Offset, &symbol_displacement, symbol) && SymGetLineFromAddr64(process, stack_frame.AddrPC.Offset, &line_displacement, &line)) {
-            trace.frames[trace.frame_count].name = copy_string(Default_Allocator, cstring_view(symbol->Name));
-            trace.frames[trace.frame_count].file = copy_string(Default_Allocator, cstring_view(line.FileName));
+            trace.frames[trace.frame_count].name = win32_copy_cstring(symbol->Name);
+            trace.frames[trace.frame_count].file = win32_copy_cstring(line.FileName);
             trace.frames[trace.frame_count].line = line.LineNumber;
             ++trace.frame_count;
         }
@@ -484,11 +497,11 @@ Stack_Trace os_get_stack_trace() {
 
 void os_free_stack_trace(Stack_Trace *trace) {
     for(s64 i = 0; i < trace->frame_count; ++i) {
-        deallocate_string(Default_Allocator, &trace->frames[i].name);
-        deallocate_string(Default_Allocator, &trace->frames[i].file);
+        free(trace->frames[i].name);
+        free(trace->frames[i].file);
     }
 
-    Default_Allocator->deallocate(trace->frames);
+    free(trace->frames);
     trace->frames = null;
     trace->frame_count = 0;
 }

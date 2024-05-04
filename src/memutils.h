@@ -8,7 +8,7 @@
 #define ONE_BYTE     (1ULL)
 
 #if FOUNDATION_DEVELOPER
-# define ENABLE_ALLOCATOR_STATISTICS 1
+# define FOUNDATION_ALLOCATOR_STATISTICS 1
 #endif
 
 enum Memory_Unit {
@@ -32,7 +32,7 @@ typedef void*(*Reallocate_Procedure)(void *data, void *old_pointer, u64 new_size
 typedef void(*Reset_Allocator_Procedure)(void *data);
 typedef u64(*Query_Allocation_Size_Procedure)(void *data, void *pointer);
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 /* The allocator statistics provide insight into the memory usage of the application.
  * They display the activity of an allocator, show the total memory consumption and help
  * find memory leaks by counting allocations and deallocations. They do cause a little
@@ -67,7 +67,7 @@ struct Allocator {
 	Reset_Allocator_Procedure _reset_procedure;
 	Query_Allocation_Size_Procedure _query_allocation_size_procedure;
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	Allocator_Stats stats;
 	Allocator_Callbacks callbacks;
 #endif
@@ -151,7 +151,7 @@ struct Memory_Pool {
 		u64 size_in_bytes : 63; // Size in bytes of the usable data section of this block. Since the arena may be used by other things, this may not correspond to the offset to the next block.
 		u64 used : 1; // Set to false once a block is freed, so that it may be merged or reused.
 	
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 		u64 original_allocation_size; // The size_in_bytes of a block is not necessarily the "user"-requested size, e.g. for alignment or when merging blocks. This "user" size however is required for proper allocator statistics.
 		u64 __padding; // The block header must be 16 byte aligned.
 #endif

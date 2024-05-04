@@ -35,10 +35,12 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
     printf("Stack Trace:\n");
 
     for(s64 i = 1; i < trace.frame_count; ++i) { // The first frame would be this procedure, which we want to ignore.
-        printf("  %.*s, %.*s:%u\n", (u32) trace.frames[i].name.count, trace.frames[i].name.data, (u32) trace.frames[i].file.count, trace.frames[i].file.data, (u32) trace.frames[i].line);
+        printf("  %s, %s:%u\n", trace.frames[i].name, trace.frames[i].file, (u32) trace.frames[i].line);
     }
 
     printf("\n\n");
+
+    os_free_stack_trace(&trace);
 
     os_debug_break();
     return true;

@@ -83,8 +83,8 @@ u64 os_get_current_cpu_cycle();
 
 struct Stack_Trace {
     struct Stack_Frame {
-        string name;
-        string file;
+        char *name;
+        char *file;
         s64 line;
     };
 

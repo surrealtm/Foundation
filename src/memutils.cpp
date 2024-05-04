@@ -11,7 +11,7 @@ Allocator *Default_Allocator = &heap_allocator;
 /* ------------------------------------------------ Allocator ------------------------------------------------ */
 
 void *Allocator::allocate(u64 size) {
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	++this->stats.allocations;
 	this->stats.working_set += size;
 	if(this->stats.working_set > this->stats.peak_working_set) this->stats.peak_working_set = this->stats.working_set;
@@ -20,7 +20,7 @@ void *Allocator::allocate(u64 size) {
 
 	void *pointer = this->_allocate_procedure(this->data, size);
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	if(this->callbacks.allocation_callback)  this->callbacks.allocation_callback(this, this->callbacks.user_pointer, pointer, size);
 #endif
 
@@ -30,7 +30,7 @@ void *Allocator::allocate(u64 size) {
 void Allocator::deallocate(void *pointer) {
 	if(pointer == null) return; // Silently ignore "null" deallocations
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	++this->stats.deallocations;
 	u64 size = this->_query_allocation_size_procedure(this->data, pointer);
 	this->stats.working_set -= size;
@@ -44,7 +44,7 @@ void Allocator::deallocate(void *pointer) {
 void *Allocator::reallocate(void *old_pointer, u64 new_size) {
 	if(old_pointer == null) return null; // Silently ignore "null" deallocations
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	++this->stats.reallocations;
 	u64 old_size = this->_query_allocation_size_procedure(this->data, old_pointer);
 	this->stats.working_set += (new_size - old_size);
@@ -53,7 +53,7 @@ void *Allocator::reallocate(void *old_pointer, u64 new_size) {
 
 	void *new_pointer = this->_reallocate_procedure(this->data, old_pointer, new_size);
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	if(this->callbacks.reallocation_callback) this->callbacks.reallocation_callback(this, this->callbacks.user_pointer, old_pointer, old_size, new_pointer, new_size);
 #endif
 
@@ -64,13 +64,13 @@ void Allocator::reset() {
 	this->_reset_procedure(this->data);
 	this->reset_stats();
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	if(this->callbacks.clear_callback) this->callbacks.clear_callback(this, this->callbacks.user_pointer);
 #endif
 }
 
 void Allocator::reset_stats() {
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	this->stats.allocations      = 0;
 	this->stats.deallocations    = 0;
 	this->stats.reallocations    = 0;
@@ -84,7 +84,7 @@ u64 Allocator::query_allocation_size(void *pointer) {
 }
 
 void Allocator::debug_print(u32 indent) {
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	f32 working_set_decimal, peak_working_set_decimal;
 	Memory_Unit working_set_unit, peak_working_set_unit;
 
@@ -109,7 +109,7 @@ void Allocator::debug_print(u32 indent) {
 void *heap_allocate(void * /*data = null */, u64 size) {
 	void *pointer = null;
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	// To support allocator statistics at runtime, we need to store the allocation
 	// size somewhere. While malloc does this somewhere under the hood, we don't
 	// have access to that information, so instead we need to store that size
@@ -138,7 +138,7 @@ void *heap_allocate(void * /*data = null */, u64 size) {
 void heap_deallocate(void * /*data = null */, void *pointer) {
 	if(!pointer) return;
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	// We gave the user code an adjusted pointer, not what malloc actually returned to
 	// us. Free however requires that exact pointer malloc returned, so we need to
 	// readjust.
@@ -153,7 +153,7 @@ void heap_deallocate(void * /*data = null */, void *pointer) {
 void *heap_reallocate(void * /*data = null */, void *old_pointer, u64 new_size) {
 	void *new_pointer;
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	// We gave the user code an adjusted pointer, not what malloc actually returned to
 	// us. Free however requires that exact pointer malloc returned, so we need to
 	// readjust.
@@ -176,12 +176,12 @@ void *heap_reallocate(void * /*data = null */, void *old_pointer, u64 new_size) 
 u64 heap_query_allocation_size(void * /*data = null */, void *pointer) {
 	u64 size;
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	u64 extra_size = align_to(sizeof(u64), 16, u64);
 	u64 *_u64 = (u64 *) ((u64) pointer - extra_size);
 	size = *_u64;
 #else
-	foundation_error("ENABLE_ALLOCATOR_STATISTICS is off, heap_query_allocation_size is unsupported.");
+	foundation_error("FOUNDATION_ALLOCATOR_STATISTICS is off, heap_query_allocation_size is unsupported.");
 	size = 0;
 #endif
 
@@ -398,7 +398,7 @@ void *Memory_Pool::push(u64 size) {
 		
 		memset(unused_block->data(), 0, size);
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 		unused_block->original_allocation_size = size;
 #endif
 
@@ -432,7 +432,7 @@ void *Memory_Pool::push(u64 size) {
 		block->size_in_bytes  = size;
 		block->used           = true;
 
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 		block->original_allocation_size = size;
 #endif
 		
@@ -510,7 +510,7 @@ void *Memory_Pool::reallocate(void *old_pointer, u64 new_size) {
 }
 
 u64 Memory_Pool::query_allocation_size(void *pointer) {
-#if ENABLE_ALLOCATOR_STATISTICS
+#if FOUNDATION_ALLOCATOR_STATISTICS
 	Block *block = this->first_block;
 	while(block && block->data() < pointer) {
 		block = block->next();
