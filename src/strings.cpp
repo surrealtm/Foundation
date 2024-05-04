@@ -251,7 +251,7 @@ s64 string_to_int(string input, b8 *success) {
     // Parse each digit and sum the result together.
     //
     char character;
-    u64 character_decimal_value, overflow_flag;
+    u64 character_decimal_value;
     u64 character_power = 1, result = 0;
 	s64 character_index = 0;
     s64 character_count = input.count - number_start;
@@ -291,19 +291,17 @@ s64 string_to_int(string input, b8 *success) {
 
         if(!valid) break;
         
-        character_decimal_value = _mulx_u64(character_decimal_value, character_power, &overflow_flag);
-        assert(!overflow_flag); // Assume 'decimal * power' can be represented properly.
+        character_decimal_value = character_decimal_value * character_power;
 
-        overflow_flag = _addcarry_u64(0, result, character_decimal_value, &result);
-        if(overflow_flag) {
-            // 'result + decimal * power' did not fit into 64 bits.
+        b8 addcarry_overflow = _addcarry_u64(0, result, character_decimal_value, &result);
+        u64 charpower_overflow;
+        character_power = _mulx_u64(character_power, radix, &charpower_overflow);
+		++character_index;
+
+        if(addcarry_overflow || charpower_overflow) {
             valid = false;
             break;
         }
-
-        character_power = character_power * radix; // Assume 'character_power * radix' can be represented properly.
-
-		++character_index;
 	}
 
 	*success = valid;

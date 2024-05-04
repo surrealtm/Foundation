@@ -9,10 +9,12 @@
 
 #define TM_DEFAULT_COLOR (-1)
 
-#if FOUNDATION_DEVELOPER
+#if FOUNDATION_TELEMETRY
 # define tmBegin()                  _tmReset()
 # define tmFunction(color)          _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
 # define tmZone(name, color)        _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
+# define tmEnter(name, color)       _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color)
+# define tmExit()                   _tmExit()
 # define tmFinish()                 _tmFinish()
 # define tmSetColor(index, r, g, b) _tmSetColor(index, r, g, b)
 # define tmDestroy()                _tmDestroy()
@@ -20,6 +22,8 @@
 # define tmBegin()
 # define tmFunction(color)
 # define tmZone(name, color)
+# define tmEnter(name, color)
+# define tmExit()
 # define tmFinish()
 # define tmSetColor(index, r, g, b)
 # define tmDestroy()

@@ -2,7 +2,6 @@
 
 #define NOMINMAX
 
-#include <assert.h> // For assert
 #include <math.h>   // For ceil, pow...
 #include <stdio.h>  // For printf
 #include <memory.h> // For memset, memcpy...
@@ -85,6 +84,16 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 
 #define foundation_error(format, ...) os_write_to_console(__FILE__ "," STRINGIFY(__LINE__) ": " format, __VA_ARGS__)
 
+#if !FOUNDATION_USE_DEFAULT_ASSERT
+# if _DEBUG
+#  define assert(expr, ...) ((!!(expr)) || foundation_do_assertion_fail(STRINGIFY(expr), __VA_ARGS__))
+# else
+#  define assert(expr, format, ...)
+# endif
+#else 
+# include <assert.h>
+#endif
+
 #define align_to(value, alignment, type) ((type) (ceil((f64) (value) / (f64) (alignment)) * (alignment)))
 
 #define min(lhs, rhs) ((lhs) < (rhs) ? (lhs) : (rhs))
@@ -101,6 +110,8 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
     inline T &operator&=(T &a, T b) { a = a & b; return a; };           \
     inline T &operator^=(T &a, T b) { a = a ^ b; return a; };   
 
+
+b8 foundation_do_assertion_fail(const char *assertion_text, const char *format = "", ...);
 
 
 /* ----------------------------------------------- Defer Helper ----------------------------------------------- */

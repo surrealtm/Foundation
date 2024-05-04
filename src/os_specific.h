@@ -79,6 +79,24 @@ u64 os_get_current_cpu_cycle();
 
 
 
+/* ---------------------------------------------- Stack Walking ---------------------------------------------- */
+
+struct Stack_Trace {
+    struct Stack_Frame {
+        string name;
+        string file;
+        s64 line;
+    };
+
+    Stack_Frame *frames;
+    s64 frame_count;
+};
+
+Stack_Trace os_get_stack_trace();
+void os_free_stack_trace(Stack_Trace *trace);
+
+
+
 /* --------------------------------------------- Bit Manipulation --------------------------------------------- */
 
 u64 os_highest_bit_set(u64 value);

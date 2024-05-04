@@ -603,19 +603,21 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
     }
 
 #if __TM_TRACK_OVERHEAD
-    Time_Unit time_unit = _tmInternalGetBestTimeUnit(total_overhead_hwtime);
-    f64 time = os_convert_hardware_time(total_overhead_hwtime, time_unit);
+    if(mode != TIMING_OUTPUT_None) {
+        Time_Unit time_unit = _tmInternalGetBestTimeUnit(total_overhead_hwtime);
+        f64 time = os_convert_hardware_time(total_overhead_hwtime, time_unit);
         
-    f32 space;
-    Memory_Unit space_unit = get_best_memory_unit(total_overhead_space, &space);
+        f32 space;
+        Memory_Unit space_unit = get_best_memory_unit(total_overhead_space, &space);
 
-    s32 header_length = sprintf_s(header_buffer, " PROFILING OVERHEAD ");            
-    s32 half_length = (s32) (__TM_PRINT_MTPC_OFFSET + 10 - header_length + 1) / 2;
+        s32 header_length = sprintf_s(header_buffer, " PROFILING OVERHEAD ");            
+        s32 half_length = (s32) (__TM_PRINT_MTPC_OFFSET + 10 - header_length + 1) / 2;
     
-    _tmPrintHeader();
-    printf("  Time: %f%s\n", time, time_unit_suffix(time_unit));
-    printf("  Space: %f%s\n", space, memory_unit_suffix(space_unit));
-    _tmPrintHeader();
+        _tmPrintHeader();
+        printf("  Time: %f%s\n", time, time_unit_suffix(time_unit));
+        printf("  Space: %f%s\n", space, memory_unit_suffix(space_unit));
+        _tmPrintHeader();
+    }
 #endif
 }
 

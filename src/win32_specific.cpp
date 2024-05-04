@@ -6,6 +6,7 @@
 #include <wchar.h> // Apparently some fucking windows header requires this somethimes or something I don't even know I don't want to have to deal with this shit.
 #include <Windows.h>
 #include <psapi.h> // For getting memory usage
+#include <dbghelp.h> // For stack walking
 
 
 
@@ -421,6 +422,75 @@ void os_sleep(f64 seconds) {
 
 u64 os_get_current_cpu_cycle() {
 	return __rdtsc();
+}
+
+
+
+/* ----------------------------------------------- Stack Trace ----------------------------------------------- */
+
+Stack_Trace os_get_stack_trace() {
+    const s64 max_frames_to_capture = 256; // We don't know in advance how many frames there are going to be (and we don't want to iterate twice), so just preallocate a max number.
+
+    Stack_Trace trace;
+    trace.frames = (Stack_Trace::Stack_Frame *) Default_Allocator->allocate(max_frames_to_capture * sizeof(Stack_Trace::Stack_Frame));
+    trace.frame_count = 0;
+
+    HANDLE process = GetCurrentProcess();
+    HANDLE thread = GetCurrentThread();
+    
+    SymInitialize(process, null, true);
+
+    // @Incomplete.
+    CONTEXT context;
+    RtlCaptureContext(&context);
+
+    STACKFRAME64 stack_frame     = { 0 };
+    stack_frame.AddrPC.Offset    = context.Rip;
+    stack_frame.AddrPC.Mode      = AddrModeFlat;
+    stack_frame.AddrStack.Offset = context.Rsp;
+    stack_frame.AddrStack.Mode   = AddrModeFlat;
+    stack_frame.AddrFrame.Offset = context.Rbp;
+    stack_frame.AddrFrame.Mode   = AddrModeFlat;
+
+    char symbol_buffer[sizeof(IMAGEHLP_SYMBOL64) + 256];
+    IMAGEHLP_SYMBOL64 *symbol = (IMAGEHLP_SYMBOL64 *) symbol_buffer;
+    symbol->SizeOfStruct      = sizeof(IMAGEHLP_SYMBOL64);
+    symbol->MaxNameLength     = 255;
+
+    IMAGEHLP_LINE64 line;
+    b8 is_self_frame = true;
+    
+    while(trace.frame_count < max_frames_to_capture && StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread, &stack_frame, &context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL)) {
+        if(is_self_frame) {
+            // We don't care about the stack frame for 'os_get_stack_trace' itself.
+            is_self_frame = false;
+            continue;
+        }
+
+        DWORD64 symbol_displacement;
+        DWORD line_displacement;
+
+        if(SymGetSymFromAddr64(process, stack_frame.AddrPC.Offset, &symbol_displacement, symbol) && SymGetLineFromAddr64(process, stack_frame.AddrPC.Offset, &line_displacement, &line)) {
+            trace.frames[trace.frame_count].name = copy_string(Default_Allocator, cstring_view(symbol->Name));
+            trace.frames[trace.frame_count].file = copy_string(Default_Allocator, cstring_view(line.FileName));
+            trace.frames[trace.frame_count].line = line.LineNumber;
+            ++trace.frame_count;
+        }
+    }
+
+    SymCleanup(process);
+    return trace;
+}
+
+void os_free_stack_trace(Stack_Trace *trace) {
+    for(s64 i = 0; i < trace->frame_count; ++i) {
+        deallocate_string(Default_Allocator, &trace->frames[i].name);
+        deallocate_string(Default_Allocator, &trace->frames[i].file);
+    }
+
+    Default_Allocator->deallocate(trace->frames);
+    trace->frames = null;
+    trace->frame_count = 0;
 }
 
 
