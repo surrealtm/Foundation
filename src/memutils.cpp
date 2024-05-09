@@ -71,11 +71,12 @@ void Allocator::reset() {
 
 void Allocator::reset_stats() {
 #if FOUNDATION_ALLOCATOR_STATISTICS
+	// We explicitely don't reset the peak working set here, since that may still be of interest
+	// when working with scratch arenas.
 	this->stats.allocations      = 0;
 	this->stats.deallocations    = 0;
 	this->stats.reallocations    = 0;
 	this->stats.working_set      = 0;
-	this->stats.peak_working_set = 0;
 #endif
 }
 
@@ -398,9 +399,7 @@ void *Memory_Pool::push(u64 size) {
 		
 		memset(unused_block->data(), 0, size);
 
-#if FOUNDATION_ALLOCATOR_STATISTICS
 		unused_block->original_allocation_size = size;
-#endif
 
 		data = unused_block->data();
 	} else {
@@ -432,9 +431,7 @@ void *Memory_Pool::push(u64 size) {
 		block->size_in_bytes  = size;
 		block->used           = true;
 
-#if FOUNDATION_ALLOCATOR_STATISTICS
 		block->original_allocation_size = size;
-#endif
 		
 		if(this->last_block) {
 			assert(this->first_block != null);
@@ -504,13 +501,15 @@ void *Memory_Pool::reallocate(void *old_pointer, u64 new_size) {
     u64 old_size = this->query_allocation_size(old_pointer);
     void *new_pointer = this->push(new_size);
     
-    memcpy(new_pointer, old_pointer, min(old_size, new_size));
+    memmove(new_pointer, old_pointer, min(old_size, new_size));
     this->release(old_pointer);
     return new_pointer;
 }
 
 u64 Memory_Pool::query_allocation_size(void *pointer) {
-#if FOUNDATION_ALLOCATOR_STATISTICS
+	//
+	// This is required for reallocation!
+	//
 	Block *block = this->first_block;
 	while(block && block->data() < pointer) {
 		block = block->next();
@@ -522,9 +521,6 @@ u64 Memory_Pool::query_allocation_size(void *pointer) {
 	assert(block->used);
 
 	return block->original_allocation_size;
-#else
-	return 0;
-#endif
 }
 
 void Memory_Pool::debug_print(u32 indent) {

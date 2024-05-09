@@ -151,10 +151,8 @@ struct Memory_Pool {
 		u64 size_in_bytes : 63; // Size in bytes of the usable data section of this block. Since the arena may be used by other things, this may not correspond to the offset to the next block.
 		u64 used : 1; // Set to false once a block is freed, so that it may be merged or reused.
 	
-#if FOUNDATION_ALLOCATOR_STATISTICS
-		u64 original_allocation_size; // The size_in_bytes of a block is not necessarily the "user"-requested size, e.g. for alignment or when merging blocks. This "user" size however is required for proper allocator statistics.
+		u64 original_allocation_size; // The size_in_bytes of a block is not necessarily the "user"-requested size, e.g. for alignment or when merging blocks. This "user" size however is required for reallocation (copying the old data), as well as for allocator statistics.
 		u64 __padding; // The block header must be 16 byte aligned.
-#endif
 
 		Block *next();
 		void *data();
@@ -203,8 +201,8 @@ struct Resizable_Array {
 		b8 operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
         Iterator &operator++() { ++this->pointer; return *this; }
         
-        T *operator*()  { return this->pointer; }
-		T *operator->() { return this->pointer; }
+        T &operator*()  { return *this->pointer; }
+		T *operator->() { return *this->pointer; }
     };
 
 	Allocator *allocator = Default_Allocator;
@@ -245,8 +243,8 @@ struct Linked_List {
 		b8 operator!=(Iterator const &it) const { return this->pointer != it.pointer; }    
         Iterator &operator++() { this->pointer = this->pointer->next; return *this; }
         
-        T *operator*()  { return &this->pointer->data; }
-		T *operator->() { return &this->pointer->data; }
+        T &operator*()  { return this->pointer->data; }
+		T *operator->() { return this->pointer->data; }
     };
 
 	Allocator *allocator = Default_Allocator;

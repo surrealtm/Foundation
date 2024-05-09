@@ -18,7 +18,7 @@ void Resizable_Array<T>::maybe_grow(b8 force) {
             // deallocation, then it is most likely some sort of scratch allocator that frees all memory at
             // once.
             T *new_pointer = (T *) this->allocator->allocate(this->allocated * sizeof(T));
-            memcpy(new_pointer, this->data, this->count * sizeof(T));
+            memmove(new_pointer, this->data, this->count * sizeof(T));
             if(this->allocator->_deallocate_procedure) this->allocator->deallocate(this->data);
             this->data = new_pointer;	
         } else {
@@ -40,7 +40,7 @@ void Resizable_Array<T>::maybe_shrink() {
             // deallocation, then it is most likely some sort of scratch allocator that frees all memory at
             // once.
             T *new_pointer = (T *) this->allocator->allocate(this->allocated * sizeof(T));
-            memcpy(new_pointer, this->data, this->count * sizeof(T));
+            memmove(new_pointer, this->data, this->count * sizeof(T));
             if(this->allocator->_deallocate_procedure) this->allocator->deallocate(this->data);
             this->data = new_pointer;	
         } else {

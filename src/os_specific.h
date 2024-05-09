@@ -75,7 +75,7 @@ f64 os_convert_hardware_time(Hardware_Time input, Time_Unit unit);
 f64 os_convert_hardware_time(f64 input, Time_Unit unit);
 void os_sleep(f64 seconds);
 
-u64 os_get_current_cpu_cycle();
+u64 os_get_cpu_cycle();
 
 
 

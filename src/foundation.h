@@ -88,7 +88,7 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 # if _DEBUG
 #  define assert(expr, ...) ((!!(expr)) || foundation_do_assertion_fail(STRINGIFY(expr), __VA_ARGS__))
 # else
-#  define assert(expr, format, ...)
+#  define assert(expr, ...)
 # endif
 #else 
 # include <assert.h>

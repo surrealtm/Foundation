@@ -427,7 +427,7 @@ void os_sleep(f64 seconds) {
 }
 
 
-u64 os_get_current_cpu_cycle() {
+u64 os_get_cpu_cycle() {
 	return __rdtsc();
 }
 

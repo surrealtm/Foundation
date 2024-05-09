@@ -10,9 +10,12 @@
 #define __TM_INITIAL_INDENT    0
 #define __TM_PRINT_PROC_OFFSET 0
 #define __TM_PRINT_INCL_OFFSET 80
-#define __TM_PRINT_EXCL_OFFSET 100
-#define __TM_PRINT_COUN_OFFSET 120
-#define __TM_PRINT_MTPC_OFFSET 132
+#define __TM_PRINT_CYCL_OFFSET 95
+#define __TM_PRINT_EXCL_OFFSET 110
+#define __TM_PRINT_COUN_OFFSET 125
+#define __TM_PRINT_MTPC_OFFSET 140
+#define __TM_PRINT_MCPC_OFFSET 155
+#define __TM_PRINT_HEADER_SIZE __TM_PRINT_MCPC_OFFSET + 10
 #define __TM_MAX_COLORS        32
 #define __TM_MAX_THREADS       16
 
@@ -29,7 +32,9 @@ struct _tm_Timeline_Entry {
     char const *source_string;
     Hardware_Time hwtime_start;
     Hardware_Time hwtime_end;
-    
+    s64 cycle_start;
+    s64 cycle_end;
+
     u8 color_index;
 };
 
@@ -41,6 +46,7 @@ struct _tm_Summary_Entry {
     char const *source_string;
     Hardware_Time total_inclusive_hwtime;
     Hardware_Time total_exclusive_hwtime;
+    s64 total_inclusive_cycles;
     s64 count;
 };
 
@@ -56,7 +62,7 @@ struct _tm_Thread_State {
     s64 head_index = MAX_S64;
     s64 root_index = MAX_S64; // The current root function (the function without a parent in the profiling mechanism).
 
-    s64 total_overhead_hwtime;
+    Hardware_Time total_overhead_hwtime;
 };
 
 struct _tm_State {
@@ -74,8 +80,11 @@ struct _tm_State {
 
     _tm_Color colors[__TM_MAX_COLORS];
 
-    s64 total_hwtime_start = 0;
-    s64 total_hwtime_end = 0;
+    Hardware_Time total_hwtime_start = 0;
+    Hardware_Time total_hwtime_end = 0;
+
+    s64 total_cycle_start = 0;
+    s64 total_cycle_end   = 0;
 };
 
 thread_local _tm_Thread_State *_tm_thread = null;
@@ -157,9 +166,11 @@ void _tmInternalPrintTimelineEntry(_tm_Thread_State *thread, _tm_Timeline_Entry 
         line_size += _tmPrintPaddingTo(indentation, 0);
         line_size += printf("%s, %s", entry->procedure_name, entry->source_string);
         line_size += _tmPrintPaddingTo(__TM_PRINT_INCL_OFFSET, line_size);
-        line_size += printf("%f%s", inclusive_time, time_unit_suffix(inclusive_unit));
+        line_size += printf("%.2f%s", inclusive_time, time_unit_suffix(inclusive_unit));
+        line_size += _tmPrintPaddingTo(__TM_PRINT_CYCL_OFFSET, line_size);
+        line_size += printf("%" PRId64, entry->cycle_end - entry->cycle_start);
         line_size += _tmPrintPaddingTo(__TM_PRINT_EXCL_OFFSET, line_size);
-        line_size += printf("%f%s", exclusive_time, time_unit_suffix(exclusive_unit));
+        line_size += printf("%.2f%s", exclusive_time, time_unit_suffix(exclusive_unit));
         printf("\n");
         
         if(entry->first_child_index != MAX_S64) {
@@ -170,6 +181,37 @@ void _tmInternalPrintTimelineEntry(_tm_Thread_State *thread, _tm_Timeline_Entry 
 
         entry = &thread->timeline[entry->next_index];
     }
+}
+
+static
+void _tmInternalPrintSummaryEntry(_tm_Summary_Entry *entry) {
+    f64 mhwtpc = (f64) entry->total_inclusive_hwtime / (f64) entry->count;
+    f64 mcpc = (f64) entry->total_inclusive_cycles / (f64) entry->count;
+
+    Time_Unit inclusive_unit = _tmInternalGetBestTimeUnit(entry->total_inclusive_hwtime);
+    Time_Unit exclusive_unit = _tmInternalGetBestTimeUnit(entry->total_exclusive_hwtime);
+    Time_Unit mtpc_unit      = _tmInternalGetBestTimeUnit((Hardware_Time) mhwtpc);
+                
+    f64 inclusive_time = os_convert_hardware_time(entry->total_inclusive_hwtime, inclusive_unit);
+    f64 exclusive_time = os_convert_hardware_time(entry->total_exclusive_hwtime, exclusive_unit);
+    f64 mtpc_time      = os_convert_hardware_time(mhwtpc, mtpc_unit);
+
+    int line_size = 0;
+    line_size += _tmPrintPaddingTo(__TM_PRINT_PROC_OFFSET, line_size);
+    line_size += printf("%s, %s", entry->procedure_name, entry->source_string);
+    line_size += _tmPrintPaddingTo(__TM_PRINT_INCL_OFFSET, line_size);
+    line_size += printf("%.2f%s", inclusive_time, time_unit_suffix(inclusive_unit));
+    line_size += _tmPrintPaddingTo(__TM_PRINT_CYCL_OFFSET, line_size);
+    line_size += printf("%" PRId64, entry->total_inclusive_cycles);
+    line_size += _tmPrintPaddingTo(__TM_PRINT_EXCL_OFFSET, line_size);
+    line_size += printf("%.2f%s", exclusive_time, time_unit_suffix(exclusive_unit));
+    line_size += _tmPrintPaddingTo(__TM_PRINT_COUN_OFFSET, line_size);
+    line_size += printf("%" PRId64, entry->count);
+    line_size += _tmPrintPaddingTo(__TM_PRINT_MTPC_OFFSET, line_size);
+    line_size += printf("%.2f%s", mtpc_time, time_unit_suffix(mtpc_unit));
+    line_size += _tmPrintPaddingTo(__TM_PRINT_MCPC_OFFSET, line_size);
+    line_size += printf("%.2f", mcpc);
+    printf("\n");
 }
 
 
@@ -281,8 +323,8 @@ void _tmInternalBuildSummaryTable() {
     //
     for(s64 i = 0; i < _tm_state.thread_count; ++i) {
         _tm_Thread_State *thread = &_tm_state.threads[i];
-        for(_tm_Timeline_Entry *entry : thread->timeline) {
-            u64 hash = string_hash(entry->procedure_name);
+        for(_tm_Timeline_Entry &entry : thread->timeline) {
+            u64 hash = string_hash(entry.procedure_name);
             if(hash == 0) hash = 1;
 
             u64 bucket_index = hash % _tm_state.summary_table_size;
@@ -300,10 +342,11 @@ void _tmInternalBuildSummaryTable() {
                     //
                     // An entry for this procedure already exists, add the stats onto it.
                     //
-                    assert(compare_cstrings(bucket->procedure_name, entry->procedure_name)); // Check for hash collisions
-                    bucket->total_inclusive_hwtime += entry->hwtime_end - entry->hwtime_start;
-                    bucket->total_exclusive_hwtime += (entry->hwtime_end - entry->hwtime_start) - _tmInternalCalculateHardwareTimeOfChildren(thread, entry);
-                    bucket->count                   += 1;
+                    assert(compare_cstrings(bucket->procedure_name, entry.procedure_name)); // Check for hash collisions
+                    bucket->total_inclusive_hwtime += entry.hwtime_end - entry.hwtime_start;
+                    bucket->total_exclusive_hwtime += entry.hwtime_end - entry.hwtime_start - _tmInternalCalculateHardwareTimeOfChildren(thread, &entry);
+                    bucket->total_inclusive_cycles += entry.cycle_end - entry.cycle_start;
+                    bucket->count                  += 1;
                 } else {
                     //
                     // No entry for this procedure exists yet, create a new one.
@@ -312,10 +355,11 @@ void _tmInternalBuildSummaryTable() {
                     bucket = (_tm_Summary_Entry *) Default_Allocator->allocate(sizeof(_tm_Summary_Entry));
                     bucket->next                    = null;
                     bucket->hash                    = hash;
-                    bucket->procedure_name          = entry->procedure_name;
-                    bucket->source_string           = entry->source_string;
-                    bucket->total_inclusive_hwtime  = entry->hwtime_end - entry->hwtime_start;
-                    bucket->total_exclusive_hwtime  = (entry->hwtime_end - entry->hwtime_start) - _tmInternalCalculateHardwareTimeOfChildren(thread, entry);
+                    bucket->procedure_name          = entry.procedure_name;
+                    bucket->source_string           = entry.source_string;
+                    bucket->total_inclusive_hwtime  = entry.hwtime_end - entry.hwtime_start;
+                    bucket->total_exclusive_hwtime  = entry.hwtime_end - entry.hwtime_start - _tmInternalCalculateHardwareTimeOfChildren(thread, &entry);
+                    bucket->total_inclusive_cycles  = entry.cycle_end - entry.cycle_start;
                     bucket->count                   = 1;
                     previous->next                  = bucket;
                 }
@@ -325,10 +369,11 @@ void _tmInternalBuildSummaryTable() {
                 //
                 bucket->next                    = null;
                 bucket->hash                    = hash;
-                bucket->procedure_name          = entry->procedure_name;
-                bucket->source_string           = entry->source_string;
-                bucket->total_inclusive_hwtime  = entry->hwtime_end - entry->hwtime_start;
-                bucket->total_exclusive_hwtime  = (entry->hwtime_end - entry->hwtime_start) - _tmInternalCalculateHardwareTimeOfChildren(thread, entry);
+                bucket->procedure_name          = entry.procedure_name;
+                bucket->source_string           = entry.source_string;
+                bucket->total_inclusive_hwtime  = entry.hwtime_end - entry.hwtime_start;
+                bucket->total_exclusive_hwtime  = entry.hwtime_end - entry.hwtime_start - _tmInternalCalculateHardwareTimeOfChildren(thread, &entry);
+                bucket->total_inclusive_cycles  = entry.cycle_end - entry.cycle_start;
                 bucket->count                   = 1;
             }
         }
@@ -394,6 +439,7 @@ void _tmReset() {
     }
 
     _tm_state.total_hwtime_start = os_get_hardware_time();
+    _tm_state.total_cycle_start  = os_get_cpu_cycle();
 }
 
 void _tmDestroy() {
@@ -488,6 +534,7 @@ void _tmEnter(char const *procedure_name, char const *source_string, int color_i
     entry->color_index       = color_index >= 0 ? (u8) color_index : (__TM_MAX_COLORS - 1);
     entry->hwtime_end        = 0;
     entry->hwtime_start      = os_get_hardware_time();
+    entry->cycle_start       = os_get_cpu_cycle();
 
 #if __TM_TRACK_OVERHEAD
     _tm_thread->total_overhead_hwtime += entry->hwtime_start - overhead_start;
@@ -495,20 +542,18 @@ void _tmEnter(char const *procedure_name, char const *source_string, int color_i
 }
 
 void _tmExit() {
-#if __TM_TRACK_OVERHEAD
-    s64 overhead_start = os_get_hardware_time();
-#endif
-
-    Hardware_Time end = os_get_hardware_time();
+    s64 cycle_end = os_get_cpu_cycle();
+    Hardware_Time hw_end = os_get_hardware_time();
 
     assert(_tm_thread->head_index != MAX_S64);
     auto entry = &_tm_thread->timeline[_tm_thread->head_index];
-    entry->hwtime_end = end;
+    entry->hwtime_end = hw_end;
+    entry->cycle_end  = cycle_end;
 
     _tm_thread->head_index = entry->parent_index;    
 
 #if __TM_TRACK_OVERHEAD
-    _tm_thread->total_overhead_hwtime += os_get_hardware_time() - overhead_start;
+    _tm_thread->total_overhead_hwtime += os_get_hardware_time() - hw_end;
 #endif
 }
 
@@ -529,12 +574,16 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         line_size += printf("Procedure");
         line_size += _tmPrintPaddingTo(__TM_PRINT_INCL_OFFSET, line_size);
         line_size += printf("Inclusive");
+        line_size += _tmPrintPaddingTo(__TM_PRINT_CYCL_OFFSET, line_size);
+        line_size += printf("(Cycles)");
         line_size += _tmPrintPaddingTo(__TM_PRINT_EXCL_OFFSET, line_size);
         line_size += printf("Exclusive");
         line_size += _tmPrintPaddingTo(__TM_PRINT_COUN_OFFSET, line_size);                        
         line_size += printf("Count");
         line_size += _tmPrintPaddingTo(__TM_PRINT_MTPC_OFFSET, line_size);                        
         line_size += printf("MTPC");
+        line_size += _tmPrintPaddingTo(__TM_PRINT_MCPC_OFFSET, line_size);                        
+        line_size += printf("(Cycles)");
         printf("\n");
     }
 
@@ -550,7 +599,7 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
 
         if(mode & TIMING_OUTPUT_Timeline) {
             s32 header_length = sprintf_s(header_buffer, " THREAD TIMELINE - %d ", thread->thread_id);            
-            s32 half_length = (s32) (__TM_PRINT_MTPC_OFFSET + 10 - header_length + 1) / 2;
+            s32 half_length = (s32) (__TM_PRINT_HEADER_SIZE + 10 - header_length + 1) / 2;
 
             _tmPrintHeader();
             _tmInternalPrintTimelineEntry(thread, &thread->timeline[0], __TM_INITIAL_INDENT);
@@ -568,35 +617,12 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         _tmInternalBuildSortedSummary(sorting);
 
         s32 header_length = sprintf_s(header_buffer, " PROFILING SUMMARY ");            
-        s32 half_length = (s32) (__TM_PRINT_MTPC_OFFSET + 10 - header_length + 1) / 2;
+        s32 half_length = (s32) (__TM_PRINT_HEADER_SIZE + 10 - header_length + 1) / 2;
             
         _tmPrintHeader();
         
-        for(_tm_Summary_Entry **iterator : _tm_state.sorted_summary) {
-            _tm_Summary_Entry *entry = *iterator;
-
-            f64 mhwtpc = (f64) entry->total_inclusive_hwtime / (f64) entry->count;
-
-            Time_Unit inclusive_unit = _tmInternalGetBestTimeUnit(entry->total_inclusive_hwtime);
-            Time_Unit exclusive_unit = _tmInternalGetBestTimeUnit(entry->total_exclusive_hwtime);
-            Time_Unit mtpc_unit      = _tmInternalGetBestTimeUnit((Hardware_Time) mhwtpc);
-                
-            f64 inclusive_time = os_convert_hardware_time(entry->total_inclusive_hwtime, inclusive_unit);
-            f64 exclusive_time = os_convert_hardware_time(entry->total_exclusive_hwtime, exclusive_unit);
-            f64 mtpc_time      = os_convert_hardware_time(mhwtpc, mtpc_unit);
-
-            int line_size = 0;
-            line_size += _tmPrintPaddingTo(__TM_PRINT_PROC_OFFSET, line_size);
-            line_size += printf("%s, %s", entry->procedure_name, entry->source_string);
-            line_size += _tmPrintPaddingTo(__TM_PRINT_INCL_OFFSET, line_size);
-            line_size += printf("%f%s", inclusive_time, time_unit_suffix(inclusive_unit));
-            line_size += _tmPrintPaddingTo(__TM_PRINT_EXCL_OFFSET, line_size);
-            line_size += printf("%f%s", exclusive_time, time_unit_suffix(exclusive_unit));
-            line_size += _tmPrintPaddingTo(__TM_PRINT_COUN_OFFSET, line_size);
-            line_size += printf("%" PRId64, entry->count);
-            line_size += _tmPrintPaddingTo(__TM_PRINT_MTPC_OFFSET, line_size);
-            line_size += printf("%f%s", mtpc_time, time_unit_suffix(mtpc_unit));
-            printf("\n");
+        for(_tm_Summary_Entry *entry : _tm_state.sorted_summary) {
+            _tmInternalPrintSummaryEntry(entry);
         }
 
         _tmPrintHeader();    
@@ -611,11 +637,11 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         Memory_Unit space_unit = get_best_memory_unit(total_overhead_space, &space);
 
         s32 header_length = sprintf_s(header_buffer, " PROFILING OVERHEAD ");            
-        s32 half_length = (s32) (__TM_PRINT_MTPC_OFFSET + 10 - header_length + 1) / 2;
+        s32 half_length = (s32) (__TM_PRINT_HEADER_SIZE + 10 - header_length + 1) / 2;
     
         _tmPrintHeader();
-        printf("  Time: %f%s\n", time, time_unit_suffix(time_unit));
-        printf("  Space: %f%s\n", space, memory_unit_suffix(space_unit));
+        printf("  Time:  %f.2%s\n", time, time_unit_suffix(time_unit));
+        printf("  Space: %f.2%s\n", space, memory_unit_suffix(space_unit));
         _tmPrintHeader();
     }
 #endif
