@@ -6,11 +6,26 @@
 #include <fenv.h> // For feclearexcept...
 #include <string.h> // For strcmp
 
-string operator "" _s(const char *literal, size_t size) {
-	string _string;
-	_string.count = size;
-	_string.data  = (u8 *) literal;
-	return _string;
+
+
+/* ------------------------------------------------ Characters ------------------------------------------------ */
+
+b8 is_lower_character(u8 c) {
+    return c >= 'a' && c <= 'z';
+}
+
+b8 is_upper_character(u8 c) {
+    return !is_lower_character(c);
+}
+
+u8 to_lower_character(u8 c) {
+    if (c >= 'A' && c <= 'Z') return (c - 'A') + 'a';
+    return c;
+}
+
+u8 to_upper_character(u8 c) {
+    if (c >= 'a' && c <= 'z') return (c - 'a') + 'A';
+    return c;
 }
 
 
@@ -26,7 +41,7 @@ s64 cstring_length(char *cstring) {
 	return length;
 }
 
-s64 cstring_length(char const *cstring) {
+s64 cstring_length(const char *cstring) {
 	s64 length = 0;
 	while(*cstring) {
 		++length;
@@ -35,7 +50,7 @@ s64 cstring_length(char const *cstring) {
 	return length;
 }
 
-string from_cstring(Allocator *allocator, char const *cstring) {
+string from_cstring(Allocator *allocator, const char *cstring) {
 	string _string;
 	_string.count = cstring_length(cstring);
 	_string.data  = (u8 *) allocator->allocate(_string.count);
@@ -43,7 +58,7 @@ string from_cstring(Allocator *allocator, char const *cstring) {
 	return _string;
 }
 
-string cstring_view(char const *cstring) {
+string cstring_view(const char *cstring) {
 	string _string;
 	_string.count = cstring_length(cstring);
 	_string.data  = (u8 *) cstring;
@@ -61,13 +76,79 @@ void free_cstring(Allocator *allocator, char *cstring) {
 	allocator->deallocate(cstring);
 }
 
-b8 compare_cstrings(char const *lhs, char const *rhs) {
+s64 search_cstring(const char *string, u8 _char) {
+    for(s64 i = 0; *string != 0; ++string, ++i) {
+        if(*string == _char) return i;
+    }
+
+    return -1;
+}
+
+s64 search_cstring_reverse(const char *string, u8 _char) {
+    for(s64 i = strlen(string); *string != 0; ++string, --i) {
+        if(*string == _char) return i;
+    }
+
+    return -1;
+}
+
+b8 cstrings_equal(const char *lhs, const char *rhs) {
     return strcmp(lhs, rhs) == 0;
+}
+
+b8 cstrings_equal(const char *lhs, const char *rhs, s64 length) {
+    return strncmp(lhs, rhs, length) == 0;
+}
+
+b8 cstrings_equal_ignore_case(const char *lhs, const char *rhs) {
+    for(;; ++lhs, ++rhs) {
+        char d = to_lower_character((unsigned char) *lhs) - to_lower_character((unsigned char) *rhs);
+        if(d != 0 || !*lhs) return false;
+    }
+
+    return true;
+}
+
+b8 cstrings_equal_ignore_case(const char *lhs, const char *rhs, s64 length) {
+    for(s64 i = 0; i < length; ++lhs, ++rhs, ++i) {
+        char d = to_lower_character((unsigned char) *lhs) - to_lower_character((unsigned char) *rhs);
+        if(d != 0 || !*lhs) return false;
+    }
+
+    return true;
+}
+
+b8 cstring_starts_with(const char *lhs, const char *rhs) {
+    return cstrings_equal(lhs, rhs, cstring_length(rhs));
+}
+
+b8 cstring_starts_with_ignore_case(const char *lhs, const char *rhs) {
+    return cstrings_equal_ignore_case(lhs, rhs, strlen(rhs));
+}
+
+b8 cstring_ends_with(const char *lhs, const char *rhs) {
+    s64 lhslen = cstring_length(lhs);
+    s64 rhslen = cstring_length(rhs);
+    if(rhslen > lhslen) return false;
+    
+    return cstrings_equal(&lhs[lhslen - rhslen], rhs, rhslen);
+}
+
+b8 cstring_ends_with_ignore_case(const char *lhs, const char *rhs) {
+    s64 lhslen = cstring_length(lhs);
+    s64 rhslen = cstring_length(rhs);
+    if(rhslen > lhslen) return false;
+    
+    return cstrings_equal_ignore_case(&lhs[lhslen - rhslen], rhs, rhslen);
 }
 
 
 
 /* -------------------------------------------------- String -------------------------------------------------- */
+
+string operator "" _s(const char *literal, size_t size) {
+	return { static_cast<s64>(size), (u8 *) literal };
+}
 
 string strltr(char *literal) {
 	string _string;
@@ -430,9 +511,9 @@ u64 String_Builder::radix_value(Radix radix, u64 index) {
 	u64 power = 1;
 
 	switch(radix) {
-	case RADIX_binary:      power = 1ULL << index; break;
-	case RADIX_hexadecimal: power = 1ULL << (index * 4); break;
-	case RADIX_decimal:
+	case RADIX_Binary:      power = 1ULL << index; break;
+	case RADIX_Hexadecimal: power = 1ULL << (index * 4); break;
+	case RADIX_Decimal:
 		for(u64 i = 0; i < index; ++i) {
 			power *= 10;
 		}
@@ -484,12 +565,12 @@ u64 String_Builder::number_of_required_digits(f64 value) {
 void String_Builder::append_string_builder_format(String_Builder_Format format) {
 	if(format.prefix) {
 		switch(format.radix) {
-		case RADIX_binary: this->append_string("0b"_s); break;
-		case RADIX_hexadecimal: this->append_string("0x"_s); break;
+		case RADIX_Binary: this->append_string("0b"_s); break;
+		case RADIX_Hexadecimal: this->append_string("0x"_s); break;
 		}
 	}
 	
-	if(format.radix == RADIX_binary || format.radix == RADIX_hexadecimal || (format.radix == RADIX_decimal && !format.sign)) {
+	if(format.radix == RADIX_Binary || format.radix == RADIX_Hexadecimal || (format.radix == RADIX_Decimal && !format.sign)) {
 		u64 value = format.value;
 		u64 required_digits = this->number_of_required_digits(format.radix, value);
 		
@@ -514,7 +595,7 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
 			value -= digit * power;
 			--index;
 		}
-	} else if(format.radix == RADIX_decimal && format.sign) {
+	} else if(format.radix == RADIX_Decimal && format.sign) {
 		u64 value = format.value;
 		u64 required_digits = this->number_of_required_digits(format.radix, (s64) value);
 		
@@ -549,7 +630,7 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
 			value -= digit * power;
 			--index;
 		}
-	} else if(format.radix == RADIX_floating_point) {
+	} else if(format.radix == RADIX_Floating_Point) {
 		f64 value;
 		memcpy(&value, &format.value, sizeof(f64));
 		u64 required_digits = this->number_of_required_digits(value);
@@ -632,35 +713,35 @@ void String_Builder::destroy() {
 }
 
 void String_Builder::append_u8(u8 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
+	this->append_string_builder_format({ RADIX_Decimal, (u64) v, 1, 0, false, false });
 }
 
 void String_Builder::append_u16(u16 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
+	this->append_string_builder_format({ RADIX_Decimal, (u64) v, 1, 0, false, false });
 }
 
 void String_Builder::append_u32(u32 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
+	this->append_string_builder_format({ RADIX_Decimal, (u64) v, 1, 0, false, false });
 }
 
 void String_Builder::append_u64(u64 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) v, 1, 0, false, false });
+	this->append_string_builder_format({ RADIX_Decimal, (u64) v, 1, 0, false, false });
 }
 
 void String_Builder::append_s8(s8 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+	this->append_string_builder_format({ RADIX_Decimal, (u64) (s64) v, 1, 0, true, false });
 }
 
 void String_Builder::append_s16(s16 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+	this->append_string_builder_format({ RADIX_Decimal, (u64) (s64) v, 1, 0, true, false });
 }
 
 void String_Builder::append_s32(s32 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+	this->append_string_builder_format({ RADIX_Decimal, (u64) (s64) v, 1, 0, true, false });
 }
 
 void String_Builder::append_s64(s64 v) {
-	this->append_string_builder_format({ RADIX_decimal, (u64) (s64) v, 1, 0, true, false });
+	this->append_string_builder_format({ RADIX_Decimal, (u64) (s64) v, 1, 0, true, false });
 }
 
 void String_Builder::append_f32(f32 value) {
@@ -670,7 +751,7 @@ void String_Builder::append_f32(f32 value) {
 void String_Builder::append_f64(f64 value) {
 	u64 _u64;
 	memcpy(&_u64, &value, sizeof(f64));
-	this->append_string_builder_format({ RADIX_floating_point, _u64, 1, 5, true, false });
+	this->append_string_builder_format({ RADIX_Floating_Point, _u64, 1, 5, true, false });
 }
 
 void String_Builder::append_char(char c) {

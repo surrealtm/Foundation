@@ -11,15 +11,6 @@
 # define FOUNDATION_ALLOCATOR_STATISTICS 1
 #endif
 
-enum Memory_Unit {
-	Bytes,
-	Kilobytes,
-	Megabytes,
-	Gigabytes,
-	Terrabytes,
-	MEMORY_UNIT_COUNT,
-};
-
 /* This codebases uses allocators for everything that requires memory management.
  * This allocator API abstracts over different memory allocation strategies, which
  * can then just be plugged in by using the appropriate allocator. If you don't care
@@ -79,6 +70,9 @@ struct Allocator {
 	void reset(); // Clears out the underlying allocation strategy
 	void reset_stats(); // Clears out the allocation stats.
 	u64 query_allocation_size(void *pointer); // Returns the original allocation size which returned this pointer. Not all allocation strategies support this.
+
+	template<typename T>
+	T *New() { T *ptr = (T *) this->allocate(sizeof(T)); *ptr = T(); return ptr; }
 
 	void debug_print(u32 indent);
 };

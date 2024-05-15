@@ -69,8 +69,6 @@ void os_set_console_text_color(Console_Color_Code color) {
     buffer[0] = 0x1b; // ESC
     buffer[1] = 0x5b; // [
 
-    // @Incomplete: What the fuck is happening here???
-    
     switch(color) {
     case CONSOLE_COLOR_Dark_Red:
         buffer[2] = '3';
@@ -453,7 +451,6 @@ Stack_Trace os_get_stack_trace() {
     
     SymInitialize(process, null, true);
 
-    // @Incomplete.
     CONTEXT context;
     RtlCaptureContext(&context);
 

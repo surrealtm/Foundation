@@ -10,19 +10,21 @@
 #define TM_DEFAULT_COLOR (-1)
 
 #if FOUNDATION_TELEMETRY
-# define tmBegin()                  _tmReset()
-# define tmFunction(color)          _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
-# define tmZone(name, color)        _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
-# define tmEnter(name, color)       _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color)
-# define tmExit()                   _tmExit()
-# define tmFinish()                 _tmFinish()
-# define tmSetColor(index, r, g, b) _tmSetColor(index, r, g, b)
-# define tmDestroy()                _tmDestroy()
+# define tmBegin()                    _tmReset()
+# define tmFunction(color)            _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
+# define tmZone(name, color)          _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color); defer {_tmExit(); }
+# define tmEnter(name, color)         _tmEnter(name, __FILE__ ":" STRINGIFY(__LINE__), color)
+# define tmParameter(parameter, copy) _tmParameter(parameter, copy)
+# define tmExit()                     _tmExit()
+# define tmFinish()                   _tmFinish()
+# define tmSetColor(index, r, g, b)   _tmSetColor(index, r, g, b)
+# define tmDestroy()                  _tmDestroy()
 #else
 # define tmBegin()
 # define tmFunction(color)
 # define tmZone(name, color)
 # define tmEnter(name, color)
+# define tmParameter(parameter, copy)
 # define tmExit()
 # define tmFinish()
 # define tmSetColor(index, r, g, b)
@@ -88,7 +90,8 @@ struct Timing_Data {
 void _tmSetColor(int index, u8 r, u8 g, u8 b);
 void _tmReset();
 void _tmDestroy();
-void _tmEnter(char const *procedure_name, char const *source_string, int color_index);
+void _tmEnter(const char *procedure_name, const char *source_string, int color_index);
+void _tmParameter(string parameter, b8 copy_to_internal);
 void _tmExit();
 void _tmFinish();
 

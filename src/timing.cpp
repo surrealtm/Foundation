@@ -30,6 +30,7 @@ struct _tm_Timeline_Entry {
 
     char const *procedure_name;
     char const *source_string;
+    string user_parameter{};
     Hardware_Time hwtime_start;
     Hardware_Time hwtime_end;
     s64 cycle_start;
@@ -164,7 +165,9 @@ void _tmInternalPrintTimelineEntry(_tm_Thread_State *thread, _tm_Timeline_Entry 
         int line_size = 0;
         line_size += _tmPrintPaddingTo(__TM_PRINT_PROC_OFFSET, line_size);
         line_size += _tmPrintPaddingTo(indentation, 0);
-        line_size += printf("%s, %s", entry->procedure_name, entry->source_string);
+        line_size += printf("%s ", entry->procedure_name);
+        if(entry->user_parameter.count) line_size += printf("(%.*s) ", (u32) entry->user_parameter.count, entry->user_parameter.data);
+        line_size += printf("%s ", entry->source_string);
         line_size += _tmPrintPaddingTo(__TM_PRINT_INCL_OFFSET, line_size);
         line_size += printf("%.2f%s", inclusive_time, time_unit_suffix(inclusive_unit));
         line_size += _tmPrintPaddingTo(__TM_PRINT_CYCL_OFFSET, line_size);
@@ -342,7 +345,7 @@ void _tmInternalBuildSummaryTable() {
                     //
                     // An entry for this procedure already exists, add the stats onto it.
                     //
-                    assert(compare_cstrings(bucket->procedure_name, entry.procedure_name)); // Check for hash collisions
+                    assert(cstrings_equal(bucket->procedure_name, entry.procedure_name)); // Check for hash collisions
                     bucket->total_inclusive_hwtime += entry.hwtime_end - entry.hwtime_start;
                     bucket->total_exclusive_hwtime += entry.hwtime_end - entry.hwtime_start - _tmInternalCalculateHardwareTimeOfChildren(thread, &entry);
                     bucket->total_inclusive_cycles += entry.cycle_end - entry.cycle_start;
@@ -467,7 +470,7 @@ void _tmDestroy() {
     }
 }
 
-void _tmEnter(char const *procedure_name, char const *source_string, int color_index) {   
+void _tmEnter(const char *procedure_name, const char *source_string, int color_index) {   
 #if __TM_TRACK_OVERHEAD
     s64 overhead_start = os_get_hardware_time();
 #endif
@@ -535,6 +538,25 @@ void _tmEnter(char const *procedure_name, char const *source_string, int color_i
     entry->hwtime_end        = 0;
     entry->hwtime_start      = os_get_hardware_time();
     entry->cycle_start       = os_get_cpu_cycle();
+
+#if __TM_TRACK_OVERHEAD
+    _tm_thread->total_overhead_hwtime += entry->hwtime_start - overhead_start;
+#endif
+}
+
+void _tmParameter(string parameter, b8 copy_to_internal) {
+#if __TM_TRACK_OVERHEAD
+    s64 overhead_start = os_get_hardware_time();
+#endif
+
+    assert(_tm_thread->head_index != MAX_S64);
+    auto *entry = &_tm_thread->timeline[_tm_thread->head_index];
+
+    if(copy_to_internal) {
+        entry->user_parameter = copy_string(Default_Allocator, parameter);
+    } else {
+        entry->user_parameter = parameter;
+    }
 
 #if __TM_TRACK_OVERHEAD
     _tm_thread->total_overhead_hwtime += entry->hwtime_start - overhead_start;
@@ -640,8 +662,8 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         s32 half_length = (s32) (__TM_PRINT_HEADER_SIZE + 10 - header_length + 1) / 2;
     
         _tmPrintHeader();
-        printf("  Time:  %f.2%s\n", time, time_unit_suffix(time_unit));
-        printf("  Space: %f.2%s\n", space, memory_unit_suffix(space_unit));
+        printf("  Time:  %.2f%s\n", time, time_unit_suffix(time_unit));
+        printf("  Space: %.2f%s\n", space, memory_unit_suffix(space_unit));
         _tmPrintHeader();
     }
 #endif

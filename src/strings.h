@@ -26,24 +26,42 @@ struct string {
 	u8 &operator[](s64 index) { assert(index >= 0 && index < this->count); return this->data[index]; }
 };
 
-string operator "" _s(const char *literal, size_t size);
+
+
+/* ------------------------------------------------ Characters ------------------------------------------------ */
+
+b8 is_lower_character(u8 c);
+b8 is_upper_character(u8 c);
+u8 to_lower_character(u8 c);
+u8 to_upper_character(u8 c);
 
 
 
 /* ------------------------------------------------ C Strings ------------------------------------------------ */
 
+s64 cstring_length(const char *cstring);
 s64 cstring_length(char *cstring);
-s64 cstring_length(char const *cstring);
-string from_cstring(Allocator *allocator, char const *cstring);
-string cstring_view(char const *cstring);
+string from_cstring(Allocator *allocator, char *cstring);
+string cstring_view(const char *cstring);
 char *to_cstring(Allocator *allocator, string _string);
 void free_cstring(Allocator *allocator, char *cstring);
-b8 compare_cstrings(char const *lhs, char const *rhs);
 
+s64 search_cstring(const char *string, u8 _char);
+s64 search_cstring_reverse(const char *string, u8 _char);
+
+b8 cstrings_equal(const char *lhs, const char *rhs);
+b8 cstrings_equal(const char *lhs, const char *rhs, s64 length);
+b8 cstrings_equal_ignore_case(const char *lhs, const char *rhs);
+b8 cstrings_equal_ignore_case(const char *lhs, const char *rhs, s64 length);
+b8 cstring_starts_with(const char *lhs, const char *rhs);
+b8 cstring_starts_with_ignore_case(const char *lhs, const char *rhs);
+b8 cstring_ends_with(const char *lhs, const char *rhs);
+b8 cstring_ends_with_ignore_case(const char *lhs, const char *rhs);
 
 
 /* ------------------------------------------------- Strings ------------------------------------------------- */
 
+string operator "" _s(const char *literal, size_t size);
 string strltr(char *literal); // Build a string from a string literal
 string string_view(u8 *data, s64 count);
 string make_string(Allocator *allocator, u8 *data, s64 count);
@@ -64,7 +82,7 @@ b8 string_starts_with(string lhs, string rhs);
 b8 string_ends_with(string lhs, string rhs);
 
 u64 string_hash(const string &input);
-u64 string_hash(char const *input);
+u64 string_hash(const char *input);
 
 
 
@@ -84,12 +102,6 @@ f32 string_to_float(string input, b8 *success);
  * The string builder maintains an internal linked list of different string blocks in case the
  * underlying allocator does not provide it with a continuous block of memory, so that these parts
  * can then be stitched together at the end with as few allocations in-bewteen as possible. */
-enum Radix {
-	RADIX_floating_point = 0,
-	RADIX_binary = 2,
-	RADIX_decimal = 10,
-	RADIX_hexadecimal = 16,
-};
 
 struct String_Builder_Format {
 	Radix radix;
@@ -98,6 +110,11 @@ struct String_Builder_Format {
 	u8  fractionals; // Only for floating point: Number of fractional digits.
 	b8  sign;
 	b8  prefix;
+
+	String_Builder_Format(Radix radix, u64 value, u8 digits = MAX_U8, u8 fractionals = MAX_U8, b8 sign = false, b8 prefix = true) :
+		radix(radix), value(value), digits(digits), fractionals(fractionals), sign(sign), prefix(prefix) {};
+	String_Builder_Format(Radix radix, s64 value, u8 digits = MAX_U8, u8 fractionals = MAX_U8, b8 sign = true, b8 prefix = true) :
+		radix(radix), value(value), digits(digits), fractionals(fractionals), sign(sign), prefix(prefix) {};
 };
 
 struct String_Builder {
@@ -109,10 +126,10 @@ struct String_Builder {
 		s64 count;
 	};
 
-	Allocator *allocator;
+	Allocator *allocator = null;
 	Block first;
-	Block *current;
-	s64 total_count;
+	Block *current = null;
+	s64 total_count = 0;
 
 	u8 *grow(s64 count);
 	u64 radix_value(Radix radix, u64 index);

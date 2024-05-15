@@ -80,7 +80,7 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 #define __INTERNAL_CONCAT(x,y) x##y
 #define CONCAT(x,y) __INTERNAL_CONCAT(x,y)
 
-#define ARRAY_SIZE(_array) (sizeof(_array) / sizeof((_array)[0]))
+#define ARRAY_COUNT(_array) (sizeof(_array) / sizeof((_array)[0]))
 
 #define foundation_error(format, ...) os_write_to_console(__FILE__ "," STRINGIFY(__LINE__) ": " format, __VA_ARGS__)
 
@@ -141,6 +141,23 @@ enum Time_Unit {
     Milliseconds,
     Seconds,
     Minutes,
+    TIME_UNIT_COUNT,
 };
 
+enum Radix {
+	RADIX_Floating_Point = 0,
+	RADIX_Binary         = 2,
+	RADIX_Decimal        = 10,
+	RADIX_Hexadecimal    = 16,
+    RADIX_COUNT,
+};
+
+enum Memory_Unit {
+	Bytes,
+	Kilobytes,
+	Megabytes,
+	Gigabytes,
+	Terrabytes,
+	MEMORY_UNIT_COUNT,
+};
 const char *time_unit_suffix(Time_Unit unit);
