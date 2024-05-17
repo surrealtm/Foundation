@@ -17,9 +17,9 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
         message_length = (u32) vsprintf_s(message, sizeof(message), format, args);
         va_end(args);
 
-        header_length = message_length + strlen("*  Assertion Failed: ") + 2;
+        header_length = message_length + strlen("*  Assertion Failed: ") + 3;
     } else {
-        header_length = strlen("* Assertion Failed: ");
+        header_length = strlen("* Assertion Failed: ") + 3;
     }
 
     for(s64 i = 0; i < header_length; ++i) printf("*");
@@ -30,7 +30,7 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
     for(s64 i = 0; i < header_length; ++i) printf("*");
     printf("\n\n");
     
-    printf("Expression failed: '%s'\n\n", assertion_text);
+    printf("Expression: '%s'\n\n", assertion_text);
 
     printf("Stack Trace:\n");
 

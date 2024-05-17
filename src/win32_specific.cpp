@@ -336,9 +336,9 @@ b8 os_looks_like_absolute_file_path(string file_path) {
 
 string os_convert_to_absolute_file_path(Allocator *allocator, string file_path) {
     char *cstring = to_cstring(Default_Allocator, file_path);
-	u32 buffer_size = GetFullPathNameA(cstring, 0, NULL, NULL);
+	u32 buffer_size = GetFullPathNameA(cstring, 0, null, null);
     string result = allocate_string(allocator, buffer_size);
-    GetFullPathNameA(cstring, buffer_size, (LPSTR) result.data, NULL);
+    GetFullPathNameA(cstring, buffer_size, (LPSTR) result.data, null);
 	free_cstring(Default_Allocator, cstring);
     return result;
 }
@@ -470,7 +470,7 @@ Stack_Trace os_get_stack_trace() {
     IMAGEHLP_LINE64 line;
     b8 is_self_frame = true;
     
-    while(trace.frame_count < max_frames_to_capture && StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread, &stack_frame, &context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL)) {
+    while(trace.frame_count < max_frames_to_capture && StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread, &stack_frame, &context, null, SymFunctionTableAccess64, SymGetModuleBase64, null)) {
         if(is_self_frame) {
             // We don't care about the stack frame for 'os_get_stack_trace' itself.
             is_self_frame = false;

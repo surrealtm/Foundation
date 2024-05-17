@@ -342,6 +342,7 @@ f64 Probed_Hash_Table<K, V>::expected_number_of_collisions() {
 
 /* ---------------------------------------- Predefined Hash Functions ---------------------------------------- */
 
+static inline
 u64 fnv1a_64(const void *data, u64 size) {
     u64 prime = 1099511628211; 
     u64 offset = 14695981039346656037U;
@@ -356,6 +357,7 @@ u64 fnv1a_64(const void *data, u64 size) {
     return hash;
 }
 
+static inline
 u64 murmur_64a(u64 k) {
     u64 m = 0xc6a4a7935bd1e995;
     s32 r = 47;

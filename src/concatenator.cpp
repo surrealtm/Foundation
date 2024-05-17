@@ -104,7 +104,7 @@ void Concatenator::setup_block(Block *block) {
     block->capacity = this->block_size;
     block->data     = this->allocator->allocate(this->block_size);
     block->count    = 0;
-    block->next     = NULL;
+    block->next     = null;
 
     if(this->last) {
         this->last->next = block;

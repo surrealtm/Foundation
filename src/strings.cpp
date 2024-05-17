@@ -792,7 +792,7 @@ string String_Builder::finish() {
 			block = next_block;
 		}
 	
-		this->first.next = NULL;
+		this->first.next = null;
 
 		return result;
 	} else {

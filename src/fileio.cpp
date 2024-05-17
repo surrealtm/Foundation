@@ -145,7 +145,7 @@ void Ascii_Writer::flush() {
 	if(directory_end != -1) os_create_directory(substring_view(this->file_path, 0, directory_end));
 
 	b8 append = false;
-	for(String_Builder::Block *block = &this->builder.first; block != NULL; block = block->next) {
+	for(String_Builder::Block *block = &this->builder.first; block != null; block = block->next) {
 		os_write_file(this->file_path, string_view(block->data, block->count), append);
 		append = true;
 	}
