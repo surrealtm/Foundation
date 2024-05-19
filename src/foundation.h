@@ -30,10 +30,10 @@ constexpr s64 MIN_S64 = 9223372036854775808LL; // This is a negative number, C++
 constexpr u64 MAX_U64 = 0xffffffffffffffff;
 constexpr u64 MIN_U64 = 0;
 
-constexpr s32 MAX_S32 =  2147483647;
-constexpr s32 MIN_S32 = -2147483648;
-constexpr u32 MAX_U32 =  0xffffffff;
-constexpr u32 MIN_U32 =  0;
+constexpr s32 MAX_S32 = 2147483647L;
+constexpr s32 MIN_S32 = 2147483648L; // This is a negative number, C++ is just shit!!
+constexpr u32 MAX_U32 = 0xffffffff;
+constexpr u32 MIN_U32 = 0;
 
 constexpr s16 MAX_S16 =  32767;
 constexpr s16 MIN_S16 = -32768;

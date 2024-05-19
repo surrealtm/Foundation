@@ -29,17 +29,19 @@ void test_hash_table_collisions() {
             s64 items = (s64) (table_size * load_factor);
             
             Hardware_Time start = os_get_hardware_time();
-            u64 start_cycle = os_get_current_cpu_cycle();
+            u64 start_cycle = os_get_cpu_cycle();
             for(s64 j = 0; j < items; ++j) {
                 table.add(j, j);
             }
-            u64 end_cycle = os_get_current_cpu_cycle();
+            u64 end_cycle = os_get_cpu_cycle();
             Hardware_Time end = os_get_hardware_time();
 
             printf("-- Entries: %" PRId64 ", Table size: %" PRId64 ".\n", table.count, table.bucket_count);
+#if FOUNDATION_DEVELOPER
             printf("    Collisions: %" PRId64 ", Load Factor: %f.\n", table.stats.collisions, table.stats.load_factor);
             printf("    Collisions Per Entry: %f.\n", (f64) table.stats.collisions / (f64) table.count);
             printf("    Expected Collisions: %f (%f).\n", table.expected_number_of_collisions(), table.stats.collisions / table.expected_number_of_collisions());
+#endif
             printf("    Time / Add: %f%s, Cycles / Add: %f.\n",os_convert_hardware_time((end - start) / (f64) items, Nanoseconds), time_unit_suffix(Nanoseconds), (end_cycle - start_cycle) / (f64) items);
 
             table.destroy();
@@ -83,12 +85,15 @@ void test_hash_table_correctness() {
         
         for(s64 i = 0; i < items / 3; ++i) {
             auto *value = table.query(i);
-            assert(value != NULL && *value == i);
+            assert(value != null && *value == i);
         }
 
         printf("-- Entries: %" PRId64 ", Table size: %" PRId64 ".\n", table.count, table.bucket_count);
+
+#if FOUNDATION_DEVELOPER
         printf("    Collisions: %" PRId64 ", Load Factor: %f.\n", table.stats.collisions, table.stats.load_factor);
-        
+#endif
+
         Hardware_Time end = os_get_hardware_time();
         printf("    Took %.3fms.\n", os_convert_hardware_time(end - start, Milliseconds));
         
