@@ -25,23 +25,23 @@ typedef bool b8;
 
 typedef s64 Hardware_Time;
 
-constexpr s64 MAX_S64 = 9223372036854775807LL;
-constexpr s64 MIN_S64 = 9223372036854775808LL; // This is a negative number, C++ is just shit!!
-constexpr u64 MAX_U64 = 0xffffffffffffffff;
-constexpr u64 MIN_U64 = 0;
+constexpr s64 MAX_S64 =  9223372036854775807LL;
+constexpr s64 MIN_S64 = -9223372036854775807LL - 1LL;
+constexpr u64 MAX_U64 =  0xffffffffffffffff;
+constexpr u64 MIN_U64 =  0;
 
-constexpr s32 MAX_S32 = 2147483647L;
-constexpr s32 MIN_S32 = 2147483648L; // This is a negative number, C++ is just shit!!
-constexpr u32 MAX_U32 = 0xffffffff;
-constexpr u32 MIN_U32 = 0;
+constexpr s32 MAX_S32 =  2147483647L;
+constexpr s32 MIN_S32 = -2147483647L - 1L;
+constexpr u32 MAX_U32 =  0xffffffff;
+constexpr u32 MIN_U32 =  0;
 
 constexpr s16 MAX_S16 =  32767;
-constexpr s16 MIN_S16 = -32768;
+constexpr s16 MIN_S16 = -32767 - 1;
 constexpr u16 MAX_U16 =  0xffff;
 constexpr u16 MIN_U16 =  0;
 
 constexpr s8 MAX_S8 =  127;
-constexpr s8 MIN_S8 = -128;
+constexpr s8 MIN_S8 = -127 - 1;
 constexpr u8 MAX_U8 =  0xff;
 constexpr u8 MIN_U8 =  0;
 
