@@ -185,3 +185,19 @@ void hide_cursor();
 void show_cursor();
 void window_sleep(f32 seconds);
 void window_ensure_frame_time(s64 frame_start, s64 frame_end, f32 requested_fps);
+
+
+
+struct Window_Buffer {
+    s32 width, height;
+    u8 *pixels;
+};
+
+void acquire_window_buffer(Window *window, Window_Buffer *buffer);
+void destroy_window_buffer(Window_Buffer *buffer);
+void clear_window_buffer(Window_Buffer *buffer, u8 r, u8 g, u8 b);
+void paint_window_buffer(Window_Buffer *buffer, s32 x, s32 y, u8 r, u8 g, u8 b);
+void query_window_buffer(Window_Buffer *buffer, s32 x, s32 y, u8 *r, u8 *g, u8 *b);
+void blit_window_buffer(Window *window, Window_Buffer *buffer);
+void blit_pixels_to_window(Window *window, u8 *pixels, s32 width, s32 height);
+u8 *convert_window_buffer_to_rgba(Window_Buffer *buffer);

@@ -634,3 +634,86 @@ void window_ensure_frame_time(s64 frame_start, s64 frame_end, f32 requested_fps)
         }
     }
 }
+
+
+
+void acquire_window_buffer(Window *window, Window_Buffer *buffer) {
+    s64 pixels = window->w * window->h * 4;
+    buffer->pixels = (u8 *) Default_Allocator->allocate(pixels * sizeof(u8));
+    
+    if(buffer->pixels) {
+        buffer->width  = window->w;
+        buffer->height = window->h;
+    }
+}
+
+void destroy_window_buffer(Window_Buffer *buffer) {
+    Default_Allocator->deallocate(buffer->pixels);
+    buffer->pixels = null;
+    buffer->width = 0;
+    buffer->height = 0;
+}
+
+void clear_window_buffer(Window_Buffer *buffer, u8 r, u8 g, u8 b) {
+    for(s32 y = 0; y < buffer->height; ++y) {
+        for(s32 x = 0; x < buffer->width; ++x) {
+            paint_window_buffer(buffer, x, y, r, g, b);
+        }
+    }
+}
+
+void paint_window_buffer(Window_Buffer *buffer, s32 x, s32 y, u8 r, u8 g, u8 b) {
+    assert(x >= 0 && x < buffer->width && y >= 0 && y < buffer->height);
+    s64 offset = (x + y * buffer->width) * 4;
+    buffer->pixels[offset + 0] = b;
+    buffer->pixels[offset + 1] = g;
+    buffer->pixels[offset + 2] = r;
+    buffer->pixels[offset + 3] =  255;
+}
+
+void query_window_buffer(Window_Buffer *buffer, s32 x, s32 y, u8 *r, u8 *g, u8 *b) {
+    assert(x >= 0 && x < buffer->width && y >= 0 && y < buffer->height);
+    s64 offset = (x + y * buffer->width) * 4;
+    *b = buffer->pixels[offset + 0];
+    *g = buffer->pixels[offset + 1];
+    *r = buffer->pixels[offset + 2];
+}
+
+void blit_window_buffer(Window *window, Window_Buffer *buffer) {
+    blit_pixels_to_window(window, buffer->pixels, buffer->width, buffer->height);
+}
+
+void blit_pixels_to_window(Window *window, u8 *pixels, s32 width, s32 height) {
+#if FOUNDATION_WIN32
+    Window_Win32_State *win32 = (Window_Win32_State *) window->platform_data;
+    
+    BITMAPINFO bmi              = { 0 };
+    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth       = width;
+    bmi.bmiHeader.biHeight      = -height;
+    bmi.bmiHeader.biPlanes      = 1;
+    bmi.bmiHeader.biBitCount    = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    bmi.bmiHeader.biSizeImage   = 0;
+    
+    if(!SetDIBitsToDevice(win32->dc, 0, 0, width, height, 0, 0, 0, height, pixels, &bmi, DIB_RGB_COLORS)) {
+        foundation_error("SetDIBitsToDevice failed."); // Unfortunately, (most) GDI functions do not use GetLastError()
+    }
+#endif
+}
+
+u8 *convert_window_buffer_to_rgba(Window_Buffer *buffer) {
+    u8 *result = (u8 *) Default_Allocator->allocate(buffer->width * buffer->height * 4);
+    
+    for(s64 y = 0; y < buffer->height; ++y) {
+        for(s64 x = 0; x < buffer->width; ++x) {
+            s64 offset = (y * buffer->width + x) * 4;
+            result[offset + 0] = buffer->pixels[offset + 2];
+            result[offset + 1] = buffer->pixels[offset + 1];
+            result[offset + 2] = buffer->pixels[offset + 0];
+            result[offset + 3] = buffer->pixels[offset + 3];
+        }
+    }
+    
+    return result;
+}
