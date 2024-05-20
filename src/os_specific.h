@@ -8,6 +8,11 @@ struct Allocator;
 
 /* --------------------------------------------------- Misc --------------------------------------------------- */
 
+#if FOUNDATION_WIN32
+char *win32_last_error_to_string();
+void win32_free_last_error_string(char *string);
+#endif
+
 void os_debug_break();
 
 

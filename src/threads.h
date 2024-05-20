@@ -18,7 +18,7 @@
 
 typedef u32(*Thread_Entry_Point)(void*);
 
-#define THREAD_INTERNAL_STATE_SIZE 64 // This is the highest size of internal platform data needed to be stored, to avoid a memory allocation here...
+#define THREAD_INTERNAL_STATE_SIZE 64 // This is the highest size of internal platform data needed to be stored, to avoid a memory allocation here (and to avoid platform headers here...)
 
 enum Thread_State {
     THREAD_STATE_Running     = 0x0,

@@ -12,7 +12,6 @@
 
 /* ---------------------------------------------- Win32 Helpers ---------------------------------------------- */
 
-static
 char *win32_last_error_to_string() {
 	DWORD error = GetLastError();
 	if(!error) return null;
@@ -25,7 +24,6 @@ char *win32_last_error_to_string() {
 	return messageBuffer;
 }
 
-static
 void win32_free_last_error_string(char *string) {
 	if(string) LocalFree(string);
 }

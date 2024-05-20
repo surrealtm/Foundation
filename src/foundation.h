@@ -82,7 +82,7 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 
 #define ARRAY_COUNT(_array) (sizeof(_array) / sizeof((_array)[0]))
 
-#define foundation_error(format, ...) os_write_to_console(__FILE__ "," STRINGIFY(__LINE__) ": " format, __VA_ARGS__)
+#define foundation_error(format, ...) foundation_do_assertion_fail(__FILE__ "," STRINGIFY(__LINE__), format, __VA_ARGS__)
 
 #if !FOUNDATION_USE_DEFAULT_ASSERT
 # if _DEBUG
