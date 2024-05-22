@@ -1,10 +1,18 @@
 #include "d3d11.h"
 #include "window.h"
+#include "os_specific.h"
+#include "memutils.h"
+
+#undef null // comdef.h has many parameters called 'null'... For fucks sake.
 
 #include <d3d11.h>
+#include <d3dcompiler.h>
 #include <dxgi1_2.h>
+#include <comdef.h>
 
-#define D3D11_CALL(expr) assert(SUCCEEDED(expr))
+#define null 0
+
+#define D3D11_CALL(expr) d3d11_call_wrapper(expr, __FILE__ "," STRINGIFY(__LINE__) ": " STRINGIFY(expr))
 
 struct Window_D3D11_State {
     IDXGISwapChain1 *swapchain;
@@ -19,16 +27,27 @@ static_assert(sizeof(Window_D3D11_State) <= sizeof(Window::graphics_data), "Wind
 /* ------------------------------------------------- Globals ------------------------------------------------- */
 
 s64 d3d_device_usage_count;
-IDXGIDevice2  *dxgi_device  = null;
-IDXGIAdapter  *dxgi_adapter = null;
-IDXGIFactory2 *dxgi_factory = null;
-ID3D11Device *d3d_device = null;
+IDXGIDevice2  *dxgi_device       = null;
+IDXGIAdapter  *dxgi_adapter      = null;
+IDXGIFactory2 *dxgi_factory      = null;
+ID3D11Device *d3d_device         = null;
 ID3D11DeviceContext *d3d_context = null;
 D3D_FEATURE_LEVEL d3d_feature_level;
 
 
 
 /* ------------------------------------------------ Setup Code ------------------------------------------------ */
+
+static
+void d3d11_call_wrapper(HRESULT result, const char *assertion_text) {
+    if(SUCCEEDED(result)) return;
+
+    LPCTSTR wide_error_string = _com_error(result).ErrorMessage();
+    size_t error_string_length;
+    char error_string[256];
+    wcstombs_s(&error_string_length, error_string, sizeof(error_string), wide_error_string, _TRUNCATE);
+    foundation_do_assertion_fail(assertion_text, "%.*s", (u32) error_string_length, error_string);
+}
 
 static
 void create_d3d11_device() {
@@ -69,7 +88,7 @@ void create_d3d11_context(Window *window) {
     swapchain_description.Width              = window->w;
     swapchain_description.Height             = window->h;
     swapchain_description.Format             = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swapchain_description.Stereo             = true;
+    swapchain_description.Stereo             = FALSE;
     swapchain_description.SampleDesc.Count   = 1;
     swapchain_description.SampleDesc.Quality = 0;
     swapchain_description.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -82,8 +101,6 @@ void create_d3d11_context(Window *window) {
     D3D11_CALL(dxgi_factory->CreateSwapChainForHwnd(d3d_device, (HWND) window_extract_hwnd(window), &swapchain_description, NULL, NULL, &d3d11->swapchain));
     D3D11_CALL(d3d11->swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) &d3d11->backbuffer));
     D3D11_CALL(d3d_device->CreateRenderTargetView(d3d11->backbuffer, 0, &d3d11->backbuffer_view));
-
-    d3d_context->OMSetRenderTargets(1, &d3d11->backbuffer_view, NULL);
 }
 
 void destroy_d3d11_context(Window *window) {
@@ -95,6 +112,26 @@ void destroy_d3d11_context(Window *window) {
     destroy_d3d11();
 }
 
+void clear_d3d11_buffer(Window *window, u8 r, u8 g, u8 b) {
+    Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
+
+    d3d_context->OMSetRenderTargets(1, &d3d11->backbuffer_view, NULL);
+    
+    D3D11_VIEWPORT viewport = {
+        0.f, 0.f,
+        (f32) window->w, (f32) window->h,
+        0.f, 1.f
+    };
+    d3d_context->RSSetViewports(1, &viewport);
+
+    f32 color_array[4];
+    color_array[0] = (f32) r / 255.f;
+    color_array[1] = (f32) g / 255.f;
+    color_array[2] = (f32) b / 255.f;
+    color_array[3] = 1.f;
+    d3d_context->ClearRenderTargetView(d3d11->backbuffer_view, &color_array[0]);
+};
+
 void swap_d3d11_buffers(Window *window) {
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
     d3d11->swapchain->Present(1, 0);
@@ -105,9 +142,10 @@ void swap_d3d11_buffers(Window *window) {
 /* ---------------------------------------------- Vertex Buffer ---------------------------------------------- */
 
 void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology) {
-    assert(float_count % dimensions == 0, "Expected byte_count to be a multiple of dimensions.");
+    foundation_assert(float_count % dimensions == 0, "Expected byte_count to be a multiple of dimensions."); // comdef.h overrides 'assert'...
 
-    buffer->primitive_count = float_count / dimensions;
+    buffer->vertex_count = float_count / dimensions;
+    buffer->dimensions = dimensions;
     buffer->topology = topology;
 
     D3D11_BUFFER_DESC buffer_description{};
@@ -123,7 +161,101 @@ void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 
 
 void destroy_vertex_buffer(Vertex_Buffer *buffer) {
     buffer->handle->Release();
-    buffer->handle          = null;
-    buffer->primitive_count = 0;
-    buffer->topology        = VERTEX_BUFFER_Undefined;
+    buffer->handle       = null;
+    buffer->vertex_count = 0;
+    buffer->topology     = VERTEX_BUFFER_Undefined;
+}
+
+void bind_vertex_buffer(Vertex_Buffer *buffer) {
+    UINT stride = buffer->dimensions * sizeof(f32), offset = 0;
+    d3d_context->IASetPrimitiveTopology((D3D11_PRIMITIVE_TOPOLOGY) buffer->topology);
+    d3d_context->IASetVertexBuffers(0, 1, &buffer->handle, &stride, &offset);
+}
+
+void draw_vertex_buffer(Vertex_Buffer *buffer) {
+    d3d_context->Draw((UINT) buffer->vertex_count, 0);
+}
+
+
+
+/* -------------------------------------------------- Shader -------------------------------------------------- */
+
+void create_shader_from_file(Shader *shader, string file_path) {
+    ID3DBlob *error_blob = null;
+
+    string file_content = os_read_file(Default_Allocator, file_path);
+    if(!file_content.count) {
+        foundation_error("Failed to load shader '%.*s' from disk.", (u32) file_path.count, file_path.data);
+        return;
+    }
+
+    char *file_path_cstring = to_cstring(Default_Allocator, file_path);
+    D3DCompile(file_content.data, file_content.count, file_path_cstring, NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->vertex_blob, &error_blob);
+    D3DCompile(file_content.data, file_content.count, file_path_cstring, NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->pixel_blob, &error_blob);
+
+    if(shader->vertex_blob && shader->pixel_blob) {
+        D3D11_CALL(d3d_device->CreateVertexShader(shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), null, &shader->vertex_shader));
+        D3D11_CALL(d3d_device->CreatePixelShader(shader->pixel_blob->GetBufferPointer(), shader->pixel_blob->GetBufferSize(), null, &shader->pixel_shader));
+
+        if(shader->vertex_shader && shader->pixel_shader) {
+            D3D11_INPUT_ELEMENT_DESC input_element_description[] = {
+                { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            };
+
+            D3D11_CALL(d3d_device->CreateInputLayout(input_element_description, ARRAYSIZE(input_element_description), shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), &shader->input_layout));
+        } else {
+            foundation_error("Failed to create shader '%.*s'.", (u32) file_path.count, file_path.data);
+            destroy_shader(shader);
+        }
+    } else {
+        assert(error_blob != null);
+        foundation_error("Failed to compile shader '%.*s': '%s'.", (u32) file_path.count, file_path.data, error_blob->GetBufferPointer());
+        destroy_shader(shader);
+    }
+    
+    free_cstring(Default_Allocator, file_path_cstring);
+    os_free_file_content(Default_Allocator, &file_content);
+    if(error_blob) error_blob->Release();
+}
+
+void destroy_shader(Shader *shader) {
+    if(shader->vertex_blob)   shader->vertex_blob->Release();
+    if(shader->pixel_blob)    shader->pixel_blob->Release();
+    if(shader->vertex_shader) shader->vertex_shader->Release();
+    if(shader->pixel_shader)  shader->pixel_shader->Release();
+    if(shader->input_layout)  shader->input_layout->Release();
+}
+
+void bind_shader(Shader *shader) {
+    d3d_context->VSSetShader(shader->vertex_shader, NULL, 0);
+    d3d_context->PSSetShader(shader->pixel_shader, NULL, 0);
+    d3d_context->IASetInputLayout(shader->input_layout);
+}
+
+
+
+/* ---------------------------------------------- Pipeline State ---------------------------------------------- */
+
+void create_pipeline_state(Pipeline_State *state) {
+    D3D11_RASTERIZER_DESC rasterizer{};
+    rasterizer.FillMode = D3D11_FILL_SOLID;
+    rasterizer.CullMode = (state->enable_culling) ? D3D11_CULL_BACK : D3D11_CULL_NONE;
+    rasterizer.FrontCounterClockwise = FALSE;
+    rasterizer.DepthBias             = 0;
+    rasterizer.DepthBiasClamp        = 0;
+    rasterizer.SlopeScaledDepthBias  = 0;
+    rasterizer.DepthClipEnable       = state->enable_depth_test;
+    rasterizer.ScissorEnable         = state->enable_scissors;
+    rasterizer.MultisampleEnable     = state->enable_multisample;
+    rasterizer.AntialiasedLineEnable = FALSE;
+    D3D11_CALL(d3d_device->CreateRasterizerState(&rasterizer, &state->handle));
+}
+
+void destroy_pipeline_state(Pipeline_State *state) {
+    state->handle->Release();
+    state->handle = null;
+}
+
+void bind_pipeline_state(Pipeline_State *state) {
+    d3d_context->RSSetState(state->handle);
 }

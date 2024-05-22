@@ -1,6 +1,7 @@
 #pragma once
 
 #include "foundation.h"
+#include "strings.h"
 
 //
 // Forward declarations to avoid having to include the D3D11 headers here.
@@ -17,6 +18,7 @@ struct ID3D11VertexShader;
 struct ID3D11PixelShader;
 struct ID3D11InputLayout;
 struct ID3D11RenderTargetView;
+struct ID3D11RasterizerState;
 
 struct Window;
 
@@ -31,7 +33,7 @@ struct Window;
 // Wrappers around the D3D11 internals for easier state manipulation.
 //
 
-enum Vertex_Buffer_Topology {
+enum Vertex_Buffer_Topology { // These mirror D3D11_PRIMITIVE_TOPOLOGY 
     VERTEX_BUFFER_Undefined   = 0x0,
     VERTEX_BUFFER_Lines       = 0x1,
     VERTEX_BUFFER_Line_Strips = 0x3,
@@ -40,7 +42,8 @@ enum Vertex_Buffer_Topology {
 
 struct Vertex_Buffer {
     Vertex_Buffer_Topology topology;
-    u64 primitive_count; // The number of primitives stored in this vertex buffer, for drawing the right amount.
+    u8 dimensions;
+    u64 vertex_count;
     ID3D11Buffer *handle;
 };
 
@@ -75,11 +78,31 @@ struct Frame_Buffer {
     s64 color_count;
 };
 
+struct Pipeline_State {
+    // --- User Level Input
+    b8 enable_culling;
+    b8 enable_depth_test;
+    b8 enable_scissors;
+    b8 enable_multisample;
+    
+    // --- Internal Handle
+    ID3D11RasterizerState *handle;
+};
+
 void create_d3d11_context(Window *window);
 void destroy_d3d11_context(Window *window);
+void clear_d3d11_buffer(Window *window, u8 r, u8 g, u8 b);
 void swap_d3d11_buffers(Window *window);
 
 void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology);
 void destroy_vertex_buffer(Vertex_Buffer *buffer);
 void bind_vertex_buffer(Vertex_Buffer *buffer);
 void draw_vertex_buffer(Vertex_Buffer *buffer);
+
+void create_shader_from_file(Shader *shader, string file_path);
+void destroy_shader(Shader *shader);
+void bind_shader(Shader *shader);
+
+void create_pipeline_state(Pipeline_State *state); // User Level Input must be set before this!
+void destroy_pipeline_state(Pipeline_State *state);
+void bind_pipeline_state(Pipeline_State *state);

@@ -12,18 +12,41 @@ int main() {
 
     create_d3d11_context(&window);
     
+    Pipeline_State pipeline_state = { false, false, false, false };
+    create_pipeline_state(&pipeline_state);
+
+    f32 vertices[] = { -.5, -.5, .5, -.5, -.5, .5 };
+
+    Vertex_Buffer vertex_buffer;
+    create_vertex_buffer(&vertex_buffer, vertices, ARRAY_COUNT(vertices), 2, VERTEX_BUFFER_Triangles);
+
+    Shader shader;
+    create_shader_from_file(&shader, "C:\\source\\Foundation\\data\\shader\\rgba.hlsl"_s);
+
     s32 x = 0, y = 0;
 	while(!window.should_close) {
         Hardware_Time frame_start = os_get_hardware_time();
 
         {
             update_window(&window);
+
+            clear_d3d11_buffer(&window, 200, 200, 100);
+            
+            bind_shader(&shader);
+            bind_vertex_buffer(&vertex_buffer);
+            bind_pipeline_state(&pipeline_state);
+            draw_vertex_buffer(&vertex_buffer);
+
             swap_d3d11_buffers(&window);
         }
         
         Hardware_Time frame_end = os_get_hardware_time();
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
+
+    destroy_pipeline_state(&pipeline_state);
+    destroy_shader(&shader);
+    destroy_vertex_buffer(&vertex_buffer);
 
     destroy_d3d11_context(&window);
 	destroy_window(&window);

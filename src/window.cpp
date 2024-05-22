@@ -289,7 +289,7 @@ b8 win32_register_class() {
     window_class.style         = CS_HREDRAW | CS_VREDRAW;
     window_class.lpfnWndProc   = win32_callback;
     window_class.lpszClassName = WIN32_CLASS_NAME;
-    window_class.hCursor       = LoadCursorW(null, IDC_ARROW);
+    window_class.hCursor       = LoadCursor(null, IDC_ARROW);
     window_class.hbrBackground = CreateSolidBrush(RGB(DEFAULT_WINDOW_BACKGROUND_COLOR_r, DEFAULT_WINDOW_BACKGROUND_COLOR_g, DEFAULT_WINDOW_BACKGROUND_COLOR_b));
     success = RegisterClassExA(&window_class);
     

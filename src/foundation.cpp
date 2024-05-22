@@ -19,13 +19,13 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
 
         header_length = message_length + strlen("*  Assertion Failed: ") + 3;
     } else {
-        header_length = strlen("* Assertion Failed: ") + 3;
+        header_length = strlen("*  Assertion Failed: ") + 3;
     }
 
     for(s64 i = 0; i < header_length; ++i) printf("*");
     printf("\n");
     
-    printf("*  Assertion Failed: %.*s *\n", message_length, message);
+    printf("*  Assertion Failed: %.*s  *\n", message_length, message);
 
     for(s64 i = 0; i < header_length; ++i) printf("*");
     printf("\n\n");
