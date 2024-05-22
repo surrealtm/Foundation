@@ -717,3 +717,12 @@ u8 *convert_window_buffer_to_rgba(Window_Buffer *buffer) {
     
     return result;
 }
+
+
+
+#if FOUNDATION_WIN32
+void *window_extract_hwnd(Window *window) {
+    Window_Win32_State *win32 = (Window_Win32_State *) window->platform_data;
+    return win32->hwnd;
+}
+#endif

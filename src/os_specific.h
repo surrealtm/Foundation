@@ -14,7 +14,7 @@ void win32_free_last_error_string(char *string);
 #endif
 
 void os_debug_break();
-
+void enable_high_resolution_clock();
 
 
 /* ---------------------------------------------- Console Output ---------------------------------------------- */

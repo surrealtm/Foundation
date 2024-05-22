@@ -3,7 +3,8 @@
 #include "foundation.h"
 #include "strings.h"
 
-#define WINDOW_INTERNAL_STATE_SIZE 64 // This is the highest size of internal platform data needed to be stored, to avoid a memory allocation here (and to avoid platform headers in here...)
+#define WINDOW_PLATFORM_STATE_SIZE 16 // This is the highest size of internal platform data needed to be stored, to avoid a memory allocation here (and to avoid platform headers in here...)
+#define WINDOW_GRAPHICS_STATE_SIZE 32 // This is the highest size of graphics data needed to be stored, to avoid a memory allocation here.
 #define WINDOW_DONT_CARE (-1)
 
 enum Key_Code {
@@ -143,7 +144,8 @@ enum Window_Style_Flags {
 };
 
 struct Window {
-    u8 platform_data[WINDOW_INTERNAL_STATE_SIZE];
+    u8 platform_data[WINDOW_PLATFORM_STATE_SIZE]; // Used by the different OS implementations (win32, linux) for platform dependent handles.
+    u8 graphics_data[WINDOW_GRAPHICS_STATE_SIZE]; // Used by the different graphics backends (d3d11) for graphics handles.
     
     s32 x, y, w, h;
     
@@ -201,3 +203,9 @@ void query_window_buffer(Window_Buffer *buffer, s32 x, s32 y, u8 *r, u8 *g, u8 *
 void blit_window_buffer(Window *window, Window_Buffer *buffer);
 void blit_pixels_to_window(Window *window, u8 *pixels, s32 width, s32 height);
 u8 *convert_window_buffer_to_rgba(Window_Buffer *buffer);
+
+
+
+#if FOUNDATION_WIN32
+void *window_extract_hwnd(Window *window);
+#endif
