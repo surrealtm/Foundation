@@ -1,5 +1,6 @@
 struct Vertex_Input {
     float2 position : POSITION;
+    float3 color : COLOR;
 };
 
 struct Pixel_Input {
@@ -8,12 +9,12 @@ struct Pixel_Input {
 };
 
 Pixel_Input vs_main(Vertex_Input input) {
-    Pixel_Input ps;
-    ps.position = float4(input.position, 0.0, 1.0);
-    ps.color    = float3(input.position + 0.5, 0.0);
-    return ps;
+    Pixel_Input output;
+    output.position = float4(input.position, 0.0, 1.0);
+    output.color    = input.color;
+    return output;
 }
 
 float4 ps_main(Pixel_Input input) : SV_TARGET {
-    return float4(input.color.x, input.color.y, 0, 1);
+    return float4(input.color, 1);
 }

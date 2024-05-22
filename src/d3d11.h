@@ -28,6 +28,7 @@ struct Window;
 
 #define D3D11_MAX_FRAMEBUFFER_COLOR_ATTACHMENTS 4
 #define D3D11_MAX_VERTEX_BUFFERS                4
+#define D3D11_MAX_SHADER_INPUTS                12
 
 //
 // Wrappers around the D3D11 internals for easier state manipulation.
@@ -48,6 +49,7 @@ struct Vertex_Buffer {
 };
 
 struct Vertex_Buffer_Array {
+    Vertex_Buffer_Topology topology;
     Vertex_Buffer buffers[D3D11_MAX_VERTEX_BUFFERS];
     s64 count;
 };
@@ -57,6 +59,12 @@ struct Texture {
     ID3D11ShaderResourceView *view;
     ID3D11SamplerState *sampler_state;
     ID3D11Texture2D *handle;
+};
+
+struct Shader_Input_Specification {
+    const char *name;
+    u8 dimensions;
+    u8 vertex_buffer_index;
 };
 
 struct Shader {
@@ -99,7 +107,13 @@ void destroy_vertex_buffer(Vertex_Buffer *buffer);
 void bind_vertex_buffer(Vertex_Buffer *buffer);
 void draw_vertex_buffer(Vertex_Buffer *buffer);
 
-void create_shader_from_file(Shader *shader, string file_path);
+void create_vertex_buffer_array(Vertex_Buffer_Array *array, Vertex_Buffer_Topology topology);
+void destroy_vertex_buffer_array(Vertex_Buffer_Array *array);
+void add_vertex_data(Vertex_Buffer_Array *array, f32 *data, u64 float_count, u8 dimensions);
+void bind_vertex_buffer_array(Vertex_Buffer_Array *array);
+void draw_vertex_buffer_array(Vertex_Buffer_Array *array);
+
+void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count);
 void destroy_shader(Shader *shader);
 void bind_shader(Shader *shader);
 

@@ -10,6 +10,8 @@
 #include <dxgi1_2.h>
 #include <comdef.h>
 
+#undef assert // Unfortunately comdef defines it's own assert (what a great idea that is microsoft...), so we should only be using foundation_assert in here. This ensures that.
+
 #define null 0
 
 #define D3D11_CALL(expr) d3d11_call_wrapper(expr, __FILE__ "," STRINGIFY(__LINE__) ": " STRINGIFY(expr))
@@ -139,7 +141,7 @@ void swap_d3d11_buffers(Window *window) {
 
 
 
-/* ---------------------------------------------- Vertex Buffer ---------------------------------------------- */
+/* ------------------------------------------------ Vertex Buffer ------------------------------------------------ */
 
 void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology) {
     foundation_assert(float_count % dimensions == 0, "Expected byte_count to be a multiple of dimensions."); // comdef.h overrides 'assert'...
@@ -178,9 +180,52 @@ void draw_vertex_buffer(Vertex_Buffer *buffer) {
 
 
 
+/* --------------------------------------------- Vertex Buffer Array --------------------------------------------- */
+
+void create_vertex_buffer_array(Vertex_Buffer_Array *array, Vertex_Buffer_Topology topology) {
+    array->topology = topology;
+    array->count = 0;
+}
+
+void destroy_vertex_buffer_array(Vertex_Buffer_Array *array) {
+    for(s64 i = 0; i < array->count; ++i) {
+        destroy_vertex_buffer(&array->buffers[i]);
+    }
+}
+
+void add_vertex_data(Vertex_Buffer_Array *array, f32 *data, u64 float_count, u8 dimensions) {
+    foundation_assert(array->count < ARRAY_COUNT(array->buffers), "Vertex_Buffer_Array ran out of buffers.");
+    create_vertex_buffer(&array->buffers[array->count], data, float_count, dimensions, array->topology);
+    ++array->count;
+}
+
+void bind_vertex_buffer_array(Vertex_Buffer_Array *array) {
+    foundation_assert(array->count > 0);
+    UINT strides[ARRAY_COUNT(array->buffers)], offsets[ARRAY_COUNT(array->buffers)];
+    ID3D11Buffer *handles[ARRAY_COUNT(array->buffers)];
+
+    for(s64 i = 0; i < array->count; ++i) {
+        strides[i] = array->buffers[i].dimensions * sizeof(f32);
+        offsets[i] = 0;
+        handles[i] = array->buffers[i].handle;
+    }
+
+    d3d_context->IASetPrimitiveTopology((D3D11_PRIMITIVE_TOPOLOGY) array->topology);
+    d3d_context->IASetVertexBuffers(0, (UINT) array->count, handles, strides, offsets);
+}
+
+void draw_vertex_buffer_array(Vertex_Buffer_Array *array) {
+    foundation_assert(array->count > 0);
+    d3d_context->Draw((UINT) array->buffers[0].vertex_count, 0);
+}
+
+
+
 /* -------------------------------------------------- Shader -------------------------------------------------- */
 
-void create_shader_from_file(Shader *shader, string file_path) {
+void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count) {
+    foundation_assert(input_count < D3D11_MAX_SHADER_INPUTS);
+
     ID3DBlob *error_blob = null;
 
     string file_content = os_read_file(Default_Allocator, file_path);
@@ -198,17 +243,31 @@ void create_shader_from_file(Shader *shader, string file_path) {
         D3D11_CALL(d3d_device->CreatePixelShader(shader->pixel_blob->GetBufferPointer(), shader->pixel_blob->GetBufferSize(), null, &shader->pixel_shader));
 
         if(shader->vertex_shader && shader->pixel_shader) {
-            D3D11_INPUT_ELEMENT_DESC input_element_description[] = {
-                { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-            };
+            D3D11_INPUT_ELEMENT_DESC input_element_description[D3D11_MAX_SHADER_INPUTS];
 
-            D3D11_CALL(d3d_device->CreateInputLayout(input_element_description, ARRAYSIZE(input_element_description), shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), &shader->input_layout));
+            for(s64 i = 0; i < input_count; ++i) {
+                DXGI_FORMAT format;
+
+                switch(inputs[i].dimensions) {
+                case 1: format = DXGI_FORMAT_R32_FLOAT; break;
+                case 2: format = DXGI_FORMAT_R32G32_FLOAT; break;
+                case 3: format = DXGI_FORMAT_R32G32B32_FLOAT; break;
+                case 4: format = DXGI_FORMAT_R32G32B32A32_FLOAT; break;
+                default: foundation_error("Invalid dimension count in the Shader_Input_Specification"); break;
+                }
+                
+                input_element_description[i] = {
+                    inputs[i].name, 0, format, inputs[i].vertex_buffer_index, 0, D3D11_INPUT_PER_VERTEX_DATA, 0
+                };
+            }
+
+            D3D11_CALL(d3d_device->CreateInputLayout(input_element_description, (UINT) input_count, shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), &shader->input_layout));
         } else {
             foundation_error("Failed to create shader '%.*s'.", (u32) file_path.count, file_path.data);
             destroy_shader(shader);
         }
     } else {
-        assert(error_blob != null);
+        foundation_assert(error_blob != null);
         foundation_error("Failed to compile shader '%.*s': '%s'.", (u32) file_path.count, file_path.data, error_blob->GetBufferPointer());
         destroy_shader(shader);
     }

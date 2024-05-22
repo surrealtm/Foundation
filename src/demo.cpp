@@ -15,13 +15,21 @@ int main() {
     Pipeline_State pipeline_state = { false, false, false, false };
     create_pipeline_state(&pipeline_state);
 
-    f32 vertices[] = { -.5, -.5, .5, -.5, -.5, .5 };
+    f32 vertices[] = { -.5, -.5,    .5, -.5,    -.5, .5 };
+    f32 colors[] = { 1, 0, 0,   0, 1, 0,    0, 0, 1 };
 
-    Vertex_Buffer vertex_buffer;
-    create_vertex_buffer(&vertex_buffer, vertices, ARRAY_COUNT(vertices), 2, VERTEX_BUFFER_Triangles);
+    Vertex_Buffer_Array vertex_buffer;
+    create_vertex_buffer_array(&vertex_buffer, VERTEX_BUFFER_Triangles);
+    add_vertex_data(&vertex_buffer, vertices, ARRAY_COUNT(vertices), 2);
+    add_vertex_data(&vertex_buffer, colors, ARRAY_COUNT(colors), 3);
 
+    Shader_Input_Specification inputs[] = {
+        { "POSITION", 2, 0 },
+        { "COLOR", 3, 1 },
+    };
+    
     Shader shader;
-    create_shader_from_file(&shader, "C:\\source\\Foundation\\data\\shader\\rgba.hlsl"_s);
+    create_shader_from_file(&shader, "data\\shader\\rgba.hlsl"_s, inputs, ARRAY_COUNT(inputs));
 
     s32 x = 0, y = 0;
 	while(!window.should_close) {
@@ -33,9 +41,9 @@ int main() {
             clear_d3d11_buffer(&window, 200, 200, 100);
             
             bind_shader(&shader);
-            bind_vertex_buffer(&vertex_buffer);
+            bind_vertex_buffer_array(&vertex_buffer);
             bind_pipeline_state(&pipeline_state);
-            draw_vertex_buffer(&vertex_buffer);
+            draw_vertex_buffer_array(&vertex_buffer);
 
             swap_d3d11_buffers(&window);
         }
@@ -46,7 +54,7 @@ int main() {
 
     destroy_pipeline_state(&pipeline_state);
     destroy_shader(&shader);
-    destroy_vertex_buffer(&vertex_buffer);
+    destroy_vertex_buffer_array(&vertex_buffer);
 
     destroy_d3d11_context(&window);
 	destroy_window(&window);
