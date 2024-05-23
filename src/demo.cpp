@@ -16,8 +16,10 @@ int main() {
     Pipeline_State pipeline_state = { false, false, false, false };
     create_pipeline_state(&pipeline_state);
 
-    f32 vertices[] = { -.5, -.5,    .5, -.5,    -.5, .5 };
-    f32 uvs[] = { 1, 1,   0, 1,    1, 0 };
+    f32 vertices[] = { -.5, .5,    .5, .5,    -.5, -.5,
+                       -.5, -.5,   .5, .5,     .5, -.5 };
+    f32 uvs[] = { 0, 0,   1, 0,    0, 1,
+                  0, 1,   1, 0,    1, 1 };
 
     Vertex_Buffer_Array vertex_buffer;
     create_vertex_buffer_array(&vertex_buffer, VERTEX_BUFFER_Triangles);
@@ -36,6 +38,9 @@ int main() {
     Shader shader;
     create_shader_from_file(&shader, "data\\shader\\rgba.hlsl"_s, inputs, ARRAY_COUNT(inputs));
 
+    Texture texture;
+    create_texture_from_file(&texture, "data\\textures\\rock.png"_s);
+    
     f32 total_time = 0.f;
     
 	while(!window.should_close) {
@@ -44,8 +49,8 @@ int main() {
         {
             update_window(&window);
 
-            color.x = cosf(total_time) * 0.5 + 0.5;
-            color.y = sinf(total_time) * 0.5 + 0.5;
+            color.x = cosf(total_time) * 0.5f + 0.5f;
+            color.y = sinf(total_time) * 0.5f + 0.5f;
             total_time += window.frame_time;
             update_shader_constant_buffer(&constants, &color);
             
@@ -55,6 +60,7 @@ int main() {
             bind_shader_constant_buffer(&constants, SHADER_Pixel);
             bind_vertex_buffer_array(&vertex_buffer);
             bind_pipeline_state(&pipeline_state);
+            bind_texture(&texture, 0);
             draw_vertex_buffer_array(&vertex_buffer);
 
             swap_d3d11_buffers(&window);
@@ -64,6 +70,7 @@ int main() {
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
 
+    destroy_texture(&texture);
     destroy_pipeline_state(&pipeline_state);
     destroy_shader_constant_buffer(&constants);
     destroy_shader(&shader);

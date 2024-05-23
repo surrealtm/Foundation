@@ -10,6 +10,9 @@ struct Pixel_Input {
 
 float3 color;
 
+Texture2D albedo;
+SamplerState albedo_sampler;
+
 Pixel_Input vs_main(Vertex_Input input) {
     Pixel_Input output;
     output.position = float4(input.position, 0.0, 1.0);
@@ -18,5 +21,5 @@ Pixel_Input vs_main(Vertex_Input input) {
 }
 
 float4 ps_main(Pixel_Input input) : SV_TARGET {
-    return float4(color, 1);
+    return albedo.Sample(albedo_sampler, input.uv) * float4(color, 1);
 }

@@ -56,9 +56,10 @@ struct Vertex_Buffer_Array {
 
 struct Texture {
     s32 w, h;
-    ID3D11ShaderResourceView *view;
-    ID3D11SamplerState *sampler_state;
+    u8 channels;
     ID3D11Texture2D *handle;
+    ID3D11SamplerState *sampler;
+    ID3D11ShaderResourceView *view;
 };
 
 enum Shader_Type {
@@ -122,6 +123,10 @@ void destroy_vertex_buffer_array(Vertex_Buffer_Array *array);
 void add_vertex_data(Vertex_Buffer_Array *array, f32 *data, u64 float_count, u8 dimensions);
 void bind_vertex_buffer_array(Vertex_Buffer_Array *array);
 void draw_vertex_buffer_array(Vertex_Buffer_Array *array);
+
+void create_texture_from_file(Texture *texture, string file_path);
+void destroy_texture(Texture *texture);
+void bind_texture(Texture *texture, s64 index_in_shader);
 
 void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, s64 size_in_bytes, void *initial_data = null);
 void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer);

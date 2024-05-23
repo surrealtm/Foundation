@@ -3,6 +3,9 @@
 #include "os_specific.h"
 #include "memutils.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "deps/stb_image.h"
+
 #undef null // comdef.h has many parameters called 'null'... For fucks sake.
 
 #include <d3d11.h>
@@ -81,6 +84,44 @@ void destroy_d3d11() {
     d3d_device  = null;
 }
 
+enum D3D11_Data_Type {
+    D3D11_Ubyte,
+    D3D11_Float32,
+};
+
+static
+DXGI_FORMAT d3d11_format(u8 channels, D3D11_Data_Type data_type) {
+    DXGI_FORMAT format;
+
+    switch(data_type) {
+    case D3D11_Ubyte: {
+        switch(channels) {
+        case 1: format = DXGI_FORMAT_R8_UNORM; break;
+        case 2: format = DXGI_FORMAT_R8G8_UNORM; break;
+        case 4: format = DXGI_FORMAT_R8G8B8A8_UNORM; break;
+        default: foundation_error("Invalid channel count for a D3D11 format."); break;
+        }
+    } break;
+
+    case D3D11_Float32: {
+        switch(channels) {
+        case 1: format = DXGI_FORMAT_R32_FLOAT; break;
+        case 2: format = DXGI_FORMAT_R32G32_FLOAT; break;
+        case 3: format = DXGI_FORMAT_R32G32B32_FLOAT; break;
+        case 4: format = DXGI_FORMAT_R32G32B32A32_FLOAT; break;
+        default: foundation_error("Invalid channel count for a D3D11 format."); break;
+        }
+    } break;
+
+    default:
+        foundation_error("Invalid data type for a D3D11 format."); break;
+        break;
+    }
+
+    return format;
+}
+
+
 void create_d3d11_context(Window *window) {
     create_d3d11_device();
 
@@ -89,7 +130,7 @@ void create_d3d11_context(Window *window) {
     DXGI_SWAP_CHAIN_DESC1 swapchain_description{};
     swapchain_description.Width              = window->w;
     swapchain_description.Height             = window->h;
-    swapchain_description.Format             = DXGI_FORMAT_R8G8B8A8_UNORM;
+    swapchain_description.Format             = d3d11_format(4, D3D11_Ubyte);
     swapchain_description.Stereo             = FALSE;
     swapchain_description.SampleDesc.Count   = 1;
     swapchain_description.SampleDesc.Quality = 0;
@@ -221,6 +262,76 @@ void draw_vertex_buffer_array(Vertex_Buffer_Array *array) {
 
 
 
+/* --------------------------------------------------- Texture --------------------------------------------------- */
+
+void create_texture_from_file(Texture *texture, string file_path) {
+    char *cstring = to_cstring(Default_Allocator, file_path);
+    defer { free_cstring(Default_Allocator, cstring); };
+
+    // D3D11 (or rather the hardware but yeah) doesn't support 3 channel textures, so we unfortunately need to
+    // convert all textures into rgba... (We don't have a way of saying only do this conversion from 3 to 4, but
+    // leave 1 or 2 channels as they are...)
+    u8 *buffer = stbi_load(cstring, (int *) &texture->w, (int *) &texture->h, (int *) &texture->channels, 4);
+    if(!buffer) {
+        foundation_error("Failed to load texture '%.*s' from disk: %s.", stbi_failure_reason());
+        return;
+    }
+    
+    D3D11_TEXTURE2D_DESC texture_description{};
+    texture_description.Width              = texture->w;
+    texture_description.Height             = texture->h;
+    texture_description.MipLevels          = 1;
+    texture_description.ArraySize          = 1;
+    texture_description.Format             = d3d11_format(texture->channels, D3D11_Ubyte);
+    texture_description.SampleDesc.Count   = 1;
+    texture_description.SampleDesc.Quality = 0;
+    texture_description.Usage              = D3D11_USAGE_DEFAULT;
+    texture_description.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
+    texture_description.CPUAccessFlags     = 0;
+    texture_description.MiscFlags          = 0;
+    
+    D3D11_SUBRESOURCE_DATA subresource{};
+    subresource.pSysMem          = buffer;
+    subresource.SysMemPitch      = texture->w * texture->channels;
+    subresource.SysMemSlicePitch = 0;
+
+    D3D11_SAMPLER_DESC sampler_description{};
+    sampler_description.Filter         = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sampler_description.AddressU       = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampler_description.AddressV       = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampler_description.AddressW       = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampler_description.MipLODBias     = 0.f;
+    sampler_description.MaxAnisotropy  = 1;
+    sampler_description.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+    sampler_description.MinLOD         = 0.f;
+    sampler_description.MaxLOD         = 0.f;
+    
+    D3D11_CALL(d3d_device->CreateTexture2D(&texture_description, &subresource, &texture->handle));
+    D3D11_CALL(d3d_device->CreateShaderResourceView(texture->handle, null, &texture->view));
+    D3D11_CALL(d3d_device->CreateSamplerState(&sampler_description, &texture->sampler));
+    
+    stbi_image_free(buffer);
+}
+
+void destroy_texture(Texture *texture) {
+    texture->sampler->Release();
+    texture->view->Release();
+    texture->handle->Release();
+    texture->sampler  = null;
+    texture->view     = null;
+    texture->handle   = null;
+    texture->w        = 0;
+    texture->h        = 0;
+    texture->channels = 0;
+}
+
+void bind_texture(Texture *texture, s64 index_in_shader) {
+    d3d_context->PSSetSamplers((UINT) index_in_shader, 1, &texture->sampler);
+    d3d_context->PSSetShaderResources((UINT) index_in_shader, 1, &texture->view);
+}
+
+
+
 /* -------------------------------------------- Shader Constant Buffer -------------------------------------------- */
 
 void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, s64 size_in_bytes, void *initial_data) {
@@ -267,7 +378,7 @@ void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Spec
 
     string file_content = os_read_file(Default_Allocator, file_path);
     if(!file_content.count) {
-        foundation_error("Failed to load shader '%.*s' from disk.", (u32) file_path.count, file_path.data);
+        foundation_error("Failed to load shader '%.*s' from disk: The file does not exist.", (u32) file_path.count, file_path.data);
         return;
     }
 
@@ -282,19 +393,9 @@ void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Spec
         if(shader->vertex_shader && shader->pixel_shader) {
             D3D11_INPUT_ELEMENT_DESC input_element_description[D3D11_MAX_SHADER_INPUTS];
 
-            for(s64 i = 0; i < input_count; ++i) {
-                DXGI_FORMAT format;
-
-                switch(inputs[i].dimensions) {
-                case 1: format = DXGI_FORMAT_R32_FLOAT; break;
-                case 2: format = DXGI_FORMAT_R32G32_FLOAT; break;
-                case 3: format = DXGI_FORMAT_R32G32B32_FLOAT; break;
-                case 4: format = DXGI_FORMAT_R32G32B32A32_FLOAT; break;
-                default: foundation_error("Invalid dimension count in the Shader_Input_Specification"); break;
-                }
-                
+            for(s64 i = 0; i < input_count; ++i) {                
                 input_element_description[i] = {
-                    inputs[i].name, 0, format, inputs[i].vertex_buffer_index, 0, D3D11_INPUT_PER_VERTEX_DATA, 0
+                    inputs[i].name, 0, d3d11_format(inputs[i].dimensions, D3D11_Float32), inputs[i].vertex_buffer_index, 0, D3D11_INPUT_PER_VERTEX_DATA, 0
                 };
             }
 
