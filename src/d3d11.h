@@ -110,8 +110,8 @@ struct Pipeline_State {
 
 void create_d3d11_context(Window *window);
 void destroy_d3d11_context(Window *window);
-void clear_d3d11_buffer(Window *window, u8 r, u8 g, u8 b);
 void swap_d3d11_buffers(Window *window);
+Frame_Buffer *get_default_frame_buffer(Window *window);
 
 void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology);
 void destroy_vertex_buffer(Vertex_Buffer *buffer);
@@ -136,6 +136,13 @@ void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, Shader_Type sha
 void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count);
 void destroy_shader(Shader *shader);
 void bind_shader(Shader *shader);
+
+void create_frame_buffer(Frame_Buffer *frame_buffer);
+void destroy_frame_buffer(Frame_Buffer *frame_buffer);
+void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h);
+void bind_frame_buffer(Frame_Buffer *frame_buffer);
+void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b);
+void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);
 
 void create_pipeline_state(Pipeline_State *state); // User Level Input must be set before this!
 void destroy_pipeline_state(Pipeline_State *state);

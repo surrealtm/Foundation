@@ -13,6 +13,12 @@ int main() {
 
     create_d3d11_context(&window);
     
+    Frame_Buffer *default_frame_buffer = get_default_frame_buffer(&window);
+
+    Frame_Buffer my_frame_buffer;
+    create_frame_buffer(&my_frame_buffer);
+    create_frame_buffer_color_attachment(&my_frame_buffer, window.w, window.h);
+    
     Pipeline_State pipeline_state = { false, false, false, false };
     create_pipeline_state(&pipeline_state);
 
@@ -54,7 +60,8 @@ int main() {
             total_time += window.frame_time;
             update_shader_constant_buffer(&constants, &color);
             
-            clear_d3d11_buffer(&window, 200, 200, 100);
+            bind_frame_buffer(&my_frame_buffer);
+            clear_frame_buffer(&my_frame_buffer, .1f, .1f, .1f);
             
             bind_shader(&shader);
             bind_shader_constant_buffer(&constants, SHADER_Pixel);
@@ -62,6 +69,8 @@ int main() {
             bind_pipeline_state(&pipeline_state);
             bind_texture(&texture, 0);
             draw_vertex_buffer_array(&vertex_buffer);
+
+            blit_frame_buffer(default_frame_buffer, &my_frame_buffer);
 
             swap_d3d11_buffers(&window);
         }
@@ -75,7 +84,8 @@ int main() {
     destroy_shader_constant_buffer(&constants);
     destroy_shader(&shader);
     destroy_vertex_buffer_array(&vertex_buffer);
-
+    destroy_frame_buffer(&my_frame_buffer);
+    
     destroy_d3d11_context(&window);
 	destroy_window(&window);
 	return 0;

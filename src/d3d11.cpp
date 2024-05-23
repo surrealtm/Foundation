@@ -21,8 +21,7 @@
 
 struct Window_D3D11_State {
     IDXGISwapChain1 *swapchain;
-    ID3D11Texture2D *backbuffer;
-    ID3D11RenderTargetView *backbuffer_view;
+    Frame_Buffer default_frame_buffer;
 };
 
 static_assert(sizeof(Window_D3D11_State) <= sizeof(Window::graphics_data), "Window_D3D11_State is bigger than expected.");
@@ -85,7 +84,7 @@ void destroy_d3d11() {
 }
 
 enum D3D11_Data_Type {
-    D3D11_Ubyte,
+    D3D11_UByte,
     D3D11_Float32,
 };
 
@@ -94,7 +93,7 @@ DXGI_FORMAT d3d11_format(u8 channels, D3D11_Data_Type data_type) {
     DXGI_FORMAT format;
 
     switch(data_type) {
-    case D3D11_Ubyte: {
+    case D3D11_UByte: {
         switch(channels) {
         case 1: format = DXGI_FORMAT_R8_UNORM; break;
         case 2: format = DXGI_FORMAT_R8G8_UNORM; break;
@@ -130,7 +129,7 @@ void create_d3d11_context(Window *window) {
     DXGI_SWAP_CHAIN_DESC1 swapchain_description{};
     swapchain_description.Width              = window->w;
     swapchain_description.Height             = window->h;
-    swapchain_description.Format             = d3d11_format(4, D3D11_Ubyte);
+    swapchain_description.Format             = d3d11_format(4, D3D11_UByte);
     swapchain_description.Stereo             = FALSE;
     swapchain_description.SampleDesc.Count   = 1;
     swapchain_description.SampleDesc.Quality = 0;
@@ -142,42 +141,30 @@ void create_d3d11_context(Window *window) {
     swapchain_description.Flags              = 0;
 
     D3D11_CALL(dxgi_factory->CreateSwapChainForHwnd(d3d_device, (HWND) window_extract_hwnd(window), &swapchain_description, NULL, NULL, &d3d11->swapchain));
-    D3D11_CALL(d3d11->swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) &d3d11->backbuffer));
-    D3D11_CALL(d3d_device->CreateRenderTargetView(d3d11->backbuffer, 0, &d3d11->backbuffer_view));
+
+    d3d11->default_frame_buffer.color_count = 1;
+    d3d11->default_frame_buffer.colors[0].w = window->w;
+    d3d11->default_frame_buffer.colors[0].h = window->h;
+    
+    D3D11_CALL(d3d11->swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) &d3d11->default_frame_buffer.colors[0].texture));
+    D3D11_CALL(d3d_device->CreateRenderTargetView(d3d11->default_frame_buffer.colors[0].texture, 0, &d3d11->default_frame_buffer.colors[0].view));
 }
 
 void destroy_d3d11_context(Window *window) {
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
-    d3d11->backbuffer_view->Release();
-    d3d11->backbuffer->Release();
-    d3d11->swapchain->Release();
-    
+    destroy_frame_buffer(&d3d11->default_frame_buffer);
+    d3d11->swapchain->Release();    
     destroy_d3d11();
 }
-
-void clear_d3d11_buffer(Window *window, u8 r, u8 g, u8 b) {
-    Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
-
-    d3d_context->OMSetRenderTargets(1, &d3d11->backbuffer_view, NULL);
-    
-    D3D11_VIEWPORT viewport = {
-        0.f, 0.f,
-        (f32) window->w, (f32) window->h,
-        0.f, 1.f
-    };
-    d3d_context->RSSetViewports(1, &viewport);
-
-    f32 color_array[4];
-    color_array[0] = (f32) r / 255.f;
-    color_array[1] = (f32) g / 255.f;
-    color_array[2] = (f32) b / 255.f;
-    color_array[3] = 1.f;
-    d3d_context->ClearRenderTargetView(d3d11->backbuffer_view, &color_array[0]);
-};
 
 void swap_d3d11_buffers(Window *window) {
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
     d3d11->swapchain->Present(1, 0);
+}
+
+Frame_Buffer *get_default_frame_buffer(Window *window) {
+    Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;    
+    return &d3d11->default_frame_buffer;
 }
 
 
@@ -282,7 +269,7 @@ void create_texture_from_file(Texture *texture, string file_path) {
     texture_description.Height             = texture->h;
     texture_description.MipLevels          = 1;
     texture_description.ArraySize          = 1;
-    texture_description.Format             = d3d11_format(texture->channels, D3D11_Ubyte);
+    texture_description.Format             = d3d11_format(texture->channels, D3D11_UByte);
     texture_description.SampleDesc.Count   = 1;
     texture_description.SampleDesc.Quality = 0;
     texture_description.Usage              = D3D11_USAGE_DEFAULT;
@@ -431,7 +418,89 @@ void bind_shader(Shader *shader) {
 
 
 
-/* ---------------------------------------------- Pipeline State ---------------------------------------------- */
+/* ------------------------------------------------- Frame Buffer ------------------------------------------------- */
+
+void create_frame_buffer(Frame_Buffer *frame_buffer) {
+    frame_buffer->color_count = 0;
+}
+
+void destroy_frame_buffer(Frame_Buffer *frame_buffer) {
+    for(s64 i = 0; i < frame_buffer->color_count; ++i) {
+        frame_buffer->colors[i].view->Release();
+        frame_buffer->colors[i].texture->Release();
+    }
+
+    frame_buffer->color_count = 0;
+}
+
+void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h) {
+    foundation_assert(frame_buffer->color_count < ARRAY_COUNT(frame_buffer->colors));
+
+    Frame_Buffer_Attachment *attachment = &frame_buffer->colors[frame_buffer->color_count];
+    attachment->w = w;
+    attachment->h = h;
+    
+    D3D11_TEXTURE2D_DESC texture_description{};
+    texture_description.Width              = w;
+    texture_description.Height             = h;
+    texture_description.MipLevels          = 1;
+    texture_description.ArraySize          = 1;
+    texture_description.Format             = d3d11_format(4, D3D11_UByte);
+    texture_description.SampleDesc.Count   = 1;
+    texture_description.SampleDesc.Quality = 0;
+    texture_description.Usage              = D3D11_USAGE_DEFAULT;
+    texture_description.BindFlags          = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    texture_description.CPUAccessFlags     = 0;
+    texture_description.MiscFlags          = 0;
+
+    D3D11_RENDER_TARGET_VIEW_DESC view_description{};
+    view_description.Format             = texture_description.Format;
+    view_description.ViewDimension      = D3D11_RTV_DIMENSION_TEXTURE2D;
+    view_description.Texture2D.MipSlice = 0;
+
+    D3D11_CALL(d3d_device->CreateTexture2D(&texture_description, null, &attachment->texture));
+    D3D11_CALL(d3d_device->CreateRenderTargetView(attachment->texture, &view_description, &attachment->view));
+
+    ++frame_buffer->color_count;
+}
+
+void bind_frame_buffer(Frame_Buffer *frame_buffer) {
+    D3D11_VIEWPORT viewports[ARRAY_COUNT(frame_buffer->colors)];
+    for(s64 i = 0; i < frame_buffer->color_count; ++i) {
+        viewports[i] = { 0.f, 0.f, (f32) frame_buffer->colors[i].w, (f32) frame_buffer->colors[i].h, 0.f, 1.f };
+    }
+    d3d_context->RSSetViewports((UINT) frame_buffer->color_count, viewports);
+
+    ID3D11RenderTargetView *views[ARRAY_COUNT(frame_buffer->colors)];
+    for(s64 i = 0; i < frame_buffer->color_count; ++i) {
+        views[i] = frame_buffer->colors[i].view;
+    }
+    d3d_context->OMSetRenderTargets((UINT) frame_buffer->color_count, views, null);
+}
+
+void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b) {
+    f32 color_array[4];
+    color_array[0] = r;
+    color_array[1] = g;
+    color_array[2] = b;
+    color_array[3] = 1.f;
+
+    for(s64 i = 0; i < frame_buffer->color_count; ++i) {
+        d3d_context->ClearRenderTargetView(frame_buffer->colors[i].view, color_array);
+    }
+}
+
+void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
+    foundation_assert(dst->color_count == src->color_count);
+    for(s64 i = 0; i < dst->color_count; ++i) {
+        foundation_assert(dst->colors[i].w == src->colors[i].w && dst->colors[i].h == src->colors[i].h);
+        d3d_context->CopyResource(dst->colors[i].texture, src->colors[i].texture);
+    }
+}
+
+
+
+/* ------------------------------------------------ Pipeline State ------------------------------------------------ */
 
 void create_pipeline_state(Pipeline_State *state) {
     D3D11_RASTERIZER_DESC rasterizer{};
