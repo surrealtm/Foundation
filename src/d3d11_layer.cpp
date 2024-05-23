@@ -1,10 +1,10 @@
-#include "d3d11.h"
+#include "d3d11_layer.h"
 #include "window.h"
 #include "os_specific.h"
 #include "memutils.h"
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "deps/stb_image.h"
+#include "Dependencies/stb_image.h"
 
 #undef null // comdef.h has many parameters called 'null'... For fucks sake.
 
