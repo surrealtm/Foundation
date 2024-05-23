@@ -90,14 +90,18 @@ struct Shader {
 
 struct Frame_Buffer_Attachment {
     s32 w, h;
+    u32 format; // DXGI_FORMAT
     ID3D11RenderTargetView *view;
     ID3D11Texture2D *texture;
 };
 
 struct Frame_Buffer {
+    s8 samples;
+
     Frame_Buffer_Attachment colors[D3D11_MAX_FRAMEBUFFER_COLOR_ATTACHMENTS];
     s64 color_count;
     
+    u32 depth_format; // DXGI_FORMAT
     ID3D11Texture2D *depth_stencil_texture;
     ID3D11DepthStencilView *depth_stencil_view;
     ID3D11DepthStencilState *depth_stencil_state;
@@ -144,9 +148,9 @@ void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Spec
 void destroy_shader(Shader *shader);
 void bind_shader(Shader *shader);
 
-void create_frame_buffer(Frame_Buffer *frame_buffer);
+void create_frame_buffer(Frame_Buffer *frame_buffer, u8 samples = 1);
 void destroy_frame_buffer(Frame_Buffer *frame_buffer);
-void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h);
+void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, b8 hdr = false);
 void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h);
 void bind_frame_buffer(Frame_Buffer *frame_buffer);
 void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b);

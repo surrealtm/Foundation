@@ -16,15 +16,15 @@ int main() {
     Frame_Buffer *default_frame_buffer = get_default_frame_buffer(&window);
 
     Frame_Buffer my_frame_buffer;
-    create_frame_buffer(&my_frame_buffer);
-    create_frame_buffer_color_attachment(&my_frame_buffer, window.w, window.h);
+    create_frame_buffer(&my_frame_buffer, 8);
+    create_frame_buffer_color_attachment(&my_frame_buffer, window.w, window.h, false);
     create_frame_buffer_depth_stencil_attachment(&my_frame_buffer, window.w, window.h);
     
     Pipeline_State pipeline_state = { false, false, false, false };
     create_pipeline_state(&pipeline_state);
 
-    f32 vertices[] = { -.5, .5,    .5, .5,    -.5, -.5,
-                       -.5, -.5,   .5, .5,     .5, -.5 };
+    f32 vertices[] = { -.5f,  .5f,   .5f, .5f,    -.5f, -.5f,
+                       -.5f, -.5f,   .5f, .5f,     .5f, -.2f };
     f32 uvs[] = { 0, 0,   1, 0,    0, 1,
                   0, 1,   1, 0,    1, 1 };
 

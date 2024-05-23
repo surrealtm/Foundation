@@ -62,7 +62,7 @@ void create_d3d11_device() {
     UINT flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_DEBUG;
     UINT sdk = D3D11_SDK_VERSION;
     
-    D3D11_CALL(D3D11CreateDevice(NULL, driver, NULL, flags, NULL, 0, sdk, &d3d_device, &d3d_feature_level, &d3d_context));
+    D3D11_CALL(D3D11CreateDevice(null, driver, null, flags, null, 0, sdk, &d3d_device, &d3d_feature_level, &d3d_context));
 
     D3D11_CALL(d3d_device->QueryInterface(__uuidof(IDXGIDevice2), (void **) &dxgi_device));
     D3D11_CALL(dxgi_device->GetParent(__uuidof(IDXGIAdapter), (void **) &dxgi_adapter));
@@ -126,10 +126,12 @@ void create_d3d11_context(Window *window) {
 
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
     
+    DXGI_FORMAT color_format = d3d11_format(4, D3D11_UByte);
+
     DXGI_SWAP_CHAIN_DESC1 swapchain_description{};
     swapchain_description.Width              = window->w;
     swapchain_description.Height             = window->h;
-    swapchain_description.Format             = d3d11_format(4, D3D11_UByte);
+    swapchain_description.Format             = color_format;
     swapchain_description.Stereo             = FALSE;
     swapchain_description.SampleDesc.Count   = 1;
     swapchain_description.SampleDesc.Quality = 0;
@@ -140,12 +142,14 @@ void create_d3d11_context(Window *window) {
     swapchain_description.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
     swapchain_description.Flags              = 0;
 
-    D3D11_CALL(dxgi_factory->CreateSwapChainForHwnd(d3d_device, (HWND) window_extract_hwnd(window), &swapchain_description, NULL, NULL, &d3d11->swapchain));
+    D3D11_CALL(dxgi_factory->CreateSwapChainForHwnd(d3d_device, (HWND) window_extract_hwnd(window), &swapchain_description, null, null, &d3d11->swapchain));
 
+    d3d11->default_frame_buffer.samples     = 1;
     d3d11->default_frame_buffer.color_count = 1;
     d3d11->default_frame_buffer.colors[0].w = window->w;
     d3d11->default_frame_buffer.colors[0].h = window->h;
-    
+    d3d11->default_frame_buffer.colors[0].format = color_format;
+
     d3d11->default_frame_buffer.has_depth = false;
 
     D3D11_CALL(d3d11->swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) &d3d11->default_frame_buffer.colors[0].texture));
@@ -372,8 +376,8 @@ void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Spec
     }
 
     char *file_path_cstring = to_cstring(Default_Allocator, file_path);
-    D3DCompile(file_content.data, file_content.count, file_path_cstring, NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->vertex_blob, &error_blob);
-    D3DCompile(file_content.data, file_content.count, file_path_cstring, NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->pixel_blob, &error_blob);
+    D3DCompile(file_content.data, file_content.count, file_path_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->vertex_blob, &error_blob);
+    D3DCompile(file_content.data, file_content.count, file_path_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->pixel_blob, &error_blob);
 
     if(shader->vertex_blob && shader->pixel_blob) {
         D3D11_CALL(d3d_device->CreateVertexShader(shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), null, &shader->vertex_shader));
@@ -413,8 +417,8 @@ void destroy_shader(Shader *shader) {
 }
 
 void bind_shader(Shader *shader) {
-    d3d_context->VSSetShader(shader->vertex_shader, NULL, 0);
-    d3d_context->PSSetShader(shader->pixel_shader, NULL, 0);
+    d3d_context->VSSetShader(shader->vertex_shader, null, 0);
+    d3d_context->PSSetShader(shader->pixel_shader, null, 0);
     d3d_context->IASetInputLayout(shader->input_layout);
 }
 
@@ -422,7 +426,8 @@ void bind_shader(Shader *shader) {
 
 /* ------------------------------------------------- Frame Buffer ------------------------------------------------- */
 
-void create_frame_buffer(Frame_Buffer *frame_buffer) {
+void create_frame_buffer(Frame_Buffer *frame_buffer, u8 samples) {
+    frame_buffer->samples     = samples;
     frame_buffer->color_count = 0;
     frame_buffer->has_depth   = 0;
 }
@@ -444,22 +449,23 @@ void destroy_frame_buffer(Frame_Buffer *frame_buffer) {
     frame_buffer->has_depth = false;
 }
 
-// @Incomplete: Add Multisampling, HDR frame buffers
+// @Incomplete: Add HDR frame buffers
 
-void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h) {
+void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, b8 hdr) {
     foundation_assert(frame_buffer->color_count < ARRAY_COUNT(frame_buffer->colors));
 
     Frame_Buffer_Attachment *attachment = &frame_buffer->colors[frame_buffer->color_count];
     attachment->w = w;
     attachment->h = h;
+    attachment->format = d3d11_format(4, hdr ? D3D11_Float32 : D3D11_UByte);
     
     D3D11_TEXTURE2D_DESC texture_description{};
     texture_description.Width              = w;
     texture_description.Height             = h;
     texture_description.MipLevels          = 1;
     texture_description.ArraySize          = 1;
-    texture_description.Format             = d3d11_format(4, D3D11_UByte);
-    texture_description.SampleDesc.Count   = 1;
+    texture_description.Format             = (DXGI_FORMAT) attachment->format;
+    texture_description.SampleDesc.Count   = frame_buffer->samples;
     texture_description.SampleDesc.Quality = 0;
     texture_description.Usage              = D3D11_USAGE_DEFAULT;
     texture_description.BindFlags          = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
@@ -467,8 +473,8 @@ void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32
     texture_description.MiscFlags          = 0;
 
     D3D11_RENDER_TARGET_VIEW_DESC view_description{};
-    view_description.Format             = texture_description.Format;
-    view_description.ViewDimension      = D3D11_RTV_DIMENSION_TEXTURE2D;
+    view_description.Format             = (DXGI_FORMAT) attachment->format;
+    view_description.ViewDimension      = frame_buffer->samples > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS : D3D11_RTV_DIMENSION_TEXTURE2D;
     view_description.Texture2D.MipSlice = 0;
 
     D3D11_CALL(d3d_device->CreateTexture2D(&texture_description, null, &attachment->texture));
@@ -479,6 +485,8 @@ void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32
 
 void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h) {
     foundation_assert(frame_buffer->has_depth == false);
+
+    frame_buffer->depth_format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
     D3D11_DEPTH_STENCILOP_DESC operations{};
     operations.StencilFailOp      = D3D11_STENCIL_OP_KEEP;
@@ -501,8 +509,8 @@ void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s3
     texture_description.Height             = h;
     texture_description.MipLevels          = 1;
     texture_description.ArraySize          = 1;
-    texture_description.Format             = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
-    texture_description.SampleDesc.Count   = 1;
+    texture_description.Format             = (DXGI_FORMAT) frame_buffer->depth_format;
+    texture_description.SampleDesc.Count   = frame_buffer->samples;
     texture_description.SampleDesc.Quality = 0;
     texture_description.Usage              = D3D11_USAGE_DEFAULT;
     texture_description.BindFlags          = D3D11_BIND_DEPTH_STENCIL;
@@ -510,8 +518,8 @@ void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s3
     texture_description.MiscFlags          = 0;
 
     D3D11_DEPTH_STENCIL_VIEW_DESC view_description{};
-    view_description.Format             = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
-    view_description.ViewDimension      = D3D11_DSV_DIMENSION_TEXTURE2D;
+    view_description.Format             = (DXGI_FORMAT) frame_buffer->depth_format;
+    view_description.ViewDimension      = frame_buffer->samples > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
     view_description.Texture2D.MipSlice = 0;
     
     D3D11_CALL(d3d_device->CreateDepthStencilState(&state_description, &frame_buffer->depth_stencil_state));
@@ -551,9 +559,30 @@ void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b) {
 
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
     foundation_assert(dst->color_count == src->color_count);
-    for(s64 i = 0; i < dst->color_count; ++i) {
-        foundation_assert(dst->colors[i].w == src->colors[i].w && dst->colors[i].h == src->colors[i].h);
-        d3d_context->CopyResource(dst->colors[i].texture, src->colors[i].texture);
+    foundation_assert(dst->samples == 1 || src->samples == dst->samples); // We can only either copy the samples into the destination, or resolve them into a single one.
+    
+    if(src->samples == dst->samples) {
+        for(s64 i = 0; i < dst->color_count; ++i) {
+            foundation_assert(dst->colors[i].w == src->colors[i].w && dst->colors[i].h == src->colors[i].h);
+            foundation_assert(dst->colors[i].format == src->colors[i].format);
+            d3d_context->CopyResource(dst->colors[i].texture, src->colors[i].texture);
+        }
+
+        if(dst->has_depth && src->has_depth) {
+            foundation_assert(dst->depth_format == src->depth_format);
+            d3d_context->CopyResource(dst->depth_stencil_texture, src->depth_stencil_texture);
+        }
+    } else {
+        for(s64 i = 0; i < dst->color_count; ++i) {
+            foundation_assert(dst->colors[i].w == src->colors[i].w && dst->colors[i].h == src->colors[i].h);
+            foundation_assert(dst->colors[i].format == src->colors[i].format);
+            d3d_context->ResolveSubresource(dst->colors[i].texture, 0, src->colors[i].texture, 0, (DXGI_FORMAT) dst->colors[i].format);
+        }
+
+        if(dst->has_depth && src->has_depth) {
+            foundation_assert(dst->depth_format == src->depth_format);
+            d3d_context->ResolveSubresource(dst->depth_stencil_texture, 0, src->depth_stencil_texture, 0, (DXGI_FORMAT) dst->depth_format);
+        }
     }
 }
 
