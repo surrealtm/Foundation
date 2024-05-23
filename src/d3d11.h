@@ -19,6 +19,8 @@ struct ID3D11PixelShader;
 struct ID3D11InputLayout;
 struct ID3D11RenderTargetView;
 struct ID3D11RasterizerState;
+struct ID3D11DepthStencilView;
+struct ID3D11DepthStencilState;
 
 struct Window;
 
@@ -95,6 +97,11 @@ struct Frame_Buffer_Attachment {
 struct Frame_Buffer {
     Frame_Buffer_Attachment colors[D3D11_MAX_FRAMEBUFFER_COLOR_ATTACHMENTS];
     s64 color_count;
+    
+    ID3D11Texture2D *depth_stencil_texture;
+    ID3D11DepthStencilView *depth_stencil_view;
+    ID3D11DepthStencilState *depth_stencil_state;
+    b8 has_depth;
 };
 
 struct Pipeline_State {
@@ -140,6 +147,7 @@ void bind_shader(Shader *shader);
 void create_frame_buffer(Frame_Buffer *frame_buffer);
 void destroy_frame_buffer(Frame_Buffer *frame_buffer);
 void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h);
+void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h);
 void bind_frame_buffer(Frame_Buffer *frame_buffer);
 void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b);
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);

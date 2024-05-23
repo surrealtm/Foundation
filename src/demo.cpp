@@ -18,6 +18,7 @@ int main() {
     Frame_Buffer my_frame_buffer;
     create_frame_buffer(&my_frame_buffer);
     create_frame_buffer_color_attachment(&my_frame_buffer, window.w, window.h);
+    create_frame_buffer_depth_stencil_attachment(&my_frame_buffer, window.w, window.h);
     
     Pipeline_State pipeline_state = { false, false, false, false };
     create_pipeline_state(&pipeline_state);
