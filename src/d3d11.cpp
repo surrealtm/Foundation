@@ -221,6 +221,43 @@ void draw_vertex_buffer_array(Vertex_Buffer_Array *array) {
 
 
 
+/* -------------------------------------------- Shader Constant Buffer -------------------------------------------- */
+
+void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, s64 size_in_bytes, void *initial_data) {
+    D3D11_BUFFER_DESC description{};
+    description.Usage          = D3D11_USAGE_DEFAULT;
+    description.ByteWidth      = align_to(size_in_bytes, 16, UINT);
+    description.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
+    description.CPUAccessFlags = 0;
+    description.MiscFlags      = 0;
+
+    D3D11_SUBRESOURCE_DATA subresource{};
+    subresource.pSysMem = initial_data;
+
+    D3D11_CALL(d3d_device->CreateBuffer(&description, (initial_data != null) ? &subresource : null, &buffer->handle));
+
+    buffer->index_in_shader = index_in_shader;
+}
+
+void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer) {
+    buffer->handle->Release();
+    buffer->handle = null;
+    buffer->index_in_shader = 0;
+}
+
+void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data) {
+    d3d_context->UpdateSubresource(buffer->handle, 0, null, data, 0, 0);
+}
+
+void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, Shader_Type shader_type) {
+    switch(shader_type) {
+    case SHADER_Vertex: d3d_context->VSSetConstantBuffers((UINT) buffer->index_in_shader, 1, &buffer->handle); break;
+    case SHADER_Pixel:  d3d_context->PSSetConstantBuffers((UINT) buffer->index_in_shader, 1, &buffer->handle); break;
+    }
+}
+
+
+
 /* -------------------------------------------------- Shader -------------------------------------------------- */
 
 void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count) {

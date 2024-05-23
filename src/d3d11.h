@@ -61,10 +61,20 @@ struct Texture {
     ID3D11Texture2D *handle;
 };
 
+enum Shader_Type {
+    SHADER_Vertex,
+    SHADER_Pixel,
+};
+
 struct Shader_Input_Specification {
     const char *name;
     u8 dimensions;
     u8 vertex_buffer_index;
+};
+
+struct Shader_Constant_Buffer {
+    s64 index_in_shader;
+    ID3D11Buffer *handle;
 };
 
 struct Shader {
@@ -112,6 +122,11 @@ void destroy_vertex_buffer_array(Vertex_Buffer_Array *array);
 void add_vertex_data(Vertex_Buffer_Array *array, f32 *data, u64 float_count, u8 dimensions);
 void bind_vertex_buffer_array(Vertex_Buffer_Array *array);
 void draw_vertex_buffer_array(Vertex_Buffer_Array *array);
+
+void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, s64 size_in_bytes, void *initial_data = null);
+void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer);
+void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data);
+void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, Shader_Type shader_type);
 
 void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count);
 void destroy_shader(Shader *shader);

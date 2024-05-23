@@ -1,5 +1,6 @@
 #include "window.h"
 #include "d3d11.h"
+#include "math/v3.h"
 #include "os_specific.h"
 
 int main() {
@@ -16,31 +17,42 @@ int main() {
     create_pipeline_state(&pipeline_state);
 
     f32 vertices[] = { -.5, -.5,    .5, -.5,    -.5, .5 };
-    f32 colors[] = { 1, 0, 0,   0, 1, 0,    0, 0, 1 };
+    f32 uvs[] = { 1, 1,   0, 1,    1, 0 };
 
     Vertex_Buffer_Array vertex_buffer;
     create_vertex_buffer_array(&vertex_buffer, VERTEX_BUFFER_Triangles);
     add_vertex_data(&vertex_buffer, vertices, ARRAY_COUNT(vertices), 2);
-    add_vertex_data(&vertex_buffer, colors, ARRAY_COUNT(colors), 3);
+    add_vertex_data(&vertex_buffer, uvs, ARRAY_COUNT(uvs), 2);
 
+    v3f color = v3f(1, 0, 0);
+    Shader_Constant_Buffer constants;
+    create_shader_constant_buffer(&constants, 0, sizeof(v3f), &color);
+    
     Shader_Input_Specification inputs[] = {
         { "POSITION", 2, 0 },
-        { "COLOR", 3, 1 },
+        { "UV", 2, 1 },
     };
     
     Shader shader;
     create_shader_from_file(&shader, "data\\shader\\rgba.hlsl"_s, inputs, ARRAY_COUNT(inputs));
 
-    s32 x = 0, y = 0;
+    f32 total_time = 0.f;
+    
 	while(!window.should_close) {
         Hardware_Time frame_start = os_get_hardware_time();
 
         {
             update_window(&window);
 
+            color.x = cosf(total_time) * 0.5 + 0.5;
+            color.y = sinf(total_time) * 0.5 + 0.5;
+            total_time += window.frame_time;
+            update_shader_constant_buffer(&constants, &color);
+            
             clear_d3d11_buffer(&window, 200, 200, 100);
             
             bind_shader(&shader);
+            bind_shader_constant_buffer(&constants, SHADER_Pixel);
             bind_vertex_buffer_array(&vertex_buffer);
             bind_pipeline_state(&pipeline_state);
             draw_vertex_buffer_array(&vertex_buffer);
@@ -53,6 +65,7 @@ int main() {
     }
 
     destroy_pipeline_state(&pipeline_state);
+    destroy_shader_constant_buffer(&constants);
     destroy_shader(&shader);
     destroy_vertex_buffer_array(&vertex_buffer);
 
