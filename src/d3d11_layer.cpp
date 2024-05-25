@@ -50,7 +50,7 @@ void d3d11_call_wrapper(HRESULT result, const char *assertion_text) {
     size_t error_string_length;
     char error_string[256];
     wcstombs_s(&error_string_length, error_string, sizeof(error_string), wide_error_string, _TRUNCATE);
-    foundation_do_assertion_fail(assertion_text, "%.*s", (u32) error_string_length, error_string);
+    foundation_do_assertion_fail(assertion_text, "[D3D11]: %.*s", (u32) error_string_length, error_string);
 }
 
 static
@@ -177,22 +177,28 @@ Frame_Buffer *get_default_frame_buffer(Window *window) {
 
 /* ------------------------------------------------ Vertex Buffer ------------------------------------------------ */
 
-void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology) {
-    foundation_assert(float_count % dimensions == 0, "Expected byte_count to be a multiple of dimensions."); // comdef.h overrides 'assert'...
+void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology, b8 allow_updates) {
+    foundation_assert(float_count % dimensions == 0, "Expected byte_count to be a multiple of dimensions.");
 
     buffer->vertex_count = float_count / dimensions;
-    buffer->dimensions = dimensions;
-    buffer->topology = topology;
+    buffer->dimensions   = dimensions;
+    buffer->topology     = topology;
+    buffer->capacity     = float_count * sizeof(f32);
 
     D3D11_BUFFER_DESC buffer_description{};
-    buffer_description.ByteWidth = (UINT) (float_count * sizeof(f32));
-    buffer_description.Usage     = D3D11_USAGE_DEFAULT;
-    buffer_description.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    buffer_description.ByteWidth      = (UINT) (float_count * sizeof(f32));
+    buffer_description.Usage          = allow_updates ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
+    buffer_description.BindFlags      = D3D11_BIND_VERTEX_BUFFER;
+    buffer_description.CPUAccessFlags = allow_updates ? D3D11_CPU_ACCESS_WRITE : 0;
 
     D3D11_SUBRESOURCE_DATA subresource{};
     subresource.pSysMem = data;
 
-    D3D11_CALL(d3d_device->CreateBuffer(&buffer_description, &subresource, &buffer->handle));
+    D3D11_CALL(d3d_device->CreateBuffer(&buffer_description, data != null ? &subresource : null, &buffer->handle));
+}
+
+void allocate_vertex_buffer(Vertex_Buffer *buffer, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology) {
+    create_vertex_buffer(buffer, null, float_count, dimensions, topology, true);
 }
 
 void destroy_vertex_buffer(Vertex_Buffer *buffer) {
@@ -200,6 +206,18 @@ void destroy_vertex_buffer(Vertex_Buffer *buffer) {
     buffer->handle       = null;
     buffer->vertex_count = 0;
     buffer->topology     = VERTEX_BUFFER_Undefined;
+}
+
+void update_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count) {
+    foundation_assert(float_count % buffer->dimensions == 0, "Expected byte_count to be a multiple of dimensions.");
+    foundation_assert(float_count * sizeof(f32) <= buffer->capacity, "A Vertex Buffer cannot be dynamically grown.");
+
+    D3D11_MAPPED_SUBRESOURCE subresource;
+    D3D11_CALL(d3d_context->Map(buffer->handle, 0, D3D11_MAP_WRITE_DISCARD, 0, &subresource)); // This might fail if we haven't supplied CPU Write Access to this buffer!
+    memcpy(subresource.pData, data, float_count * sizeof(f32));
+    d3d_context->Unmap(buffer->handle, 0);
+
+    buffer->vertex_count = float_count / buffer->dimensions;
 }
 
 void bind_vertex_buffer(Vertex_Buffer *buffer) {
@@ -227,10 +245,19 @@ void destroy_vertex_buffer_array(Vertex_Buffer_Array *array) {
     }
 }
 
-void add_vertex_data(Vertex_Buffer_Array *array, f32 *data, u64 float_count, u8 dimensions) {
+void add_vertex_data(Vertex_Buffer_Array *array, f32 *data, u64 float_count, u8 dimensions, b8 allow_updates) {
     foundation_assert(array->count < ARRAY_COUNT(array->buffers), "Vertex_Buffer_Array ran out of buffers.");
-    create_vertex_buffer(&array->buffers[array->count], data, float_count, dimensions, array->topology);
+    create_vertex_buffer(&array->buffers[array->count], data, float_count, dimensions, array->topology, allow_updates);
     ++array->count;
+}
+
+void allocate_vertex_data(Vertex_Buffer_Array *array, u64 float_count, u8 dimensions) {
+    add_vertex_data(array, null, float_count, dimensions, true);
+}
+
+void update_vertex_data(Vertex_Buffer_Array *array, s64 index, f32 *data, u64 float_count) {
+    foundation_assert(index >= 0 && index < array->count);
+    update_vertex_buffer(&array->buffers[index], data, float_count);
 }
 
 void bind_vertex_buffer_array(Vertex_Buffer_Array *array) {

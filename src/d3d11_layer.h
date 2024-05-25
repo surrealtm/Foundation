@@ -47,6 +47,7 @@ struct Vertex_Buffer {
     Vertex_Buffer_Topology topology;
     u8 dimensions;
     u64 vertex_count;
+    u64 capacity; // D3D11 does not allow for dynamic resizing of a buffer. We can always use less than that initial size (using the vertex_count), but we can never grow it. This capacity marks that initial size in bytes.
     ID3D11Buffer *handle;
 };
 
@@ -124,14 +125,18 @@ void destroy_d3d11_context(Window *window);
 void swap_d3d11_buffers(Window *window);
 Frame_Buffer *get_default_frame_buffer(Window *window);
 
-void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology);
+void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology, b8 allow_updates = false);
+void allocate_vertex_buffer(Vertex_Buffer *buffer, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology);
 void destroy_vertex_buffer(Vertex_Buffer *buffer);
+void update_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count);
 void bind_vertex_buffer(Vertex_Buffer *buffer);
 void draw_vertex_buffer(Vertex_Buffer *buffer);
 
 void create_vertex_buffer_array(Vertex_Buffer_Array *array, Vertex_Buffer_Topology topology);
 void destroy_vertex_buffer_array(Vertex_Buffer_Array *array);
-void add_vertex_data(Vertex_Buffer_Array *array, f32 *data, u64 float_count, u8 dimensions);
+void add_vertex_data(Vertex_Buffer_Array *array, f32 *data, u64 float_count, u8 dimensions, b8 allow_updates = false);
+void allocate_vertex_data(Vertex_Buffer_Array *array, u64 float_count, u8 dimensions);
+void update_vertex_data(Vertex_Buffer_Array *array, s64 index, f32 *data, u64 float_count);
 void bind_vertex_buffer_array(Vertex_Buffer_Array *array);
 void draw_vertex_buffer_array(Vertex_Buffer_Array *array);
 

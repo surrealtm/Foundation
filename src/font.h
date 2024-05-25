@@ -69,12 +69,22 @@ struct Font {
     
     // Internal layout information.
     Glyph_Set loaded_glyph_sets;
-    Font_Glyph *extended_ascii_hot_path[256];
+    u32 extended_ascii_hot_path[256]; // Indices into the glyph array as a shortcut so that we don't have to actually search for it. We use indices here since the glyphs array may grow.
 
     Font_Glyph *glyphs;
     s64 glyph_count;
     s64 glyphs_allocated;
 };
 
+struct Text_Mesh {
+    s64 vertex_count;
+    f32 *vertices;
+    f32 *uvs;
+    s32 *atlas_indices;
+};
+
 b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load);
 void destroy_font(Font *font);
+
+Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment alignment, Allocator *allocator);
+void free_text_mesh(Text_Mesh *text_mesh, Allocator *allocator);

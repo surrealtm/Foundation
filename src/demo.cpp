@@ -27,15 +27,10 @@ int main() {
     Pipeline_State pipeline_state = { false, false, false, false };
     create_pipeline_state(&pipeline_state);
 
-    f32 vertices[] = { -.5f,  .5f,   .5f, .5f,    -.5f, -.5f,
-                       -.5f, -.5f,   .5f, .5f,     .5f, -.5f };
-    f32 uvs[] = { 0, 0,   1, 0,    0, 1,
-                  0, 1,   1, 0,    1, 1 };
-
     Vertex_Buffer_Array vertex_buffer;
     create_vertex_buffer_array(&vertex_buffer, VERTEX_BUFFER_Triangles);
-    add_vertex_data(&vertex_buffer, vertices, ARRAY_COUNT(vertices), 2);
-    add_vertex_data(&vertex_buffer, uvs, ARRAY_COUNT(uvs), 2);
+    allocate_vertex_data(&vertex_buffer, 5 * 6 * 2, 2);
+    allocate_vertex_data(&vertex_buffer, 5 * 6 * 2, 2);
 
     f32 color[] = { 1, 1, 1 };
     Shader_Constant_Buffer constants;
@@ -74,6 +69,11 @@ int main() {
             color[0] = cosf(total_time) * 0.5f + 0.5f;
             color[1] = sinf(total_time) * 0.5f + 0.5f;
             */
+
+            Text_Mesh text_mesh = build_text_mesh(&font, "Hello"_s, 100, 100, TEXT_ALIGNMENT_Centered, Default_Allocator);
+            update_vertex_data(&vertex_buffer, 0, text_mesh.vertices, text_mesh.vertex_count * 2);
+            update_vertex_data(&vertex_buffer, 1, text_mesh.uvs, text_mesh.vertex_count * 2);
+            free_text_mesh(&text_mesh, Default_Allocator);
 
             total_time += window.frame_time;
             update_shader_constant_buffer(&constants, &color);

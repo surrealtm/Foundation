@@ -20,7 +20,7 @@ struct Font_Creation_Helper {
 static
 Font_Glyph *find_glyph(Font *font, s64 character) {
     if(character >= 0 && character <= 255) {
-        return font->extended_ascii_hot_path[character];
+        return font->glyphs + font->extended_ascii_hot_path[character];
     }
 
     foundation_error("The character value '%u' is not supported in the font.", character);
@@ -37,6 +37,28 @@ s64 find_glyph_index_in_advance_table(s64 character) {
 
     return -1;
 }
+
+static
+s16 find_glyph_advance(Font_Glyph *glyph, s64 next_character) {
+    s64 index = find_glyph_index_in_advance_table(next_character);
+    if(index == -1) return glyph->advances[0];
+    return glyph->advances[index];
+}
+
+static
+Font_Atlas *find_atlas(Font *font, s64 index) {
+    if(index == 0) return font->atlas; // Fast Path. Not tested if this is actually worth it.
+    
+    Font_Atlas *atlas = font->atlas;
+
+    while(index > 0) {
+        atlas = atlas->next;
+        --index;
+    }
+
+    return atlas;
+}
+
 
 static
 u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap_pitch, s64 bitmap_channels, Font_Creation_Helper *helper) {
@@ -120,13 +142,13 @@ u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap
 }
 
 static
-Font_Glyph *load_glyph(Font *font, FT_ULong character, Font_Creation_Helper *helper) {
+u32 load_glyph(Font *font, FT_ULong character, Font_Creation_Helper *helper) {
     FT_UInt glyph_index = FT_Get_Char_Index(helper->face, character);
 
     // Char Index 0 is 'undefined', happens for ascii control characters. Only the first character (as a default
     // fallback) should be loaded (it will be a square icon). This character will be used as a placeholder for
     // other not-loaded glyphs (such as umlauts)
-    if(glyph_index == 0 && character > 0) return null;
+    if(glyph_index == 0 && character > 0) return 0;
 
     FT_Load_Glyph(helper->face, glyph_index, FT_LOAD_DEFAULT);
     FT_Render_Glyph(helper->face->glyph, helper->render_options);
@@ -177,7 +199,7 @@ Font_Glyph *load_glyph(Font *font, FT_ULong character, Font_Creation_Helper *hel
         glyph->atlas_index = -1;
     }
 
-    return glyph;
+    return (u32) (font->glyph_count - 1);
 }
 
 static
@@ -220,6 +242,8 @@ void load_glyph_set(Font *font, Glyph_Set glyphs_to_load, Font_Creation_Helper *
     } break;
     }
 }
+
+
 
 b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load) {
     memset(font, 0, sizeof(Font)); // Make sure we don't have any uninitialized data in here.
@@ -297,4 +321,84 @@ void destroy_font(Font *font) {
     font->glyphs            = null;
     font->glyph_count       = 0;
     font->glyphs_allocated  = 0;
+}
+
+
+
+Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment alignment, Allocator *allocator) {
+    assert(font->glyph_count > 0);
+
+    Text_Mesh text_mesh;
+    text_mesh.vertex_count  = text.count * 6;
+    text_mesh.vertices      = (f32 *) allocator->allocate(text_mesh.vertex_count * 2 * sizeof(f32));
+    text_mesh.uvs           = (f32 *) allocator->allocate(text_mesh.vertex_count * 2 * sizeof(f32));
+    text_mesh.atlas_indices = (s32 *) allocator->allocate(text_mesh.vertex_count * sizeof(s32));
+
+    s32 cx = x, cy = y;
+
+    for(s64 i = 0; i < text.count; ++i) {
+        u8 character = text[i];
+        Font_Glyph *glyph = find_glyph(font, character);
+        if(!glyph || glyph->atlas_index == -1) glyph = &font->glyphs[0]; // Use the default glyph to display at least something.
+
+        Font_Atlas *atlas = find_atlas(font, glyph->atlas_index);
+
+        {
+            s64 offset = i * 6 * 2;
+            s32 x0 = (cx + glyph->cursor_offset_x), y0 = (cy - glyph->cursor_offset_y);
+            s32 x1 = (cx + glyph->cursor_offset_x + glyph->bitmap_width), y1 = (cy - glyph->cursor_offset_y + glyph->bitmap_height);
+            text_mesh.vertices[offset + 0]  = (f32) x0;
+            text_mesh.vertices[offset + 1]  = (f32) y0;
+            text_mesh.vertices[offset + 2]  = (f32) x1;
+            text_mesh.vertices[offset + 3]  = (f32) y0;
+            text_mesh.vertices[offset + 4]  = (f32) x0;
+            text_mesh.vertices[offset + 5]  = (f32) y1;
+            text_mesh.vertices[offset + 6]  = (f32) x0;
+            text_mesh.vertices[offset + 7]  = (f32) y1;
+            text_mesh.vertices[offset + 8]  = (f32) x1;
+            text_mesh.vertices[offset + 9]  = (f32) y0;
+            text_mesh.vertices[offset + 10] = (f32) x1;
+            text_mesh.vertices[offset + 11] = (f32) y1;
+        }
+
+        {
+            s64 offset = i * 6 * 2;
+            f32 x0 = ((f32) glyph->bitmap_offset_x / (f32) atlas->w), y0 = ((f32) glyph->bitmap_offset_y / (f32) atlas->h);
+            f32 x1 = ((f32) (glyph->bitmap_offset_x + glyph->bitmap_width) / (f32) atlas->w), y1 = ((f32) (glyph->bitmap_offset_y + glyph->bitmap_height) / (f32) atlas->h);
+            text_mesh.uvs[offset + 0]  = x0;
+            text_mesh.uvs[offset + 1]  = y0;
+            text_mesh.uvs[offset + 2]  = x1;
+            text_mesh.uvs[offset + 3]  = y0;
+            text_mesh.uvs[offset + 4]  = x0;
+            text_mesh.uvs[offset + 5]  = y1;
+            text_mesh.uvs[offset + 6]  = x0;
+            text_mesh.uvs[offset + 7]  = y1;
+            text_mesh.uvs[offset + 8]  = x1;
+            text_mesh.uvs[offset + 9]  = y0;
+            text_mesh.uvs[offset + 10] = x1;
+            text_mesh.uvs[offset + 11] = y1;
+        }
+
+        {
+            s64 offset = i * 6;
+            for(s64 i = 0; i < 6; ++i) {
+                text_mesh.atlas_indices[offset + i] = glyph->atlas_index;
+            }
+        }
+
+        if(i + 1 < text.count) cx += find_glyph_advance(glyph, text[i + 1]);
+    }
+
+    return text_mesh;
+}
+
+void free_text_mesh(Text_Mesh *text_mesh, Allocator *allocator) {
+    allocator->deallocate(text_mesh->vertices);
+    allocator->deallocate(text_mesh->uvs);
+    allocator->deallocate(text_mesh->atlas_indices);
+
+    text_mesh->vertex_count  = 0;
+    text_mesh->vertices      = null;
+    text_mesh->uvs           = null;
+    text_mesh->atlas_indices = null;
 }
