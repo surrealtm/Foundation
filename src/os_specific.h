@@ -16,6 +16,7 @@ void win32_free_last_error_string(char *string);
 void os_message_box(string message);
 void os_debug_break();
 void os_enable_high_resolution_clock();
+void os_get_desktop_dpi(s32 *x, s32 *y);
 
 
 /* ---------------------------------------------- Console Output ---------------------------------------------- */

@@ -17,6 +17,18 @@ struct Font_Creation_Helper {
     FT_Render_Mode render_options;
 };
 
+
+static
+s16 freetype_unit_to_pixels(FT_Face face, FT_Pos unit) {
+    return (s16) (FT_MulFix(unit, face->size->metrics.y_scale) >> 6);
+}
+
+static
+Font_Glyph *find_default_glyph(Font *font) {
+    assert(font->glyph_count);
+    return &font->glyphs[0];
+}
+
 static
 Font_Glyph *find_glyph(Font *font, s64 character) {
     if(character >= 0 && character <= 255) {
@@ -275,11 +287,13 @@ b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter fil
 
     defer { FT_Done_Face(face); };
 
-    FT_Set_Pixel_Sizes(face, 0, size);
+    s32 xdpi, ydpi;
+    os_get_desktop_dpi(&xdpi, &ydpi);
+    FT_Set_Char_Size(face, 0, size * 72, xdpi, ydpi);
 
-    font->line_height  = (s16) (face->size->metrics.height >> 6);
-    font->ascender     = (s16) (face->size->metrics.ascender >> 6);
-    font->descender    = (s16) (face->size->metrics.descender >> 6);
+    font->line_height  = freetype_unit_to_pixels(face, face->height);
+    font->ascender     = freetype_unit_to_pixels(face, face->ascender);
+    font->descender    = freetype_unit_to_pixels(face, face->descender);
     font->glyph_height = font->ascender - font->descender;
 
     Font_Creation_Helper creation_helper;
@@ -339,10 +353,24 @@ Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment 
 
     s32 cx = x, cy = y;
 
+    if(alignment & TEXT_ALIGNMENT_Centered) {
+        s32 width = get_string_width_in_pixels(font, text);
+        cx -= width / 2;
+    } else if(alignment & TEXT_ALIGNMENT_Right) {
+        s32 width = get_string_width_in_pixels(font, text);
+        cx -= width;
+    }
+
+    if(alignment & TEXT_ALIGNMENT_Top) {
+        cy += font->ascender;
+    } else if(alignment & TEXT_ALIGNMENT_Median) {
+        cy += (font->ascender + font->descender) / 2;
+    }
+
     for(s64 i = 0; i < text.count; ++i) {
         u8 character = text[i];
         Font_Glyph *glyph = find_glyph(font, character);
-        if(!glyph || glyph->atlas_index == -1) glyph = &font->glyphs[0]; // Use the default glyph to display at least something.
+        if(!glyph || glyph->atlas_index == -1) glyph = find_default_glyph(font);
 
         Font_Atlas *atlas = find_atlas(font, glyph->atlas_index);
 
@@ -404,4 +432,31 @@ void free_text_mesh(Text_Mesh *text_mesh, Allocator *allocator) {
     text_mesh->vertices      = null;
     text_mesh->uvs           = null;
     text_mesh->atlas_indices = null;
+}
+
+
+s32 get_character_width_in_pixels(Font *font, u8 character) {
+    Font_Glyph *glyph = find_glyph(font, character);
+    if(!glyph) return 0;
+
+    return glyph->bitmap_width;
+}
+
+s32 get_string_width_in_pixels(Font *font, string text) {
+    s32 width = 0;
+
+    for(s64 i = 0; i < text.count; ++i) {
+        Font_Glyph *glyph = find_glyph(font, text[i]);
+        if(!glyph || glyph->atlas_index == -1) glyph = find_default_glyph(font);
+        
+        if(i == 0) width -= glyph->cursor_offset_x;
+
+        if(i + 1 < text.count) {
+            width += find_glyph_advance(glyph, text[i + 1]);
+        } else {
+            width += glyph->bitmap_width + glyph->cursor_offset_x;
+        }
+    }
+
+    return width;
 }

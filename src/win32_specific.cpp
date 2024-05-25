@@ -7,6 +7,7 @@
 #include <Windows.h>
 #include <psapi.h> // For getting memory usage
 #include <dbghelp.h> // For stack walking
+#include <shellscalingapi.h> // For DPI awareness.
 
 
 
@@ -54,6 +55,14 @@ void os_debug_break() {
 
 void os_enable_high_resolution_clock() {
     timeBeginPeriod(1);
+}
+
+void os_get_desktop_dpi(s32 *x, s32 *y) {
+    UINT uintx, uinty;
+    HMONITOR desktop_monitor = MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTOPRIMARY);
+    GetDpiForMonitor(desktop_monitor, MDT_EFFECTIVE_DPI, &uintx, &uinty);
+    *x = (s32) uintx;
+    *y = (s32) uinty;
 }
 
 

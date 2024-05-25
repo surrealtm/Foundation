@@ -28,7 +28,7 @@ int main() {
     
     Frame_Buffer *default_frame_buffer = get_default_frame_buffer(&window);
 
-    Frame_Buffer my_frame_buffer;
+    Frame_Buffer my_frame_buffer; // @Incomplete: Support resizing?
     create_frame_buffer(&my_frame_buffer, 8);
     create_frame_buffer_color_attachment(&my_frame_buffer, window.w, window.h, false);
     create_frame_buffer_depth_stencil_attachment(&my_frame_buffer, window.w, window.h);
@@ -77,7 +77,7 @@ int main() {
         {
             update_window(&window);
 
-            Text_Mesh text_mesh = build_text_mesh(&font, "AVWa!"_s, 100, 100, TEXT_ALIGNMENT_Centered, Default_Allocator);
+            Text_Mesh text_mesh = build_text_mesh(&font, "AVWa!"_s, 100, 100, TEXT_ALIGNMENT_Left | TEXT_ALIGNMENT_Median, Default_Allocator);
             update_vertex_data(&vertex_buffer, 0, text_mesh.vertices, text_mesh.vertex_count * 2);
             update_vertex_data(&vertex_buffer, 1, text_mesh.uvs, text_mesh.vertex_count * 2);
             free_text_mesh(&text_mesh, Default_Allocator);

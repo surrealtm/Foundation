@@ -4,10 +4,18 @@
 #include "strings.h"
 
 enum Text_Alignment {
+    /* Horizontal Alignment */
     TEXT_ALIGNMENT_Left     = 0x1,
     TEXT_ALIGNMENT_Centered = 0x2,
     TEXT_ALIGNMENT_Right    = 0x4,
+
+    /* Vertical Alignment */
+    TEXT_ALIGNMENT_Top    = 0x8,
+    TEXT_ALIGNMENT_Median = 0x10,
+    TEXT_ALIGNMENT_Bottom = 0x20,
 };
+
+BITWISE(Text_Alignment);
 
 enum Glyph_Set {
     GLYPH_SET_None  = 0x0,
@@ -15,13 +23,13 @@ enum Glyph_Set {
     GLYPH_SET_Extended_Ascii = 0x2,
 };
 
+BITWISE(Glyph_Set);
+
 enum Font_Filter {
     FONT_FILTER_Mono, // One channel.
     FONT_FILTER_Lcd_Without_Alpha, // Three channels.
     FONT_FILTER_Lcd_With_Alpha, // This will enforce four channels in the atlas bitmap (which is required for certain Graphics APIs). The alpha value will always be 255.
 };
-
-BITWISE(Glyph_Set);
 
 struct Font_Atlas {
     Font_Atlas *next;
@@ -88,3 +96,6 @@ void destroy_font(Font *font);
 
 Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment alignment, Allocator *allocator);
 void free_text_mesh(Text_Mesh *text_mesh, Allocator *allocator);
+
+s32 get_character_width_in_pixels(Font *font, u8 character);
+s32 get_string_width_in_pixels(Font *font, string text);
