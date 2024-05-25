@@ -40,6 +40,14 @@ char *win32_copy_cstring(const char *cstring) {
 
 /* --------------------------------------------------- Misc --------------------------------------------------- */
 
+void os_message_box(string message) {
+    char *cstring = to_cstring(Default_Allocator, message);
+    defer { free_cstring(Default_Allocator, cstring); };
+
+    DWORD type = MB_OK | MB_ICONERROR;
+    MessageBoxA(null, cstring, "Foundation | Assertion Failed.", type);
+}
+
 void os_debug_break() {
     DebugBreak();
 }

@@ -100,7 +100,7 @@ int main() {
         Default_Allocator->deallocate(texture);
     }
 
-    destroy_font(&font);
+    //destroy_font(&font);
     destroy_texture(&texture);
     destroy_pipeline_state(&pipeline_state);
     destroy_shader_constant_buffer(&constants);
