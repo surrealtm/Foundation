@@ -15,6 +15,12 @@ enum Glyph_Set {
     GLYPH_SET_Extended_Ascii = 0x2,
 };
 
+enum Font_Filter {
+    FONT_FILTER_Mono, // One channel.
+    FONT_FILTER_Lcd_Without_Alpha, // Three channels.
+    FONT_FILTER_Lcd_With_Alpha, // This will enforce four channels in the atlas bitmap (which is required for certain Graphics APIs). The alpha value will always be 255.
+};
+
 BITWISE(Glyph_Set);
 
 struct Font_Atlas {
@@ -30,6 +36,8 @@ struct Font_Atlas {
 };
 
 struct Font_Glyph {
+    u32 code;
+
      // The offset in pixels from the current cursor position to where the bitmap of this glyph should be placed.
     s8 cursor_offset_x;
     s8 cursor_offset_y;
@@ -68,5 +76,5 @@ struct Font {
     s64 glyphs_allocated;
 };
 
-b8 create_font_from_file(Font *font, string file_path, s16 size, b8 use_lcd_filtering, Glyph_Set glyphs_to_load);
+b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load);
 void destroy_font(Font *font);

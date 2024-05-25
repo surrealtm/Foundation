@@ -53,7 +53,7 @@ int main() {
     create_texture_from_file(&texture, "data\\textures\\rock.png"_s);
     
     Font font;
-    create_font_from_file(&font, "C:\\Windows\\Fonts\\segoeui.ttf"_s, 50, false, GLYPH_SET_Ascii);
+    create_font_from_file(&font, "C:\\Windows\\Fonts\\segoeui.ttf"_s, 20, FONT_FILTER_Lcd_With_Alpha, GLYPH_SET_Extended_Ascii);
 
     for(Font_Atlas *atlas = font.atlas; atlas != null; atlas = atlas->next) {
         Texture *texture = Default_Allocator->New<Texture>();
@@ -61,8 +61,6 @@ int main() {
     
         atlas->user_handle = texture;
     }
-
-    printf("Heap: %" PRId64 "\n", Default_Allocator->stats.working_set);
 
     f32 total_time = 0.f;
     

@@ -7,28 +7,39 @@
 #include "Dependencies/freetype/freetype.h"
 #include "Dependencies/freetype/ftlcdfil.h"
 
-#define FONT_ATLAS_SIZE 512
+#define FONT_ATLAS_SIZE 128
 
 struct Font_Creation_Helper {
     FT_Face face;
     b8 apply_kerning;
-    u8 bitmap_channels;
+    u8 atlas_channels;
     s16 line_height;
     FT_Render_Mode render_options;
 };
 
 static
-Font_Glyph *find_glyph(Font *font, FT_ULong character) {
+Font_Glyph *find_glyph(Font *font, s64 character) {
     if(character >= 0 && character <= 255) {
         return font->extended_ascii_hot_path[character];
     }
 
-    foundation_error("The character value '%ul' is not supported in the font.", character);
+    foundation_error("The character value '%u' is not supported in the font.", character);
     return null;
 }
 
 static
-u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap_pitch, Font_Creation_Helper *helper) {
+s64 find_glyph_index_in_advance_table(s64 character) {
+    if(character == 0) return 0;
+    
+    if(character >= 32 && character <= 255) {
+        return character - 31;
+    }
+
+    return -1;
+}
+
+static
+u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap_pitch, s64 bitmap_channels, Font_Creation_Helper *helper) {
     assert(glyph->bitmap_height <= helper->line_height); // We assume that the line height covers all glyphs, so that we don't have any overlaps in the font atlas.
 
     //
@@ -57,7 +68,7 @@ u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap
         atlas = (Font_Atlas *) Default_Allocator->New<Font_Atlas>();
         atlas->w        = FONT_ATLAS_SIZE;
         atlas->h        = FONT_ATLAS_SIZE;
-        atlas->channels = helper->bitmap_channels;
+        atlas->channels = helper->atlas_channels;
         atlas->bitmap   = (u8 *) Default_Allocator->allocate(atlas->w * atlas->h * atlas->channels);
 
         if(font->atlas) {
@@ -91,7 +102,7 @@ u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap
         for(s16 x = 0; x < glyph->bitmap_width; ++x) {
             // When using LCD filtering, the bitmap has padding at the end of rows, so the 'pitch' value is
             // the width + padding, which we require when copying into our big atlas.
-            s64 source_offset = ((s64) y * bitmap_pitch + (s64) x * (s64) atlas->channels);
+            s64 source_offset = ((s64) y * bitmap_pitch + (s64) x * (s64) bitmap_channels);
             s64 destination_x = (s64) atlas->cursor_x + x;
             s64 destination_y = (s64) atlas->cursor_y + y;
             s64 destination_offset = (destination_x + destination_y * atlas->w) * atlas->channels;
@@ -120,33 +131,47 @@ Font_Glyph *load_glyph(Font *font, FT_ULong character, Font_Creation_Helper *hel
     FT_Load_Glyph(helper->face, glyph_index, FT_LOAD_DEFAULT);
     FT_Render_Glyph(helper->face->glyph, helper->render_options);
 
+    s16 bitmap_channels = helper->face->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_LCD ? 3 : 1;
+
     Font_Glyph *glyph      = &font->glyphs[font->glyph_count];
+    glyph->code            = character;
     glyph->cursor_offset_x = helper->face->glyph->bitmap_left;
     glyph->cursor_offset_y = helper->face->glyph->bitmap_top;
-    glyph->bitmap_width    = helper->face->glyph->bitmap.width / helper->bitmap_channels;
+    glyph->bitmap_width    = helper->face->glyph->bitmap.width / bitmap_channels;
     glyph->bitmap_height   = helper->face->glyph->bitmap.rows;
     ++font->glyph_count;
 
     s16 unkerned_advance = (s16) (helper->face->glyph->advance.x >> 6);
 
-    glyph->advances = (s16 *) Default_Allocator->allocate(font->glyphs_allocated * sizeof(s16));
+    const s64 advance_count = 224; // We only support kerning between Ascii characters (for now).
+    glyph->advances = (s16 *) Default_Allocator->allocate(advance_count * sizeof(s16));
 
     if(helper->apply_kerning) {
         for(s64 i = 0; i < font->glyphs_allocated; ++i) {
+            s64 advance_index = find_glyph_index_in_advance_table(i);
+            if(advance_index == -1) continue;
+            
+            assert(advance_index >= 0 && advance_index < advance_count);
+
             FT_UInt other_glyph_index = FT_Get_Char_Index(helper->face, (FT_ULong) i);
             FT_Vector kerning_value;
             FT_Get_Kerning(helper->face, glyph_index, other_glyph_index, FT_KERNING_DEFAULT, &kerning_value);
-            glyph->advances[i] = unkerned_advance + (s16) (kerning_value.x >> 6);
+            glyph->advances[advance_index] = unkerned_advance + (s16) (kerning_value.x >> 6);
         }
     } else {
         for(s64 i = 0; i < font->glyphs_allocated; ++i) {
-            glyph->advances[i] = unkerned_advance;
+            s64 advance_index = find_glyph_index_in_advance_table(i);
+            if(advance_index == -1) continue;
+
+            assert(advance_index >= 0 && advance_index < advance_count);
+
+            glyph->advances[advance_index] = unkerned_advance;
         }
     }
 
     if(glyph->bitmap_width > 0 && glyph->bitmap_height) {
         // Add the glyph to some font atlas.
-        glyph->atlas_index = add_glyph_to_font_atlas(font, glyph, helper->face->glyph->bitmap.buffer, helper->face->glyph->bitmap.pitch, helper);
+        glyph->atlas_index = add_glyph_to_font_atlas(font, glyph, helper->face->glyph->bitmap.buffer, helper->face->glyph->bitmap.pitch, bitmap_channels, helper);
     } else {
         // The glyph does not have a bitmap attached.
         glyph->atlas_index = -1;
@@ -196,7 +221,7 @@ void load_glyph_set(Font *font, Glyph_Set glyphs_to_load, Font_Creation_Helper *
     }
 }
 
-b8 create_font_from_file(Font *font, string file_path, s16 size, b8 use_lcd_filtering, Glyph_Set glyphs_to_load) {
+b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load) {
     memset(font, 0, sizeof(Font)); // Make sure we don't have any uninitialized data in here.
 
     string file_content = os_read_file(Default_Allocator, file_path);
@@ -235,13 +260,13 @@ b8 create_font_from_file(Font *font, string file_path, s16 size, b8 use_lcd_filt
     creation_helper.line_height   = font->line_height;
     creation_helper.apply_kerning = FT_HAS_KERNING(face);
 
-    if(use_lcd_filtering) {
+    if(filter != FONT_FILTER_Mono) {
         FT_Library_SetLcdFilter(library, FT_LCD_FILTER_DEFAULT);
         creation_helper.render_options  = FT_RENDER_MODE_LCD;
-        creation_helper.bitmap_channels = 3;
+        creation_helper.atlas_channels = (filter == FONT_FILTER_Lcd_With_Alpha) ? 4 : 3;
     } else {
         creation_helper.render_options  = FT_RENDER_MODE_NORMAL;
-        creation_helper.bitmap_channels = 1;
+        creation_helper.atlas_channels = 1;
     }
 
     load_glyph_set(font, glyphs_to_load, &creation_helper);
