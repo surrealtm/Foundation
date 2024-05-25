@@ -238,8 +238,8 @@ m4<T> m4_rotate(const m4<T> &matrix, T angle, T x, T y, T z) {
 template<typename T>
 m4<T> m4_rotate_XYZ(const m4<T> &matrix, T x, T y, T z) {
     m4<T> result;
-    result = m4_rotate(matrix, x, 1, 0, 0);
-    result = m4_rotate(result, y, 0, 1, 0);
-    result = m4_rotate(result, z, 0, 0, 1);
+    result = m4_rotate(matrix, x, static_cast<T>(1), static_cast<T>(0), static_cast<T>(0));
+    result = m4_rotate(result, y, static_cast<T>(0), static_cast<T>(1), static_cast<T>(0));
+    result = m4_rotate(result, z, static_cast<T>(0), static_cast<T>(0), static_cast<T>(1));
     return result;
 }

@@ -66,9 +66,11 @@ struct Texture {
 };
 
 enum Shader_Type {
-    SHADER_Vertex,
-    SHADER_Pixel,
+    SHADER_Vertex = 0x1,
+    SHADER_Pixel  = 0x2,
 };
+
+BITWISE(Shader_Type);
 
 struct Shader_Input_Specification {
     const char *name;
@@ -148,7 +150,7 @@ void bind_texture(Texture *texture, s64 index_in_shader);
 void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, s64 size_in_bytes, void *initial_data = null);
 void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer);
 void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data);
-void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, Shader_Type shader_type);
+void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, Shader_Type shader_types);
 
 void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count);
 void destroy_shader(Shader *shader);

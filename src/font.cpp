@@ -7,7 +7,7 @@
 #include "Dependencies/freetype/freetype.h"
 #include "Dependencies/freetype/ftlcdfil.h"
 
-#define FONT_ATLAS_SIZE 128
+#define FONT_ATLAS_SIZE 512
 
 struct Font_Creation_Helper {
     FT_Face face;
@@ -135,6 +135,9 @@ u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap
             }
         }
     }
+
+    glyph->bitmap_offset_x = atlas->cursor_x;
+    glyph->bitmap_offset_y = atlas->cursor_y;
     
     atlas->cursor_x += glyph->bitmap_width;
     

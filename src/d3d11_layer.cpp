@@ -362,7 +362,7 @@ void bind_texture(Texture *texture, s64 index_in_shader) {
 
 
 
-/* -------------------------------------------- Shader Constant Buffer -------------------------------------------- */
+/* ------------------------------------------ Shader Constant Buffer ------------------------------------------ */
 
 void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, s64 size_in_bytes, void *initial_data) {
     D3D11_BUFFER_DESC description{};
@@ -387,14 +387,13 @@ void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer) {
 }
 
 void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data) {
+    // @@Speed: This should probably go with Map / Unmap as well.
     d3d_context->UpdateSubresource(buffer->handle, 0, null, data, 0, 0);
 }
 
-void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, Shader_Type shader_type) {
-    switch(shader_type) {
-    case SHADER_Vertex: d3d_context->VSSetConstantBuffers((UINT) buffer->index_in_shader, 1, &buffer->handle); break;
-    case SHADER_Pixel:  d3d_context->PSSetConstantBuffers((UINT) buffer->index_in_shader, 1, &buffer->handle); break;
-    }
+void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, Shader_Type shader_types) {
+    if(shader_types & SHADER_Vertex) d3d_context->VSSetConstantBuffers((UINT) buffer->index_in_shader, 1, &buffer->handle);
+    if(shader_types & SHADER_Pixel)  d3d_context->PSSetConstantBuffers((UINT) buffer->index_in_shader, 1, &buffer->handle);
 }
 
 
