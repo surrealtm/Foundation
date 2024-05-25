@@ -22,5 +22,6 @@ b8 fuzzy_equals(f64 lhs, f64 rhs) { return (lhs - rhs) <= 1e-8 && (lhs - rhs) >=
 #include "v3.h"
 #include "v4.h"
 #include "qt.h"
+#include "m4.h"
 
 #include "intersect.h"

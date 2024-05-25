@@ -1,5 +1,6 @@
 #include "memutils.h"
 #include "os_specific.h"
+#include "math/m4.h"
 
 #include "window.h"
 #include "d3d11_layer.h"
