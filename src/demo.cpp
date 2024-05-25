@@ -37,7 +37,7 @@ int main() {
     add_vertex_data(&vertex_buffer, vertices, ARRAY_COUNT(vertices), 2);
     add_vertex_data(&vertex_buffer, uvs, ARRAY_COUNT(uvs), 2);
 
-    f32 color[] = { 1, 0, 0 };
+    f32 color[] = { 1, 1, 1 };
     Shader_Constant_Buffer constants;
     create_shader_constant_buffer(&constants, 0, sizeof(color), &color);
     
@@ -53,7 +53,7 @@ int main() {
     create_texture_from_file(&texture, "data\\textures\\rock.png"_s);
     
     Font font;
-    create_font_from_file(&font, "C:\\Windows\\Fonts\\segoeui.ttf"_s, 20, false, GLYPH_SET_Ascii);
+    create_font_from_file(&font, "C:\\Windows\\Fonts\\segoeui.ttf"_s, 50, false, GLYPH_SET_Ascii);
 
     for(Font_Atlas *atlas = font.atlas; atlas != null; atlas = atlas->next) {
         Texture *texture = Default_Allocator->New<Texture>();
@@ -61,6 +61,8 @@ int main() {
     
         atlas->user_handle = texture;
     }
+
+    printf("Heap: %" PRId64 "\n", Default_Allocator->stats.working_set);
 
     f32 total_time = 0.f;
     
@@ -70,8 +72,11 @@ int main() {
         {
             update_window(&window);
 
+            /*
             color[0] = cosf(total_time) * 0.5f + 0.5f;
             color[1] = sinf(total_time) * 0.5f + 0.5f;
+            */
+
             total_time += window.frame_time;
             update_shader_constant_buffer(&constants, &color);
             
@@ -93,14 +98,14 @@ int main() {
         Hardware_Time frame_end = os_get_hardware_time();
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
-
+    
     for(Font_Atlas *atlas = font.atlas; atlas != null; atlas = atlas->next) {
         Texture *texture = (Texture *) atlas->user_handle;
         destroy_texture(texture);
         Default_Allocator->deallocate(texture);
     }
 
-    //destroy_font(&font);
+    destroy_font(&font);
     destroy_texture(&texture);
     destroy_pipeline_state(&pipeline_state);
     destroy_shader_constant_buffer(&constants);

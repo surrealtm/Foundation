@@ -28,7 +28,7 @@ Font_Glyph *find_glyph(Font *font, FT_ULong character) {
 }
 
 static
-u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s16 bitmap_pitch, Font_Creation_Helper *helper) {
+u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap_pitch, Font_Creation_Helper *helper) {
     assert(glyph->bitmap_height <= helper->line_height); // We assume that the line height covers all glyphs, so that we don't have any overlaps in the font atlas.
 
     //
@@ -91,10 +91,10 @@ u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s16 bitmap
         for(s16 x = 0; x < glyph->bitmap_width; ++x) {
             // When using LCD filtering, the bitmap has padding at the end of rows, so the 'pitch' value is
             // the width + padding, which we require when copying into our big atlas.
-            s16 source_offset = (y * bitmap_pitch + x * atlas->channels);
-            s16 destination_x = atlas->cursor_x + x;
-            s16 destination_y = atlas->cursor_y + y;
-            s16 destination_offset = (destination_x + destination_y * atlas->w) * atlas->channels;
+            s64 source_offset = ((s64) y * bitmap_pitch + (s64) x * (s64) atlas->channels);
+            s64 destination_x = (s64) atlas->cursor_x + x;
+            s64 destination_y = (s64) atlas->cursor_y + y;
+            s64 destination_offset = (destination_x + destination_y * atlas->w) * atlas->channels;
 
             // Copy each channel into the destination
             for(u8 i = 0; i < atlas->channels; ++i) {
