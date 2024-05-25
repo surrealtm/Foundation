@@ -605,6 +605,46 @@ f64 convert_to_memory_unit(s64 bytes, Memory_Unit target_unit) {
 }
 
 
+#if FOUNDATION_ALLOCATOR_STATISTICS
+static
+void __allocation_callback(Allocator *allocator, const void *allocator_name, void *data, u64 size) {
+    printf("[Allocation] %s : %" PRIu64 "b, 0x%016" PRIx64 "\n", (char *) allocator_name, size, (u64) data);
+}
+
+static
+void __deallocation_callback(Allocator *allocator, const void *allocator_name, void *data, u64 size) {
+    printf("[Deallocation] %s : %" PRIu64 "b, 0x%016" PRIx64 "\n", (char *) allocator_name, size, (u64) data);    
+}
+
+static
+void __reallocation_callback(Allocator *allocator, const void *allocator_name, void *old_data, u64 old_size, void *new_data, u64 new_size) {
+    printf("[Reallocation] %s : %" PRIu64 "b, 0x%016" PRIx64 " -> %" PRIu64 "b, 0x%016" PRIx64 "\n", (char *) allocator_name, old_size, (u64) old_data, new_size, (u64) new_data);    
+}
+
+static
+void __clear_callback(Allocator *allocator, const void *allocator_name) {
+    printf("[Clear] %s\n", (char *) allocator_name);
+}
+
+void install_allocator_console_logger(Allocator *allocator, const char *name) {
+    allocator->callbacks.allocation_callback   = __allocation_callback;
+    allocator->callbacks.deallocation_callback = __deallocation_callback;
+    allocator->callbacks.reallocation_callback = __reallocation_callback;
+    allocator->callbacks.clear_callback        = __clear_callback;
+    allocator->callbacks.user_pointer          = name;
+}
+
+void clear_allocator_logger(Allocator *allocator) {
+    allocator->callbacks.allocation_callback   = null;
+    allocator->callbacks.deallocation_callback = null;
+    allocator->callbacks.reallocation_callback = null;
+    allocator->callbacks.clear_callback        = null;
+    allocator->callbacks.user_pointer          = null;
+}
+#endif
+
+
+
 void byteswap2(void *value) {
 	u8 *bytes = (u8 *) value;
 	*(u16 *) value = (bytes[0] << 8) | (bytes[1]);

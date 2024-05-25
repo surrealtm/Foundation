@@ -1,11 +1,15 @@
-#include "window.h"
-#include "d3d11_layer.h"
-#include "math/v3.h"
+#include "memutils.h"
 #include "os_specific.h"
 
-int main() {
-    enable_high_resolution_clock();
+#include "window.h"
+#include "d3d11_layer.h"
+#include "font.h"
 
+int main() {
+    os_enable_high_resolution_clock();
+
+    //install_allocator_console_logger(Default_Allocator, "Heap");
+    
 	Window window;
 	create_window(&window, "Hello World"_s);
     set_window_icon(&window, "diffraction.ico"_s);
@@ -24,7 +28,7 @@ int main() {
     create_pipeline_state(&pipeline_state);
 
     f32 vertices[] = { -.5f,  .5f,   .5f, .5f,    -.5f, -.5f,
-                       -.5f, -.5f,   .5f, .5f,     .5f, -.2f };
+                       -.5f, -.5f,   .5f, .5f,     .5f, -.5f };
     f32 uvs[] = { 0, 0,   1, 0,    0, 1,
                   0, 1,   1, 0,    1, 1 };
 
@@ -33,9 +37,9 @@ int main() {
     add_vertex_data(&vertex_buffer, vertices, ARRAY_COUNT(vertices), 2);
     add_vertex_data(&vertex_buffer, uvs, ARRAY_COUNT(uvs), 2);
 
-    v3f color = v3f(1, 0, 0);
+    f32 color[] = { 1, 0, 0 };
     Shader_Constant_Buffer constants;
-    create_shader_constant_buffer(&constants, 0, sizeof(v3f), &color);
+    create_shader_constant_buffer(&constants, 0, sizeof(color), &color);
     
     Shader_Input_Specification inputs[] = {
         { "POSITION", 2, 0 },
@@ -48,6 +52,16 @@ int main() {
     Texture texture;
     create_texture_from_file(&texture, "data\\textures\\rock.png"_s);
     
+    Font font;
+    create_font_from_file(&font, "C:\\Windows\\Fonts\\segoeui.ttf"_s, 20, false, GLYPH_SET_Ascii);
+
+    for(Font_Atlas *atlas = font.atlas; atlas != null; atlas = atlas->next) {
+        Texture *texture = Default_Allocator->New<Texture>();
+        create_texture_from_memory(texture, atlas->bitmap, atlas->w, atlas->h, atlas->channels);
+    
+        atlas->user_handle = texture;
+    }
+
     f32 total_time = 0.f;
     
 	while(!window.should_close) {
@@ -56,8 +70,8 @@ int main() {
         {
             update_window(&window);
 
-            color.x = cosf(total_time) * 0.5f + 0.5f;
-            color.y = sinf(total_time) * 0.5f + 0.5f;
+            color[0] = cosf(total_time) * 0.5f + 0.5f;
+            color[1] = sinf(total_time) * 0.5f + 0.5f;
             total_time += window.frame_time;
             update_shader_constant_buffer(&constants, &color);
             
@@ -68,7 +82,7 @@ int main() {
             bind_shader_constant_buffer(&constants, SHADER_Pixel);
             bind_vertex_buffer_array(&vertex_buffer);
             bind_pipeline_state(&pipeline_state);
-            bind_texture(&texture, 0);
+            bind_texture((Texture *) font.atlas->user_handle, 0);
             draw_vertex_buffer_array(&vertex_buffer);
 
             blit_frame_buffer(default_frame_buffer, &my_frame_buffer);
@@ -80,6 +94,13 @@ int main() {
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
 
+    for(Font_Atlas *atlas = font.atlas; atlas != null; atlas = atlas->next) {
+        Texture *texture = (Texture *) atlas->user_handle;
+        destroy_texture(texture);
+        Default_Allocator->deallocate(texture);
+    }
+
+    destroy_font(&font);
     destroy_texture(&texture);
     destroy_pipeline_state(&pipeline_state);
     destroy_shader_constant_buffer(&constants);
@@ -89,5 +110,12 @@ int main() {
     
     destroy_d3d11_context(&window);
 	destroy_window(&window);
+
+#if FOUNDATION_DEVELOPER
+    if(Default_Allocator->stats.allocations > Default_Allocator->stats.deallocations) {
+        foundation_error("Detected Memory Leaks on the Heap Allocator!");
+    }
+#endif
+
 	return 0;
 }

@@ -265,6 +265,11 @@ struct Linked_List {
 	Iterator end()   { return Iterator { null }; }
 };
 
+#if FOUNDATION_ALLOCATOR_STATISTICS
+void install_allocator_console_logger(Allocator *allocator, const char *name);
+void clear_allocator_logger(Allocator *allocator);
+#endif
+
 const char *memory_unit_suffix(Memory_Unit unit);
 Memory_Unit get_best_memory_unit(s64 bytes, f32 *decimal);
 f64 convert_to_memory_unit(s64 bytes, Memory_Unit target_unit);

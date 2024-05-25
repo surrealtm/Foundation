@@ -44,7 +44,7 @@ void os_debug_break() {
     DebugBreak();
 }
 
-void enable_high_resolution_clock() {
+void os_enable_high_resolution_clock() {
     timeBeginPeriod(1);
 }
 

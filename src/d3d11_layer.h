@@ -136,6 +136,7 @@ void bind_vertex_buffer_array(Vertex_Buffer_Array *array);
 void draw_vertex_buffer_array(Vertex_Buffer_Array *array);
 
 void create_texture_from_file(Texture *texture, string file_path);
+void create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels);
 void destroy_texture(Texture *texture);
 void bind_texture(Texture *texture, s64 index_in_shader);
 

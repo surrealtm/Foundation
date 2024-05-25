@@ -261,15 +261,27 @@ void create_texture_from_file(Texture *texture, string file_path) {
     char *cstring = to_cstring(Default_Allocator, file_path);
     defer { free_cstring(Default_Allocator, cstring); };
 
+    int w, h, channels;
+
     // D3D11 (or rather the hardware but yeah) doesn't support 3 channel textures, so we unfortunately need to
     // convert all textures into rgba... (We don't have a way of saying only do this conversion from 3 to 4, but
     // leave 1 or 2 channels as they are...)
-    u8 *buffer = stbi_load(cstring, (int *) &texture->w, (int *) &texture->h, (int *) &texture->channels, 4);
+    u8 *buffer = stbi_load(cstring, &w, &h, &channels, 4);
     if(!buffer) {
         foundation_error("Failed to load texture '%.*s' from disk: %s.", stbi_failure_reason());
         return;
     }
     
+    create_texture_from_memory(texture, buffer, w, h, channels);
+
+    stbi_image_free(buffer);
+}
+
+void create_texture_from_memory(Texture *texture, u8 *bitmap, s32 w, s32 h, u8 channels) {
+    texture->w = w;
+    texture->h = h;
+    texture->channels = channels;
+
     D3D11_TEXTURE2D_DESC texture_description{};
     texture_description.Width              = texture->w;
     texture_description.Height             = texture->h;
@@ -284,7 +296,7 @@ void create_texture_from_file(Texture *texture, string file_path) {
     texture_description.MiscFlags          = 0;
     
     D3D11_SUBRESOURCE_DATA subresource{};
-    subresource.pSysMem          = buffer;
+    subresource.pSysMem          = bitmap;
     subresource.SysMemPitch      = texture->w * texture->channels;
     subresource.SysMemSlicePitch = 0;
 
@@ -302,8 +314,6 @@ void create_texture_from_file(Texture *texture, string file_path) {
     D3D11_CALL(d3d_device->CreateTexture2D(&texture_description, &subresource, &texture->handle));
     D3D11_CALL(d3d_device->CreateShaderResourceView(texture->handle, null, &texture->view));
     D3D11_CALL(d3d_device->CreateSamplerState(&sampler_description, &texture->sampler));
-    
-    stbi_image_free(buffer);
 }
 
 void destroy_texture(Texture *texture) {
