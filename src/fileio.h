@@ -12,7 +12,7 @@ struct Ascii_Parser {
 
     void create_from_string(string data);
     void create_from_buffer(u8 *data, s64 size);
-    void create_from_file(string file_path);
+    b8 create_from_file(string file_path);
     void destroy_file_data();
 
     string read_string();
@@ -59,7 +59,7 @@ struct Binary_Parser {
 
 	void create_from_string(string data);
 	void create_from_buffer(u8 *data, s64 size);
-	void create_from_file(string file_path);
+	b8 create_from_file(string file_path);
 	void destroy_file_data();
 
 	void *read(s64 size_in_bytes);

@@ -24,9 +24,10 @@ void Ascii_Parser::create_from_buffer(u8 *data, s64 size) {
     this->position = 0;
 }
 
-void Ascii_Parser::create_from_file(string file_path) {
+b8 Ascii_Parser::create_from_file(string file_path) {
     this->data = os_read_file(Default_Allocator, file_path);
     this->position = 0;
+	return this->data.count > 0;
 }
 
 void Ascii_Parser::destroy_file_data() {
@@ -209,9 +210,10 @@ void Binary_Parser::create_from_buffer(u8 *data, s64 size) {
 	this->position = 0;
 }
 
-void Binary_Parser::create_from_file(string file_path) {
+b8 Binary_Parser::create_from_file(string file_path) {
 	this->data = os_read_file(Default_Allocator, file_path);
 	this->position = 0;
+	return this->data.count > 0;
 }
 
 void Binary_Parser::destroy_file_data() {

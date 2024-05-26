@@ -17,6 +17,7 @@
 
 #define null 0
 
+#define D3D11_BACKBUFFER_COLOR_FORMAT DXGI_FORMAT_R8G8B8A8_UNORM
 #define D3D11_CALL(expr) d3d11_call_wrapper(expr, __FILE__ "," STRINGIFY(__LINE__) ": " STRINGIFY(expr))
 
 struct Window_D3D11_State {
@@ -30,7 +31,7 @@ static_assert(sizeof(Window_D3D11_State) <= sizeof(Window::graphics_data), "Wind
 
 /* ------------------------------------------------- Globals ------------------------------------------------- */
 
-s64 d3d_device_usage_count;
+s64 d3d_device_usage_count = 0;
 IDXGIDevice2  *dxgi_device       = null;
 IDXGIAdapter  *dxgi_adapter      = null;
 IDXGIFactory2 *dxgi_factory      = null;
@@ -155,12 +156,10 @@ void create_d3d11_context(Window *window) {
 
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
     
-    DXGI_FORMAT color_format = d3d11_format(4, D3D11_UByte);
-
     DXGI_SWAP_CHAIN_DESC1 swapchain_description{};
     swapchain_description.Width              = window->w;
     swapchain_description.Height             = window->h;
-    swapchain_description.Format             = color_format;
+    swapchain_description.Format             = D3D11_BACKBUFFER_COLOR_FORMAT;
     swapchain_description.Stereo             = FALSE;
     swapchain_description.SampleDesc.Count   = 1;
     swapchain_description.SampleDesc.Quality = 0;
@@ -173,11 +172,11 @@ void create_d3d11_context(Window *window) {
 
     D3D11_CALL(dxgi_factory->CreateSwapChainForHwnd(d3d_device, (HWND) window_extract_hwnd(window), &swapchain_description, null, null, &d3d11->swapchain));
 
-    d3d11->default_frame_buffer.samples     = 1;
-    d3d11->default_frame_buffer.color_count = 1;
-    d3d11->default_frame_buffer.colors[0].w = window->w;
-    d3d11->default_frame_buffer.colors[0].h = window->h;
-    d3d11->default_frame_buffer.colors[0].format = color_format;
+    d3d11->default_frame_buffer.samples          = 1;
+    d3d11->default_frame_buffer.color_count      = 1;
+    d3d11->default_frame_buffer.colors[0].w      = window->w;
+    d3d11->default_frame_buffer.colors[0].h      = window->h;
+    d3d11->default_frame_buffer.colors[0].format = D3D11_BACKBUFFER_COLOR_FORMAT;
 
     d3d11->default_frame_buffer.has_depth = false;
 
@@ -187,8 +186,8 @@ void create_d3d11_context(Window *window) {
 
 void destroy_d3d11_context(Window *window) {
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
-    destroy_frame_buffer(&d3d11->default_frame_buffer);
-    d3d11->swapchain->Release();    
+    d3d11->default_frame_buffer.colors[0].view->Release();
+    d3d11->swapchain->Release();
     destroy_d3d11();
 }
 
@@ -200,6 +199,25 @@ void swap_d3d11_buffers(Window *window) {
 Frame_Buffer *get_default_frame_buffer(Window *window) {
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;    
     return &d3d11->default_frame_buffer;
+}
+
+void resize_default_frame_buffer(Window *window) {
+    Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
+    
+    // Release all outstanding references to the swap chain's buffer, because we cannot
+    // resize the swap chain otherwise.
+    d3d11->default_frame_buffer.colors[0].texture->Release();
+    d3d11->default_frame_buffer.colors[0].view->Release();
+
+    // Actually resize the buffer.
+    D3D11_CALL(d3d11->swapchain->ResizeBuffers(2, window->w, window->h, D3D11_BACKBUFFER_COLOR_FORMAT, 0));
+
+    // Get the render target view back.
+    D3D11_CALL(d3d11->swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) &d3d11->default_frame_buffer.colors[0].texture));
+    D3D11_CALL(d3d_device->CreateRenderTargetView(d3d11->default_frame_buffer.colors[0].texture, 0, &d3d11->default_frame_buffer.colors[0].view));
+
+    d3d11->default_frame_buffer.colors[0].w = window->w;
+    d3d11->default_frame_buffer.colors[0].h = window->h;
 }
 
 
@@ -396,18 +414,20 @@ void bind_texture(Texture *texture, s64 index_in_shader) {
 
 /* ------------------------------------------ Shader Constant Buffer ------------------------------------------ */
 
-void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, s64 size_in_bytes, void *initial_data) {
+void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 size_in_bytes, void *initial_data) {
     D3D11_BUFFER_DESC description{};
-    description.Usage          = D3D11_USAGE_DEFAULT;
+    description.Usage          = D3D11_USAGE_DYNAMIC;
     description.ByteWidth      = align_to(size_in_bytes, 16, UINT);
     description.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
-    description.CPUAccessFlags = 0;
+    description.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     description.MiscFlags      = 0;
 
     D3D11_SUBRESOURCE_DATA subresource{};
     subresource.pSysMem = initial_data;
 
     D3D11_CALL(d3d_device->CreateBuffer(&description, (initial_data != null) ? &subresource : null, &buffer->handle));
+
+    buffer->size_in_bytes = size_in_bytes;
 }
 
 void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer) {
@@ -416,8 +436,10 @@ void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer) {
 }
 
 void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data) {
-    // @@Speed: This should probably go with Map / Unmap as well.
-    d3d_context->UpdateSubresource(buffer->handle, 0, null, data, 0, 0);
+    D3D11_MAPPED_SUBRESOURCE subresource;
+    D3D11_CALL(d3d_context->Map(buffer->handle, 0, D3D11_MAP_WRITE_DISCARD, 0, &subresource)); // This might fail if we haven't supplied CPU Write Access to this buffer!
+    memcpy(subresource.pData, data, buffer->size_in_bytes);
+    d3d_context->Unmap(buffer->handle, 0);
 }
 
 void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, Shader_Type shader_types) {
@@ -494,42 +516,11 @@ void bind_shader(Shader *shader) {
 
 /* ------------------------------------------------- Frame Buffer ------------------------------------------------- */
 
-void create_frame_buffer(Frame_Buffer *frame_buffer, u8 samples) {
-    frame_buffer->samples     = samples;
-    frame_buffer->color_count = 0;
-    frame_buffer->has_depth   = 0;
-}
-
-void destroy_frame_buffer(Frame_Buffer *frame_buffer) {
-    for(s64 i = 0; i < frame_buffer->color_count; ++i) {
-        frame_buffer->colors[i].view->Release();
-        frame_buffer->colors[i].texture->Release();
-    }
-
-    frame_buffer->color_count = 0;
-
-    if(frame_buffer->has_depth) {
-        frame_buffer->depth_stencil_texture->Release();
-        frame_buffer->depth_stencil_view->Release();
-        frame_buffer->depth_stencil_state->Release();
-    }
-    
-    frame_buffer->has_depth = false;
-}
-
-// @Incomplete: Add HDR frame buffers
-
-void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, b8 hdr) {
-    foundation_assert(frame_buffer->color_count < ARRAY_COUNT(frame_buffer->colors));
-
-    Frame_Buffer_Attachment *attachment = &frame_buffer->colors[frame_buffer->color_count];
-    attachment->w = w;
-    attachment->h = h;
-    attachment->format = d3d11_format(4, hdr ? D3D11_Float32 : D3D11_UByte);
-    
+static
+void create_frame_buffer_color_attachment_internal(Frame_Buffer *frame_buffer, Frame_Buffer_Color_Attachment *attachment) {
     D3D11_TEXTURE2D_DESC texture_description{};
-    texture_description.Width              = w;
-    texture_description.Height             = h;
+    texture_description.Width              = attachment->w;
+    texture_description.Height             = attachment->h;
     texture_description.MipLevels          = 1;
     texture_description.ArraySize          = 1;
     texture_description.Format             = (DXGI_FORMAT) attachment->format;
@@ -547,15 +538,10 @@ void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32
 
     D3D11_CALL(d3d_device->CreateTexture2D(&texture_description, null, &attachment->texture));
     D3D11_CALL(d3d_device->CreateRenderTargetView(attachment->texture, &view_description, &attachment->view));
-
-    ++frame_buffer->color_count;
 }
 
-void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h) {
-    foundation_assert(frame_buffer->has_depth == false);
-
-    frame_buffer->depth_format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-
+static
+void create_frame_buffer_depth_stencil_attachment_internal(Frame_Buffer *frame_buffer, Frame_Buffer_Depth_Attachment *attachment) {
     D3D11_DEPTH_STENCILOP_DESC operations{};
     operations.StencilFailOp      = D3D11_STENCIL_OP_KEEP;
     operations.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;
@@ -573,11 +559,11 @@ void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s3
     state_description.BackFace         = operations;
 
     D3D11_TEXTURE2D_DESC texture_description{};
-    texture_description.Width              = w;
-    texture_description.Height             = h;
+    texture_description.Width              = attachment->w;
+    texture_description.Height             = attachment->h;
     texture_description.MipLevels          = 1;
     texture_description.ArraySize          = 1;
-    texture_description.Format             = (DXGI_FORMAT) frame_buffer->depth_format;
+    texture_description.Format             = (DXGI_FORMAT) attachment->format;
     texture_description.SampleDesc.Count   = frame_buffer->samples;
     texture_description.SampleDesc.Quality = 0;
     texture_description.Usage              = D3D11_USAGE_DEFAULT;
@@ -586,15 +572,93 @@ void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s3
     texture_description.MiscFlags          = 0;
 
     D3D11_DEPTH_STENCIL_VIEW_DESC view_description{};
-    view_description.Format             = (DXGI_FORMAT) frame_buffer->depth_format;
+    view_description.Format             = (DXGI_FORMAT) attachment->format;
     view_description.ViewDimension      = frame_buffer->samples > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
     view_description.Texture2D.MipSlice = 0;
     
-    D3D11_CALL(d3d_device->CreateDepthStencilState(&state_description, &frame_buffer->depth_stencil_state));
-    D3D11_CALL(d3d_device->CreateTexture2D(&texture_description, null, &frame_buffer->depth_stencil_texture));
-    D3D11_CALL(d3d_device->CreateDepthStencilView(frame_buffer->depth_stencil_texture, &view_description, &frame_buffer->depth_stencil_view));
+    D3D11_CALL(d3d_device->CreateDepthStencilState(&state_description, &attachment->state));
+    D3D11_CALL(d3d_device->CreateTexture2D(&texture_description, null, &attachment->texture));
+    D3D11_CALL(d3d_device->CreateDepthStencilView(attachment->texture, &view_description, &attachment->view));
+}
+
+void create_frame_buffer(Frame_Buffer *frame_buffer, u8 samples) {
+    frame_buffer->samples     = samples;
+    frame_buffer->color_count = 0;
+    frame_buffer->has_depth   = 0;
+}
+
+void destroy_frame_buffer(Frame_Buffer *frame_buffer) {
+    for(s64 i = 0; i < frame_buffer->color_count; ++i) {
+        frame_buffer->colors[i].view->Release();
+        frame_buffer->colors[i].texture->Release();
+    }
+
+    frame_buffer->color_count = 0;
+
+    if(frame_buffer->has_depth) {
+        frame_buffer->depth.texture->Release();
+        frame_buffer->depth.view->Release();
+        frame_buffer->depth.state->Release();
+    }
+    
+    frame_buffer->has_depth = false;
+}
+
+void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, b8 hdr) {
+    foundation_assert(frame_buffer->color_count < ARRAY_COUNT(frame_buffer->colors));
+
+    Frame_Buffer_Color_Attachment *attachment = &frame_buffer->colors[frame_buffer->color_count];
+    attachment->w = w;
+    attachment->h = h;
+    attachment->format = d3d11_format(4, hdr ? D3D11_Float32 : D3D11_UByte);
+
+    create_frame_buffer_color_attachment_internal(frame_buffer, attachment);
+
+    ++frame_buffer->color_count;
+}
+
+void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h) {
+    foundation_assert(frame_buffer->has_depth == false);
+
+    frame_buffer->depth.w = w;
+    frame_buffer->depth.h = h;
+    frame_buffer->depth.format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+
+    create_frame_buffer_depth_stencil_attachment_internal(frame_buffer, &frame_buffer->depth);
 
     frame_buffer->has_depth = true;
+}
+
+void resize_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s64 index, s32 w, s32 h) {
+    foundation_assert(index >= 0 && index < frame_buffer->color_count);
+    
+    Frame_Buffer_Color_Attachment *attachment = &frame_buffer->colors[index];
+
+    attachment->view->Release();
+    attachment->texture->Release();
+
+    attachment->w = w;
+    attachment->h = h;
+
+    create_frame_buffer_color_attachment_internal(frame_buffer, attachment);
+}
+
+void resize_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h) {
+    foundation_assert(frame_buffer->has_depth == true);
+
+    frame_buffer->depth.view->Release();
+    frame_buffer->depth.state->Release();
+    frame_buffer->depth.texture->Release();
+
+    frame_buffer->depth.w = w;
+    frame_buffer->depth.h = h;
+
+    create_frame_buffer_depth_stencil_attachment_internal(frame_buffer, &frame_buffer->depth);
+}
+
+void resize_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h) {
+    for(s64 i = 0; i < frame_buffer->color_count; ++i) resize_frame_buffer_color_attachment(frame_buffer, i, w, h);
+    if(frame_buffer->has_depth) resize_frame_buffer_depth_stencil_attachment(frame_buffer, w, h);
 }
 
 void bind_frame_buffer(Frame_Buffer *frame_buffer) {
@@ -608,7 +672,7 @@ void bind_frame_buffer(Frame_Buffer *frame_buffer) {
     for(s64 i = 0; i < frame_buffer->color_count; ++i) {
         views[i] = frame_buffer->colors[i].view;
     }
-    d3d_context->OMSetRenderTargets((UINT) frame_buffer->color_count, views, (frame_buffer->has_depth) ? frame_buffer->depth_stencil_view : null);
+    d3d_context->OMSetRenderTargets((UINT) frame_buffer->color_count, views, (frame_buffer->has_depth) ? frame_buffer->depth.view : null);
 }
 
 void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b) {
@@ -622,7 +686,7 @@ void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b) {
         d3d_context->ClearRenderTargetView(frame_buffer->colors[i].view, color_array);
     }
 
-    if(frame_buffer->has_depth) d3d_context->ClearDepthStencilView(frame_buffer->depth_stencil_view, D3D11_CLEAR_DEPTH  | D3D11_CLEAR_STENCIL, 1.f, 0);
+    if(frame_buffer->has_depth) d3d_context->ClearDepthStencilView(frame_buffer->depth.view, D3D11_CLEAR_DEPTH  | D3D11_CLEAR_STENCIL, 1.f, 0);
 }
 
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
@@ -637,8 +701,8 @@ void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
         }
 
         if(dst->has_depth && src->has_depth) {
-            foundation_assert(dst->depth_format == src->depth_format);
-            d3d_context->CopyResource(dst->depth_stencil_texture, src->depth_stencil_texture);
+            foundation_assert(dst->depth.format == src->depth.format);
+            d3d_context->CopyResource(dst->depth.texture, src->depth.texture);
         }
     } else {
         for(s64 i = 0; i < dst->color_count; ++i) {
@@ -648,8 +712,8 @@ void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
         }
 
         if(dst->has_depth && src->has_depth) {
-            foundation_assert(dst->depth_format == src->depth_format);
-            d3d_context->ResolveSubresource(dst->depth_stencil_texture, 0, src->depth_stencil_texture, 0, (DXGI_FORMAT) dst->depth_format);
+            foundation_assert(dst->depth.format == src->depth.format);
+            d3d_context->ResolveSubresource(dst->depth.texture, 0, src->depth.texture, 0, (DXGI_FORMAT) dst->depth.format);
         }
     }
 }
@@ -660,9 +724,9 @@ void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
 
 void create_pipeline_state(Pipeline_State *state) {
     D3D11_RASTERIZER_DESC rasterizer{};
-    rasterizer.FillMode = D3D11_FILL_SOLID;
-    rasterizer.CullMode = (state->enable_culling) ? D3D11_CULL_BACK : D3D11_CULL_NONE;
-    rasterizer.FrontCounterClockwise = FALSE;
+    rasterizer.FillMode              = D3D11_FILL_SOLID;
+    rasterizer.CullMode              = (state->enable_culling) ? D3D11_CULL_BACK : D3D11_CULL_NONE;
+    rasterizer.FrontCounterClockwise = TRUE;
     rasterizer.DepthBias             = 0;
     rasterizer.DepthBiasClamp        = 0;
     rasterizer.SlopeScaledDepthBias  = 0;

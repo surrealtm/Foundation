@@ -33,33 +33,33 @@ Key_Code win32_key_map(WPARAM vk) {
     Key_Code code;
     
     switch(vk) {
-        case VK_OEM_COMMA:  code = KEY_Comma;  break;
-        case VK_OEM_PERIOD: code = KEY_Period; break;
-        case VK_OEM_MINUS:  code = KEY_Minus;  break;
-        case VK_OEM_PLUS:   code = KEY_Plus;   break;
+    case VK_OEM_COMMA:  code = KEY_Comma;  break;
+    case VK_OEM_PERIOD: code = KEY_Period; break;
+    case VK_OEM_MINUS:  code = KEY_Minus;  break;
+    case VK_OEM_PLUS:   code = KEY_Plus;   break;
         
-        case VK_DOWN:  code = KEY_Arrow_Down;  break;
-        case VK_UP:    code = KEY_Arrow_Up;    break;
-        case VK_LEFT:  code = KEY_Arrow_Left;  break;
-        case VK_RIGHT: code = KEY_Arrow_Right; break;
+    case VK_DOWN:  code = KEY_Arrow_Down;  break;
+    case VK_UP:    code = KEY_Arrow_Up;    break;
+    case VK_LEFT:  code = KEY_Arrow_Left;  break;
+    case VK_RIGHT: code = KEY_Arrow_Right; break;
         
-        case VK_RETURN:  code = KEY_Enter;   break;
-        case VK_SPACE:   code = KEY_Space;   break;
-        case VK_SHIFT:   code = KEY_Shift;   break;
-        case VK_ESCAPE:  code = KEY_Escape;  break;
-        case VK_MENU:    code = KEY_Menu;    break;
-        case VK_CONTROL: code = KEY_Control; break;
+    case VK_RETURN:  code = KEY_Enter;   break;
+    case VK_SPACE:   code = KEY_Space;   break;
+    case VK_SHIFT:   code = KEY_Shift;   break;
+    case VK_ESCAPE:  code = KEY_Escape;  break;
+    case VK_MENU:    code = KEY_Menu;    break;
+    case VK_CONTROL: code = KEY_Control; break;
         
-        case VK_BACK:   code = KEY_Backspace; break;
-        case VK_DELETE: code = KEY_Delete;    break;
-        case VK_TAB:    code = KEY_Tab;       break;
+    case VK_BACK:   code = KEY_Backspace; break;
+    case VK_DELETE: code = KEY_Delete;    break;
+    case VK_TAB:    code = KEY_Tab;       break;
         
-        case VK_PRIOR: code = KEY_Page_Up;   break;
-        case VK_NEXT:  code = KEY_Page_Down; break;
-        case VK_END:   code = KEY_End;       break;
-        case VK_HOME:  code = KEY_Home;      break;
+    case VK_PRIOR: code = KEY_Page_Up;   break;
+    case VK_NEXT:  code = KEY_Page_Down; break;
+    case VK_END:   code = KEY_End;       break;
+    case VK_HOME:  code = KEY_Home;      break;
         
-        default: code = KEY_None; break;
+    default: code = KEY_None; break;
     }
     
     return code;
@@ -131,140 +131,147 @@ LRESULT CALLBACK win32_callback(HWND hwnd, UINT message, WPARAM wparam, LPARAM l
     LRESULT result = 0;
     
     switch(message) {
-        case WM_CLOSE:
+    case WM_CLOSE:
         window->should_close = true;
         break;
         
-        case WM_SIZE:
+    case WM_SIZE: {
         window->resized_this_frame = true;
         window->w         = (lparam & 0x0000ffff) >> 0;
         window->h         = (lparam & 0xffff0000) >> 16;
         window->maximized = wparam == SIZE_MAXIMIZED;
-        break;
         
-        case WM_MOVE:
+        if(window->callback_during_resize) {
+            PAINTSTRUCT ps{ 0 };
+            BeginPaint(hwnd, &ps);
+            window->callback_during_resize(window->callback_during_resize_user_pointer);
+            EndPaint(hwnd, &ps);
+        }
+    } break;
+        
+    case WM_MOVE:
         window->moved_this_frame = true;
         window->x = (lparam & 0x0000ffff) >> 0;
         window->y = (lparam & 0xffff0000) >> 16;
         break;
         
-        case WM_SETFOCUS: {
-            window->focused = true;
+    case WM_SETFOCUS: {
+        window->focused = true;
             
-            // When the window lost focus, keyup messages were not sent to this window (if there were any),
-            // meaning that keys which were held down before the window lost focus, and released after, are
-            // still considered "down" in this window. Therefore, update the window's keyboard
-            // state by going through all virtual key codes, and scanning for the current status.
-            for(int i = 0; i < 256; ++i) {
-                Key_Code key = win32_key_map(i);
-                window->keys[key] = (GetAsyncKeyState(i) != 0) ? KEY_Down : KEY_Up;
-            }
-        } break;
+        // When the window lost focus, keyup messages were not sent to this window (if there were any),
+        // meaning that keys which were held down before the window lost focus, and released after, are
+        // still considered "down" in this window. Therefore, update the window's keyboard
+        // state by going through all virtual key codes, and scanning for the current status.
+        for(int i = 0; i < 256; ++i) {
+            Key_Code key = win32_key_map(i);
+            window->keys[key] = (GetAsyncKeyState(i) != 0) ? KEY_Down : KEY_Up;
+        }
+    } break;
         
-        case WM_KILLFOCUS:
+    case WM_KILLFOCUS:
         window->focused = false;
         break;
         
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN: {
-            Key_Code key = win32_key_map(wparam);
-            Key_Status status = KEY_Down | KEY_Repeated;
-            if(!(window->keys[key] & KEY_Down)) status |= KEY_Pressed;
-            window->keys[key] = status;
+    case WM_KEYDOWN:
+    case WM_SYSKEYDOWN: {
+        Key_Code key = win32_key_map(wparam);
+        Key_Status status = KEY_Down | KEY_Repeated;
+        if(!(window->keys[key] & KEY_Down)) status |= KEY_Pressed;
+        window->keys[key] = status;
             
-            if(key == KEY_F4 && window->keys[KEY_Menu] & KEY_Down)   window->should_close = true; // Allow alt+f4 to close the window again, since syskeydown disables the built in windows thing for this.
+        if(key == KEY_F4 && window->keys[KEY_Menu] & KEY_Down)   window->should_close = true; // Allow alt+f4 to close the window again, since syskeydown disables the built in windows thing for this.
             
-            // Some special text handling characters are not included in the WM_CHAR message, since these do
-            // not actually procedure characters. They are still tied to text input (similar to backspace, which
-            // is handled in WM_CHAR for some reason), therefore register these unicodes manually here.
-            if(key == KEY_Arrow_Left || key == KEY_Arrow_Right || key == KEY_Backspace || key == KEY_Delete || key == KEY_Enter || key == KEY_Home || key == KEY_End || key == KEY_V || key == KEY_C || key == KEY_A || key == KEY_X) {
-                win32_add_control_text_input_event(window, key);
-            }
-        } break;
+        // Some special text handling characters are not included in the WM_CHAR message, since these do
+        // not actually procedure characters. They are still tied to text input (similar to backspace, which
+        // is handled in WM_CHAR for some reason), therefore register these unicodes manually here.
+        if(key == KEY_Arrow_Left || key == KEY_Arrow_Right || key == KEY_Backspace || key == KEY_Delete || key == KEY_Enter || key == KEY_Home || key == KEY_End || key == KEY_V || key == KEY_C || key == KEY_A || key == KEY_X) {
+            win32_add_control_text_input_event(window, key);
+        }
+    } break;
         
-        case WM_KEYUP:
-        case WM_SYSKEYUP: {
-            Key_Code key = win32_key_map(wparam);
-            window->keys[key] = KEY_Released;
-        } break;
+    case WM_KEYUP:
+    case WM_SYSKEYUP: {
+        Key_Code key = win32_key_map(wparam);
+        window->keys[key] = KEY_Released;
+    } break;
         
-        case WM_CHAR: {
-            wchar_t utf16 = (u16) wparam;
+    case WM_CHAR: {
+        wchar_t utf16 = (u16) wparam;
             
-            // Make sure that only characters that are actually printable make it through here. All other input
-            // events should be handled as control keys (e.g. backspace, escape...)
-            WORD character_type;
-            GetStringTypeW(CT_CTYPE1, &utf16, 1, &character_type);
-            if(character_type & C1_ALPHA || character_type & C1_UPPER || character_type & C1_LOWER || character_type & C1_DIGIT || character_type & C1_PUNCT || character_type & C1_BLANK) {
-                win32_add_character_text_input_event(window, utf16);
-            }
-        } break;
+        // Make sure that only characters that are actually printable make it through here. All other input
+        // events should be handled as control keys (e.g. backspace, escape...)
+        WORD character_type;
+        GetStringTypeW(CT_CTYPE1, &utf16, 1, &character_type);
+        if(character_type & C1_ALPHA || character_type & C1_UPPER || character_type & C1_LOWER || character_type & C1_DIGIT || character_type & C1_PUNCT || character_type & C1_BLANK) {
+            win32_add_character_text_input_event(window, utf16);
+        }
+    } break;
         
-        case WM_LBUTTONDOWN:
+    case WM_LBUTTONDOWN:
         window->buttons[BUTTON_Left] = BUTTON_Down | BUTTON_Pressed;
         SetCapture(hwnd); // Track the dragging and release events of the mouse.
         break;
         
-        case WM_LBUTTONUP:
+    case WM_LBUTTONUP:
         window->buttons[BUTTON_Left] = BUTTON_Released;
         ReleaseCapture();
         break;
         
-        case WM_RBUTTONDOWN:
+    case WM_RBUTTONDOWN:
         window->buttons[BUTTON_Right] = BUTTON_Down | BUTTON_Pressed;
         SetCapture(hwnd); // Track the dragging and release events of the mouse.
         break;
         
-        case WM_RBUTTONUP:
+    case WM_RBUTTONUP:
         window->buttons[BUTTON_Right] = BUTTON_Released;
         ReleaseCapture();
         break;
         
-        case WM_MBUTTONDOWN:
+    case WM_MBUTTONDOWN:
         window->buttons[BUTTON_Middle] = BUTTON_Down | BUTTON_Pressed;
         SetCapture(hwnd); // Track the dragging and release events of the mouse.
         break;
         
-        case WM_MBUTTONUP:
+    case WM_MBUTTONUP:
         window->buttons[BUTTON_Middle] = BUTTON_Released;
         ReleaseCapture();
         break;
         
-        case WM_MOUSEWHEEL: {
-            s16 mouse_wheel_delta = (wparam & 0xffff0000) >> 16;
-            window->mouse_wheel_turns = (f32) mouse_wheel_delta / 120.0f;
-        } break;
+    case WM_MOUSEWHEEL: {
+        s16 mouse_wheel_delta = (wparam & 0xffff0000) >> 16;
+        window->mouse_wheel_turns = (f32) mouse_wheel_delta / 120.0f;
+    } break;
         
-        case WM_MOUSEMOVE: {
-            if(!window->mouse_active_this_frame) win32_register_mouse_tracking(hwnd);
+    case WM_MOUSEMOVE: {
+        if(!window->mouse_active_this_frame) win32_register_mouse_tracking(hwnd);
             
-            s16 new_mouse_x = (lparam & 0x0000ffff) >> 0;
-            s16 new_mouse_y = (lparam & 0xffff0000) >> 16;
+        s16 new_mouse_x = (lparam & 0x0000ffff) >> 0;
+        s16 new_mouse_y = (lparam & 0xffff0000) >> 16;
             
-            window->mouse_delta_x += new_mouse_x - window->mouse_x;
-            window->mouse_delta_y += new_mouse_y - window->mouse_y;
-            window->mouse_x = new_mouse_x;
-            window->mouse_y = new_mouse_y;
-            window->mouse_active_this_frame = true;
-        } break;
+        window->mouse_delta_x += new_mouse_x - window->mouse_x;
+        window->mouse_delta_y += new_mouse_y - window->mouse_y;
+        window->mouse_x = new_mouse_x;
+        window->mouse_y = new_mouse_y;
+        window->mouse_active_this_frame = true;
+    } break;
         
-        case WM_MOUSELEAVE:
+    case WM_MOUSELEAVE:
         window->mouse_active_this_frame = false;
         break;
         
-        case WM_INPUT: {
-            UINT rawinput_size = sizeof(RAWINPUT);
-            RAWINPUT rawinput;
-            UINT bytes = GetRawInputData((HRAWINPUT) lparam, RID_INPUT, &rawinput, &rawinput_size, sizeof(RAWINPUTHEADER));
-            if(bytes == -1) break; // Failed to obtain the raw input data for some reason.
+    case WM_INPUT: {
+        UINT rawinput_size = sizeof(RAWINPUT);
+        RAWINPUT rawinput;
+        UINT bytes = GetRawInputData((HRAWINPUT) lparam, RID_INPUT, &rawinput, &rawinput_size, sizeof(RAWINPUTHEADER));
+        if(bytes == -1) break; // Failed to obtain the raw input data for some reason.
             
-            if(rawinput.header.dwType == RIM_TYPEMOUSE && (rawinput.data.mouse.usFlags & MOUSE_MOVE_RELATIVE) == MOUSE_MOVE_RELATIVE) {
-                window->raw_mouse_delta_x += rawinput.data.mouse.lLastX;
-                window->raw_mouse_delta_y += rawinput.data.mouse.lLastY;
-            }
-        } break;
+        if(rawinput.header.dwType == RIM_TYPEMOUSE && (rawinput.data.mouse.usFlags & MOUSE_MOVE_RELATIVE) == MOUSE_MOVE_RELATIVE) {
+            window->raw_mouse_delta_x += rawinput.data.mouse.lLastX;
+            window->raw_mouse_delta_y += rawinput.data.mouse.lLastY;
+        }
+    } break;
         
-        default:
+    default:
         result = DefWindowProcA(hwnd, message, wparam, lparam);
         break;
     }

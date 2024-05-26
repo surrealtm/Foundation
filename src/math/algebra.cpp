@@ -43,7 +43,7 @@ m4f make_transformation_matrix(const v3f &position, const qtf &rotation, const v
     m4f translated = m4_translate(m4f(1), position.x, position.y, position.z);
     m4f rotated    = make_rotation_matrix_from_quat(rotation);
     m4f scaled     = m4_scale(m4f(1), scale.x, scale.y, scale.z);
-    return translated * (rotated * scaled);
+    return (translated * rotated) * scaled;
 }
 
 m4f make_rotation_matrix_from_quat(const qtf &rotation) {

@@ -46,7 +46,12 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
 
     os_free_stack_trace(&trace);
 
-    os_message_box(string_view((u8 *) message, message_length));
+    if(message_length) {
+        os_message_box(string_view((u8 *) message, message_length));
+    } else {
+        os_message_box(cstring_view(assertion_text));
+    }
+
     os_debug_break();
     return true;
 }

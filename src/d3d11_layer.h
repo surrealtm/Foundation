@@ -93,6 +93,7 @@ struct Shader_Input_Specification {
 };
 
 struct Shader_Constant_Buffer {
+    s64 size_in_bytes;
     ID3D11Buffer *handle;
 };
 
@@ -104,23 +105,28 @@ struct Shader {
     ID3D11InputLayout *input_layout;
 };
 
-struct Frame_Buffer_Attachment {
+struct Frame_Buffer_Color_Attachment {
     s32 w, h;
     u32 format; // DXGI_FORMAT
     ID3D11RenderTargetView *view;
     ID3D11Texture2D *texture;
 };
 
+struct Frame_Buffer_Depth_Attachment {
+    s32 w, h;
+    u32 format; // DXGI_FORMAT
+    ID3D11Texture2D *texture;
+    ID3D11DepthStencilView *view;
+    ID3D11DepthStencilState *state;
+};
+
 struct Frame_Buffer {
     s8 samples;
 
-    Frame_Buffer_Attachment colors[D3D11_MAX_FRAMEBUFFER_COLOR_ATTACHMENTS];
+    Frame_Buffer_Color_Attachment colors[D3D11_MAX_FRAMEBUFFER_COLOR_ATTACHMENTS];
     s64 color_count;
     
-    u32 depth_format; // DXGI_FORMAT
-    ID3D11Texture2D *depth_stencil_texture;
-    ID3D11DepthStencilView *depth_stencil_view;
-    ID3D11DepthStencilState *depth_stencil_state;
+    Frame_Buffer_Depth_Attachment depth;
     b8 has_depth;
 };
 
@@ -147,6 +153,7 @@ void create_d3d11_context(Window *window);
 void destroy_d3d11_context(Window *window);
 void swap_d3d11_buffers(Window *window);
 Frame_Buffer *get_default_frame_buffer(Window *window);
+void resize_default_frame_buffer(Window *window);
 
 void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology, b8 allow_updates = false);
 void allocate_vertex_buffer(Vertex_Buffer *buffer, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology);
@@ -168,7 +175,7 @@ void create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 c
 void destroy_texture(Texture *texture);
 void bind_texture(Texture *texture, s64 index_in_shader);
 
-void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, s64 size_in_bytes, void *initial_data = null);
+void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 size_in_bytes, void *initial_data = null);
 void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer);
 void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data);
 void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, Shader_Type shader_types);
@@ -181,6 +188,9 @@ void create_frame_buffer(Frame_Buffer *frame_buffer, u8 samples = 1);
 void destroy_frame_buffer(Frame_Buffer *frame_buffer);
 void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, b8 hdr = false);
 void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h);
+void resize_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s64 index, s32 w, s32 h);
+void resize_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h);
+void resize_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h);
 void bind_frame_buffer(Frame_Buffer *frame_buffer);
 void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b);
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);

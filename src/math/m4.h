@@ -14,11 +14,11 @@ struct m4 {
         column() {};
         column(T x, T y, T z, T w) : _{ x, y, z, w } {};
         
-        column operator+(const column &other) { return column(_[0] + other._[0], _[1] + other._[1], _[2] + other._[2], _[3] + other._[3]); }
-        column operator-(const column &other) { return column(_[0] - other._[0], _[1] - other._[1], _[2] - other._[2], _[3] - other._[3]); }
-        column operator*(const column &other) { return column(_[0] * other._[0], _[1] * other._[1], _[2] * other._[2], _[3] * other._[3]); }
+        column operator+(const column &other) const { return column(_[0] + other._[0], _[1] + other._[1], _[2] + other._[2], _[3] + other._[3]); }
+        column operator-(const column &other) const { return column(_[0] - other._[0], _[1] - other._[1], _[2] - other._[2], _[3] - other._[3]); }
+        column operator*(const column &other) const { return column(_[0] * other._[0], _[1] * other._[1], _[2] * other._[2], _[3] * other._[3]); }
 
-        column operator*(T v) { return column(_[0] * v, _[1] * v, _[2] * v, _[3] * v); }
+        column operator*(T v) const { return column(_[0] * v, _[1] * v, _[2] * v, _[3] * v); }
         
         const T operator[](s64 index) const { return _[index]; }
         T &operator[](s64 index) { return _[index]; }
@@ -198,9 +198,9 @@ template<typename T>
 m4<T> m4_scale(const m4<T> &matrix, T x, T y, T z) {
     m4<T> result;
 
-    result[0] = result[0] * x;
-    result[1] = result[1] * y;
-    result[2] = result[2] * z;    
+    result[0] = matrix[0] * x;
+    result[1] = matrix[1] * y;
+    result[2] = matrix[2] * z;    
     result[3] = matrix[3];
 
     return result;

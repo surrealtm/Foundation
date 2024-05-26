@@ -472,7 +472,7 @@ s32 get_string_width_in_pixels(Font *font, string text) {
         Font_Glyph *glyph = find_glyph(font, text[i]);
         if(!glyph || glyph->atlas_index == -1) glyph = find_default_glyph(font);
         
-        if(i == 0) width -= glyph->cursor_offset_x;
+        if(i == 0 && glyph->cursor_offset_x < 0) width -= glyph->cursor_offset_x;
 
         if(i + 1 < text.count) {
             width += find_glyph_advance(glyph, text[i + 1]);
