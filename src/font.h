@@ -88,7 +88,6 @@ struct Text_Mesh {
     s64 vertex_count;
     f32 *vertices;
     f32 *uvs;
-    s32 *atlas_indices;
 };
 
 b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load);

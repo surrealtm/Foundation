@@ -349,8 +349,7 @@ Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment 
     text_mesh.vertex_count  = text.count * 6;
     text_mesh.vertices      = (f32 *) allocator->allocate(text_mesh.vertex_count * 2 * sizeof(f32));
     text_mesh.uvs           = (f32 *) allocator->allocate(text_mesh.vertex_count * 2 * sizeof(f32));
-    text_mesh.atlas_indices = (s32 *) allocator->allocate(text_mesh.vertex_count * sizeof(s32));
-
+    
     s32 cx = x, cy = y;
 
     if(alignment & TEXT_ALIGNMENT_Centered) {
@@ -410,13 +409,6 @@ Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment 
             text_mesh.uvs[offset + 11] = y1;
         }
 
-        {
-            s64 offset = i * 6;
-            for(s64 i = 0; i < 6; ++i) {
-                text_mesh.atlas_indices[offset + i] = glyph->atlas_index;
-            }
-        }
-
         if(i + 1 < text.count) cx += find_glyph_advance(glyph, text[i + 1]);
     }
 
@@ -426,12 +418,10 @@ Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment 
 void free_text_mesh(Text_Mesh *text_mesh, Allocator *allocator) {
     allocator->deallocate(text_mesh->vertices);
     allocator->deallocate(text_mesh->uvs);
-    allocator->deallocate(text_mesh->atlas_indices);
-
+    
     text_mesh->vertex_count  = 0;
     text_mesh->vertices      = null;
     text_mesh->uvs           = null;
-    text_mesh->atlas_indices = null;
 }
 
 
