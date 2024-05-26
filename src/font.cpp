@@ -2,11 +2,10 @@
 #include "memutils.h"
 #include "os_specific.h"
 
-#define FT_CONFIG_OPTION_SUBPIXEL_RENDERING
-
 #include "Dependencies/freetype/freetype.h"
 #include "Dependencies/freetype/ftlcdfil.h"
 
+#define INVALID_ATLAS_INDEX 255 // Since we are using u8 for this.
 #define FONT_ATLAS_SIZE 512
 
 struct Font_Creation_Helper {
@@ -19,8 +18,14 @@ struct Font_Creation_Helper {
 
 
 static
-s16 freetype_unit_to_pixels(FT_Face face, FT_Pos unit) {
+s16 freetype_unit_to_vertical_pixels(FT_Face face, FT_Pos unit) {
     return (s16) (FT_MulFix(unit, face->size->metrics.y_scale) >> 6);
+}
+
+static
+s16 freetype_unit_to_horizontal_pixels(FT_Face face, FT_Pos unit) {
+    // Using the x_scale produces wrong results, I don't know...
+    return (s16) (unit >> 6);
 }
 
 static
@@ -142,8 +147,13 @@ u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap
             s64 destination_offset = (destination_x + destination_y * atlas->w) * atlas->channels;
 
             // Copy each channel into the destination
-            for(u8 i = 0; i < atlas->channels; ++i) {
+            for(u8 i = 0; i < bitmap_channels; ++i) {
                 atlas->bitmap[destination_offset + i] = bitmap[source_offset + i];
+            }
+
+            // Set the remaining channels to zero.
+            for(u8 i = (u8) bitmap_channels; i < atlas->channels; ++i) {
+                atlas->bitmap[destination_offset + i] = 0;
             }
         }
     }
@@ -165,7 +175,7 @@ u32 load_glyph(Font *font, FT_ULong character, Font_Creation_Helper *helper) {
     // other not-loaded glyphs (such as umlauts)
     if(glyph_index == 0 && character > 0) return 0;
 
-    FT_Load_Glyph(helper->face, glyph_index, FT_LOAD_DEFAULT);
+    FT_Load_Glyph(helper->face, glyph_index, FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_LIGHT);
     FT_Render_Glyph(helper->face->glyph, helper->render_options);
 
     s16 bitmap_channels = helper->face->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_LCD ? 3 : 1;
@@ -178,7 +188,7 @@ u32 load_glyph(Font *font, FT_ULong character, Font_Creation_Helper *helper) {
     glyph->bitmap_height   = helper->face->glyph->bitmap.rows;
     ++font->glyph_count;
 
-    s16 unkerned_advance = (s16) (helper->face->glyph->advance.x >> 6);
+    s16 unkerned_advance = (s16) freetype_unit_to_horizontal_pixels(helper->face, helper->face->glyph->advance.x);
 
     const s64 advance_count = 224; // We only support kerning between Ascii characters (for now).
     glyph->advances = (s16 *) Default_Allocator->allocate(advance_count * sizeof(s16));
@@ -193,7 +203,7 @@ u32 load_glyph(Font *font, FT_ULong character, Font_Creation_Helper *helper) {
             FT_UInt other_glyph_index = FT_Get_Char_Index(helper->face, (FT_ULong) i);
             FT_Vector kerning_value;
             FT_Get_Kerning(helper->face, glyph_index, other_glyph_index, FT_KERNING_DEFAULT, &kerning_value);
-            glyph->advances[advance_index] = unkerned_advance + (s16) (kerning_value.x >> 6);
+            glyph->advances[advance_index] = unkerned_advance + (s16) freetype_unit_to_horizontal_pixels(helper->face, kerning_value.x);
         }
     } else {
         for(s64 i = 0; i < font->glyphs_allocated; ++i) {
@@ -211,7 +221,7 @@ u32 load_glyph(Font *font, FT_ULong character, Font_Creation_Helper *helper) {
         glyph->atlas_index = add_glyph_to_font_atlas(font, glyph, helper->face->glyph->bitmap.buffer, helper->face->glyph->bitmap.pitch, bitmap_channels, helper);
     } else {
         // The glyph does not have a bitmap attached.
-        glyph->atlas_index = -1;
+        glyph->atlas_index = INVALID_ATLAS_INDEX;
     }
 
     return (u32) (font->glyph_count - 1);
@@ -263,6 +273,8 @@ void load_glyph_set(Font *font, Glyph_Set glyphs_to_load, Font_Creation_Helper *
 b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load) {
     memset(font, 0, sizeof(Font)); // Make sure we don't have any uninitialized data in here.
 
+    font->filter = filter;
+
     string file_content = os_read_file(Default_Allocator, file_path);
     if(!file_content.count) {
         foundation_error("Failed to load the font '%.*s' from disk: The file does not exist.", (u32) file_path.count, file_path.data);
@@ -291,9 +303,9 @@ b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter fil
     os_get_desktop_dpi(&xdpi, &ydpi);
     FT_Set_Char_Size(face, 0, size * 72, xdpi, ydpi);
 
-    font->line_height  = freetype_unit_to_pixels(face, face->height);
-    font->ascender     = freetype_unit_to_pixels(face, face->ascender);
-    font->descender    = freetype_unit_to_pixels(face, face->descender);
+    font->line_height  = freetype_unit_to_vertical_pixels(face, face->height);
+    font->ascender     = freetype_unit_to_vertical_pixels(face, face->ascender);
+    font->descender    = freetype_unit_to_vertical_pixels(face, face->descender);
     font->glyph_height = font->ascender - font->descender;
 
     Font_Creation_Helper creation_helper;
@@ -303,10 +315,10 @@ b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter fil
 
     if(filter != FONT_FILTER_Mono) {
         FT_Library_SetLcdFilter(library, FT_LCD_FILTER_DEFAULT);
-        creation_helper.render_options  = FT_RENDER_MODE_LCD;
+        creation_helper.render_options = FT_RENDER_MODE_LCD;
         creation_helper.atlas_channels = (filter == FONT_FILTER_Lcd_With_Alpha) ? 4 : 3;
     } else {
-        creation_helper.render_options  = FT_RENDER_MODE_NORMAL;
+        creation_helper.render_options = FT_RENDER_MODE_NORMAL;
         creation_helper.atlas_channels = 1;
     }
 
@@ -345,11 +357,20 @@ void destroy_font(Font *font) {
 Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment alignment, Allocator *allocator) {
     assert(font->glyph_count > 0);
 
+    s64 non_empty_glyph_count = 0;
+    for(s64 i = 0; i < text.count; ++i) {
+        Font_Glyph *glyph = find_glyph(font, text[i]);
+        if(!glyph) glyph = find_default_glyph(font);
+
+        if(glyph->atlas_index != INVALID_ATLAS_INDEX) ++non_empty_glyph_count;
+    }
+
     Text_Mesh text_mesh;
-    text_mesh.vertex_count  = text.count * 6;
-    text_mesh.vertices      = (f32 *) allocator->allocate(text_mesh.vertex_count * 2 * sizeof(f32));
-    text_mesh.uvs           = (f32 *) allocator->allocate(text_mesh.vertex_count * 2 * sizeof(f32));
-    
+    text_mesh.glyph_count = non_empty_glyph_count;
+    text_mesh.vertices    = (f32 *) allocator->allocate(non_empty_glyph_count * 6 * 2 * sizeof(f32));
+    text_mesh.uvs         = (f32 *) allocator->allocate(non_empty_glyph_count * 6 * 2 * sizeof(f32));
+    text_mesh.atlasses    = (Font_Atlas **) allocator->allocate(non_empty_glyph_count * sizeof(Font_Atlas*));
+
     s32 cx = x, cy = y;
 
     if(alignment & TEXT_ALIGNMENT_Centered) {
@@ -366,47 +387,57 @@ Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment 
         cy += (font->ascender + font->descender) / 2;
     }
 
+    s64 non_empty_glyph_index = 0;
+
     for(s64 i = 0; i < text.count; ++i) {
-        u8 character = text[i];
-        Font_Glyph *glyph = find_glyph(font, character);
-        if(!glyph || glyph->atlas_index == -1) glyph = find_default_glyph(font);
+        Font_Glyph *glyph = find_glyph(font, text[i]);
+        if(!glyph) glyph = find_default_glyph(font);
 
-        Font_Atlas *atlas = find_atlas(font, glyph->atlas_index);
+        if(glyph->atlas_index != INVALID_ATLAS_INDEX) {
+            Font_Atlas *atlas = find_atlas(font, glyph->atlas_index);
 
-        {
-            s64 offset = i * 6 * 2;
-            s32 x0 = (cx + glyph->cursor_offset_x), y0 = (cy - glyph->cursor_offset_y);
-            s32 x1 = (cx + glyph->cursor_offset_x + glyph->bitmap_width), y1 = (cy - glyph->cursor_offset_y + glyph->bitmap_height);
-            text_mesh.vertices[offset + 0]  = (f32) x0;
-            text_mesh.vertices[offset + 1]  = (f32) y0;
-            text_mesh.vertices[offset + 2]  = (f32) x1;
-            text_mesh.vertices[offset + 3]  = (f32) y0;
-            text_mesh.vertices[offset + 4]  = (f32) x0;
-            text_mesh.vertices[offset + 5]  = (f32) y1;
-            text_mesh.vertices[offset + 6]  = (f32) x0;
-            text_mesh.vertices[offset + 7]  = (f32) y1;
-            text_mesh.vertices[offset + 8]  = (f32) x1;
-            text_mesh.vertices[offset + 9]  = (f32) y0;
-            text_mesh.vertices[offset + 10] = (f32) x1;
-            text_mesh.vertices[offset + 11] = (f32) y1;
-        }
+            {
+                s64 offset = non_empty_glyph_index * 6 * 2;
+                s32 x0 = (cx + glyph->cursor_offset_x), y0 = (cy - glyph->cursor_offset_y);
+                s32 x1 = (cx + glyph->cursor_offset_x + glyph->bitmap_width), y1 = (cy - glyph->cursor_offset_y + glyph->bitmap_height);
+                text_mesh.vertices[offset + 0]  = (f32) x0;
+                text_mesh.vertices[offset + 1]  = (f32) y0;
+                text_mesh.vertices[offset + 2]  = (f32) x1;
+                text_mesh.vertices[offset + 3]  = (f32) y0;
+                text_mesh.vertices[offset + 4]  = (f32) x0;
+                text_mesh.vertices[offset + 5]  = (f32) y1;
+                text_mesh.vertices[offset + 6]  = (f32) x0;
+                text_mesh.vertices[offset + 7]  = (f32) y1;
+                text_mesh.vertices[offset + 8]  = (f32) x1;
+                text_mesh.vertices[offset + 9]  = (f32) y0;
+                text_mesh.vertices[offset + 10] = (f32) x1;
+                text_mesh.vertices[offset + 11] = (f32) y1;
+            }
 
-        {
-            s64 offset = i * 6 * 2;
-            f32 x0 = ((f32) glyph->bitmap_offset_x / (f32) atlas->w), y0 = ((f32) glyph->bitmap_offset_y / (f32) atlas->h);
-            f32 x1 = ((f32) (glyph->bitmap_offset_x + glyph->bitmap_width) / (f32) atlas->w), y1 = ((f32) (glyph->bitmap_offset_y + glyph->bitmap_height) / (f32) atlas->h);
-            text_mesh.uvs[offset + 0]  = x0;
-            text_mesh.uvs[offset + 1]  = y0;
-            text_mesh.uvs[offset + 2]  = x1;
-            text_mesh.uvs[offset + 3]  = y0;
-            text_mesh.uvs[offset + 4]  = x0;
-            text_mesh.uvs[offset + 5]  = y1;
-            text_mesh.uvs[offset + 6]  = x0;
-            text_mesh.uvs[offset + 7]  = y1;
-            text_mesh.uvs[offset + 8]  = x1;
-            text_mesh.uvs[offset + 9]  = y0;
-            text_mesh.uvs[offset + 10] = x1;
-            text_mesh.uvs[offset + 11] = y1;
+            {
+                s64 offset = non_empty_glyph_index * 6 * 2;
+                f32 x0 = ((f32) glyph->bitmap_offset_x / (f32) atlas->w), y0 = ((f32) glyph->bitmap_offset_y / (f32) atlas->h);
+                f32 x1 = ((f32) (glyph->bitmap_offset_x + glyph->bitmap_width) / (f32) atlas->w), y1 = ((f32) (glyph->bitmap_offset_y + glyph->bitmap_height) / (f32) atlas->h);
+                text_mesh.uvs[offset + 0]  = x0;
+                text_mesh.uvs[offset + 1]  = y0;
+                text_mesh.uvs[offset + 2]  = x1;
+                text_mesh.uvs[offset + 3]  = y0;
+                text_mesh.uvs[offset + 4]  = x0;
+                text_mesh.uvs[offset + 5]  = y1;
+                text_mesh.uvs[offset + 6]  = x0;
+                text_mesh.uvs[offset + 7]  = y1;
+                text_mesh.uvs[offset + 8]  = x1;
+                text_mesh.uvs[offset + 9]  = y0;
+                text_mesh.uvs[offset + 10] = x1;
+                text_mesh.uvs[offset + 11] = y1;
+            }
+
+            {
+                s64 offset = non_empty_glyph_index;
+                text_mesh.atlasses[offset] = atlas;
+            }
+
+            ++non_empty_glyph_index;
         }
 
         if(i + 1 < text.count) cx += find_glyph_advance(glyph, text[i + 1]);
@@ -418,10 +449,12 @@ Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment 
 void free_text_mesh(Text_Mesh *text_mesh, Allocator *allocator) {
     allocator->deallocate(text_mesh->vertices);
     allocator->deallocate(text_mesh->uvs);
+    allocator->deallocate(text_mesh->atlasses);
     
-    text_mesh->vertex_count  = 0;
-    text_mesh->vertices      = null;
-    text_mesh->uvs           = null;
+    text_mesh->glyph_count = 0;
+    text_mesh->vertices    = null;
+    text_mesh->uvs         = null;
+    text_mesh->atlasses    = null;
 }
 
 

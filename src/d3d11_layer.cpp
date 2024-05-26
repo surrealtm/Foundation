@@ -120,6 +120,35 @@ DXGI_FORMAT d3d11_format(u8 channels, D3D11_Data_Type data_type) {
     return format;
 }
 
+static
+D3D11_FILTER d3d11_filter(Texture_Hints hints) {
+    D3D11_FILTER output;
+
+    Texture_Hints input = hints & TEXTURE_FILTER;
+    
+    switch(input) {
+    case TEXTURE_FILTER_Nearest: output = D3D11_FILTER_MIN_MAG_MIP_POINT;  break;
+    case TEXTURE_FILTER_Linear:  output = D3D11_FILTER_MIN_MAG_MIP_LINEAR; break;
+    }
+    
+    return output;
+}
+
+static
+D3D11_TEXTURE_ADDRESS_MODE d3d11_texture_address_mode(Texture_Hints hints) {
+    D3D11_TEXTURE_ADDRESS_MODE output;
+
+    Texture_Hints input = hints & TEXTURE_WRAP;
+
+    switch(input) {
+    case TEXTURE_WRAP_Repeat: output = D3D11_TEXTURE_ADDRESS_WRAP;   break;
+    case TEXTURE_WRAP_Edge:   output = D3D11_TEXTURE_ADDRESS_CLAMP;  break;
+    case TEXTURE_WRAP_Border: output = D3D11_TEXTURE_ADDRESS_BORDER; break;
+    }
+    
+    return output;
+}
+
 
 void create_d3d11_context(Window *window) {
     create_d3d11_device();
@@ -284,7 +313,7 @@ void draw_vertex_buffer_array(Vertex_Buffer_Array *array) {
 
 /* --------------------------------------------------- Texture --------------------------------------------------- */
 
-void create_texture_from_file(Texture *texture, string file_path) {
+void create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints) {
     char *cstring = to_cstring(Default_Allocator, file_path);
     defer { free_cstring(Default_Allocator, cstring); };
 
@@ -299,16 +328,19 @@ void create_texture_from_file(Texture *texture, string file_path) {
         return;
     }
     
-    create_texture_from_memory(texture, buffer, w, h, channels);
+    create_texture_from_memory(texture, buffer, w, h, channels, hints);
 
     stbi_image_free(buffer);
 }
 
-void create_texture_from_memory(Texture *texture, u8 *bitmap, s32 w, s32 h, u8 channels) {
+void create_texture_from_memory(Texture *texture, u8 *bitmap, s32 w, s32 h, u8 channels, Texture_Hints hints) {
     texture->w = w;
     texture->h = h;
     texture->channels = channels;
 
+    D3D11_FILTER filter = d3d11_filter(hints);
+    D3D11_TEXTURE_ADDRESS_MODE texture_address_mode = d3d11_texture_address_mode(hints);
+    
     D3D11_TEXTURE2D_DESC texture_description{};
     texture_description.Width              = texture->w;
     texture_description.Height             = texture->h;
@@ -328,10 +360,10 @@ void create_texture_from_memory(Texture *texture, u8 *bitmap, s32 w, s32 h, u8 c
     subresource.SysMemSlicePitch = 0;
 
     D3D11_SAMPLER_DESC sampler_description{};
-    sampler_description.Filter         = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    sampler_description.AddressU       = D3D11_TEXTURE_ADDRESS_CLAMP;
-    sampler_description.AddressV       = D3D11_TEXTURE_ADDRESS_CLAMP;
-    sampler_description.AddressW       = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampler_description.Filter         = filter;
+    sampler_description.AddressU       = texture_address_mode;
+    sampler_description.AddressV       = texture_address_mode;
+    sampler_description.AddressW       = texture_address_mode;
     sampler_description.MipLODBias     = 0.f;
     sampler_description.MaxAnisotropy  = 1;
     sampler_description.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
@@ -376,14 +408,11 @@ void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_
     subresource.pSysMem = initial_data;
 
     D3D11_CALL(d3d_device->CreateBuffer(&description, (initial_data != null) ? &subresource : null, &buffer->handle));
-
-    buffer->index_in_shader = index_in_shader;
 }
 
 void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer) {
     buffer->handle->Release();
     buffer->handle = null;
-    buffer->index_in_shader = 0;
 }
 
 void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data) {
@@ -391,9 +420,9 @@ void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data) {
     d3d_context->UpdateSubresource(buffer->handle, 0, null, data, 0, 0);
 }
 
-void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, Shader_Type shader_types) {
-    if(shader_types & SHADER_Vertex) d3d_context->VSSetConstantBuffers((UINT) buffer->index_in_shader, 1, &buffer->handle);
-    if(shader_types & SHADER_Pixel)  d3d_context->PSSetConstantBuffers((UINT) buffer->index_in_shader, 1, &buffer->handle);
+void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, Shader_Type shader_types) {
+    if(shader_types & SHADER_Vertex) d3d_context->VSSetConstantBuffers((UINT) index_in_shader, 1, &buffer->handle);
+    if(shader_types & SHADER_Pixel)  d3d_context->PSSetConstantBuffers((UINT) index_in_shader, 1, &buffer->handle);
 }
 
 
@@ -413,7 +442,10 @@ void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Spec
 
     char *file_path_cstring = to_cstring(Default_Allocator, file_path);
     D3DCompile(file_content.data, file_content.count, file_path_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->vertex_blob, &error_blob);
-    D3DCompile(file_content.data, file_content.count, file_path_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->pixel_blob, &error_blob);
+    
+    if(!error_blob) {
+        D3DCompile(file_content.data, file_content.count, file_path_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->pixel_blob, &error_blob);
+    }
 
     if(shader->vertex_blob && shader->pixel_blob) {
         D3D11_CALL(d3d_device->CreateVertexShader(shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), null, &shader->vertex_shader));
@@ -638,14 +670,51 @@ void create_pipeline_state(Pipeline_State *state) {
     rasterizer.ScissorEnable         = state->enable_scissors;
     rasterizer.MultisampleEnable     = state->enable_multisample;
     rasterizer.AntialiasedLineEnable = FALSE;
-    D3D11_CALL(d3d_device->CreateRasterizerState(&rasterizer, &state->handle));
+    D3D11_CALL(d3d_device->CreateRasterizerState(&rasterizer, &state->rasterizer));
+
+    D3D11_BLEND_DESC blender;
+    blender.AlphaToCoverageEnable  = FALSE;
+    blender.IndependentBlendEnable = FALSE; // All render targets should use the same blend state.
+    switch(state->blend_mode) {
+    case BLEND_Additive:
+        blender.RenderTarget[0].BlendEnable           = TRUE;
+        blender.RenderTarget[0].SrcBlend              = D3D11_BLEND_SRC_ALPHA;
+        blender.RenderTarget[0].DestBlend             = D3D11_BLEND_DEST_ALPHA;
+        blender.RenderTarget[0].BlendOp               = D3D11_BLEND_OP_ADD;
+        blender.RenderTarget[0].SrcBlendAlpha         = D3D11_BLEND_SRC_ALPHA;
+        blender.RenderTarget[0].DestBlendAlpha        = D3D11_BLEND_DEST_ALPHA;
+        blender.RenderTarget[0].BlendOpAlpha          = D3D11_BLEND_OP_ADD;
+        blender.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        break;
+
+    case BLEND_Default:
+        blender.RenderTarget[0].BlendEnable           = TRUE;
+        blender.RenderTarget[0].SrcBlend              = D3D11_BLEND_SRC_ALPHA;
+        blender.RenderTarget[0].DestBlend             = D3D11_BLEND_INV_SRC_ALPHA;
+        blender.RenderTarget[0].BlendOp               = D3D11_BLEND_OP_ADD;
+        blender.RenderTarget[0].SrcBlendAlpha         = D3D11_BLEND_SRC_ALPHA;
+        blender.RenderTarget[0].DestBlendAlpha        = D3D11_BLEND_INV_SRC_ALPHA;
+        blender.RenderTarget[0].BlendOpAlpha          = D3D11_BLEND_OP_ADD;
+        blender.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        break;
+
+    default:
+        blender.RenderTarget[0].BlendEnable = false;
+        break;
+    }
+
+    D3D11_CALL(d3d_device->CreateBlendState(&blender, &state->blender));
 }
 
 void destroy_pipeline_state(Pipeline_State *state) {
-    state->handle->Release();
-    state->handle = null;
+    state->blender->Release();
+    state->rasterizer->Release();
+
+    state->blender    = null;
+    state->rasterizer = null;
 }
 
 void bind_pipeline_state(Pipeline_State *state) {
-    d3d_context->RSSetState(state->handle);
+    d3d_context->OMSetBlendState(state->blender, null, 0xffffffff);
+    d3d_context->RSSetState(state->rasterizer);
 }

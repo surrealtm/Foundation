@@ -47,11 +47,8 @@ struct Font_Glyph {
     u32 code;
 
      // The offset in pixels from the current cursor position to where the bitmap of this glyph should be placed.
-    s8 cursor_offset_x;
-    s8 cursor_offset_y;
-
-    // Which font atlas this glyph is stored in.
-    u8 atlas_index;
+    s16 cursor_offset_x;
+    s16 cursor_offset_y;
 
     // The bitmap size of this glyph inside the font atlas. This glyph's bitmap should be blitted onto the
     // screen in a 1:1 ratio for optimal quality.
@@ -60,6 +57,9 @@ struct Font_Glyph {
     u16 bitmap_offset_x;
     u16 bitmap_offset_y;
 
+    // Which font atlas this glyph is stored in.
+    u16 atlas_index;
+
     // The horizontal advances (including kerning) in pixels to every other glyph.
     s16 *advances;
 };
@@ -67,6 +67,7 @@ struct Font_Glyph {
 struct Font {
     // Font bitmap. The font may require multiple textures, depending on the glyph
     // count and the selected size. These are stored in a linked list.
+    Font_Filter filter; // Whatever the user passed in create_font_from_file.
     Font_Atlas *atlas;
 
     // Font metrics, all in pixels.
@@ -85,9 +86,10 @@ struct Font {
 };
 
 struct Text_Mesh {
-    s64 vertex_count;
-    f32 *vertices;
-    f32 *uvs;
+    s64 glyph_count;
+    f32 *vertices; // 6 Vertices per glyph. 2 Floats per Vertex.
+    f32 *uvs; // 6 Uvs per glyph. 2 Floats per Vertex.
+    Font_Atlas **atlasses; // 1 Atlas per glyph.
 };
 
 b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load);

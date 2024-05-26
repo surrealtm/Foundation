@@ -11,16 +11,17 @@ struct ID3D10Blob;
 typedef ID3D10Blob ID3DBlob;
 
 struct ID3D11Buffer;
-struct ID3D11ShaderResourceView;
-struct ID3D11SamplerState;
 struct ID3D11Texture2D;
-struct ID3D11VertexShader;
+struct ID3D11BlendState;
 struct ID3D11PixelShader;
 struct ID3D11InputLayout;
-struct ID3D11RenderTargetView;
+struct ID3D11SamplerState;
+struct ID3D11VertexShader;
 struct ID3D11RasterizerState;
+struct ID3D11RenderTargetView;
 struct ID3D11DepthStencilView;
 struct ID3D11DepthStencilState;
+struct ID3D11ShaderResourceView;
 
 struct Window;
 
@@ -57,6 +58,19 @@ struct Vertex_Buffer_Array {
     s64 count;
 };
 
+enum Texture_Hints {
+    TEXTURE_FILTER_Nearest = 0x1,
+    TEXTURE_FILTER_Linear  = 0x2,
+    TEXTURE_FILTER         = 0x3,
+
+    TEXTURE_WRAP_Repeat = 0x4,
+    TEXTURE_WRAP_Edge   = 0x8,
+    TEXTURE_WRAP_Border = 0x10,
+    TEXTURE_WRAP        = 0x1c,
+};
+
+BITWISE(Texture_Hints);
+
 struct Texture {
     s32 w, h;
     u8 channels;
@@ -79,7 +93,6 @@ struct Shader_Input_Specification {
 };
 
 struct Shader_Constant_Buffer {
-    s64 index_in_shader;
     ID3D11Buffer *handle;
 };
 
@@ -111,15 +124,23 @@ struct Frame_Buffer {
     b8 has_depth;
 };
 
+enum Blend_Mode {
+    BLEND_Disabled,
+    BLEND_Default,
+    BLEND_Additive,
+};
+
 struct Pipeline_State {
     // --- User Level Input
-    b8 enable_culling;
-    b8 enable_depth_test;
-    b8 enable_scissors;
-    b8 enable_multisample;
+    b8 enable_culling     = true;
+    b8 enable_depth_test  = true;
+    b8 enable_scissors    = false;
+    b8 enable_multisample = false;
+    Blend_Mode blend_mode = BLEND_Default;
     
     // --- Internal Handle
-    ID3D11RasterizerState *handle;
+    ID3D11RasterizerState *rasterizer;
+    ID3D11BlendState *blender;
 };
 
 void create_d3d11_context(Window *window);
@@ -142,15 +163,15 @@ void update_vertex_data(Vertex_Buffer_Array *array, s64 index, f32 *data, u64 fl
 void bind_vertex_buffer_array(Vertex_Buffer_Array *array);
 void draw_vertex_buffer_array(Vertex_Buffer_Array *array);
 
-void create_texture_from_file(Texture *texture, string file_path);
-void create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels);
+void create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints);
+void create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints);
 void destroy_texture(Texture *texture);
 void bind_texture(Texture *texture, s64 index_in_shader);
 
 void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, s64 size_in_bytes, void *initial_data = null);
 void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer);
 void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data);
-void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, Shader_Type shader_types);
+void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, Shader_Type shader_types);
 
 void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count);
 void destroy_shader(Shader *shader);
