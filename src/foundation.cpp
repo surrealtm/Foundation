@@ -5,8 +5,6 @@
 #include <string.h> // For strlen
 
 b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, ...) {
-    Stack_Trace trace = os_get_stack_trace();
-
     char message[1024];
     u32 message_length = 0;
     s64 header_length  = 0;
@@ -36,6 +34,9 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
     
     printf("Expression: '%s'\n\n", assertion_text);
 
+#if FOUNDATION_DEVELOPER
+    Stack_Trace trace = os_get_stack_trace();
+
     printf("Stack Trace:\n");
 
     for(s64 i = 1; i < trace.frame_count; ++i) { // The first frame would be this procedure, which we want to ignore.
@@ -53,6 +54,10 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
     }
 
     os_debug_break();
+#else
+    os_terminate_process(0);
+#endif
+
     return true;
 }
 

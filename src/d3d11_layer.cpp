@@ -347,7 +347,7 @@ void create_texture_from_file(Texture *texture, string file_path, Texture_Hints 
         return;
     }
     
-    create_texture_from_memory(texture, buffer, w, h, channels, hints);
+    create_texture_from_memory(texture, buffer, w, h, 4, hints); // 'channels' contains the original channels in the file, not the converted output which we forced to 4
 
     stbi_image_free(buffer);
 }

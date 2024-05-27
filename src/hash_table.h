@@ -42,6 +42,7 @@ struct Chained_Hash_Table {
 
     void add(K const &k, V const &v);
     void remove(K const &k);
+    V *push(K const &k);
     V *query(K const &k);
 
 #if FOUNDATION_DEVELOPER
@@ -86,6 +87,7 @@ struct Probed_Hash_Table {
 
     void add(K const &k, V const &v);
     void remove(K const &k);
+    V *push(K const &k);
     V *query(K const &k);
 
 #if FOUNDATION_DEVELOPER

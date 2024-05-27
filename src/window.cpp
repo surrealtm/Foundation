@@ -615,6 +615,23 @@ void show_cursor() {
 #endif
 }
 
+void confine_cursor(s32 x0, s32 y0, s32 x1, s32 y1) {
+#if FOUNDATION_WIN32
+    RECT rect;
+    rect.left   = x0;
+    rect.top    = y0;
+    rect.right  = x1;
+    rect.bottom = y1;
+    ClipCursor(&rect);
+#endif
+}
+
+void unconfine_cursor() {
+#if FOUNDATION_WIN32
+    ClipCursor(null);
+#endif
+}
+
 void window_sleep(f32 seconds) {
 #if FOUNDATION_WIN32
     Sleep((DWORD) (seconds * 1000.0f));

@@ -797,7 +797,8 @@ string String_Builder::finish() {
 		return result;
 	} else {
 		// There was only ever one block of data, meaning this block is already our complete
-		// string.
-		return string_view(this->first.data, this->first.count);
+		// string. That block however was allocated on the stack, so we need to move it onto
+		// the supplied allocator.
+		return copy_string(this->allocator, string_view(this->first.data, this->first.count));
 	}
 }

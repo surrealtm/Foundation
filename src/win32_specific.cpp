@@ -53,6 +53,10 @@ void os_debug_break() {
     DebugBreak();
 }
 
+void os_terminate_process(u32 exit_code) {
+    ExitProcess(exit_code);
+}
+
 void os_enable_high_resolution_clock() {
     timeBeginPeriod(1);
 }
@@ -453,6 +457,7 @@ u64 os_get_cpu_cycle() {
 /* ----------------------------------------------- Stack Trace ----------------------------------------------- */
 
 Stack_Trace os_get_stack_trace() {
+#if FOUNDATION_DEVELOPER
     const s64 max_frames_to_capture = 256; // We don't know in advance how many frames there are going to be (and we don't want to iterate twice), so just preallocate a max number.
 
     //
@@ -509,6 +514,9 @@ Stack_Trace os_get_stack_trace() {
 
     SymCleanup(process);
     return trace;
+#else
+    return Stack_Trace();
+#endif
 }
 
 void os_free_stack_trace(Stack_Trace *trace) {

@@ -111,35 +111,8 @@ void Chained_Hash_Table<K, V>::destroy() {
 
 template<typename K, typename V>
 void Chained_Hash_Table<K, V>::add(K const &k, V const &v) {
-    assert(!this->query(k));
-
-    u64 hash = this->hash(k);
-    u64 bucket_index = hash & this->bucket_mask;
-
-    if(this->bucket_occupied[bucket_index]) {
-        Entry *entry = (Entry *) this->allocator->allocate(sizeof(Entry));
-        entry->next  = this->buckets[bucket_index].next;
-        entry->hash  = hash;
-        entry->key   = k;
-        entry->value = v;
-        this->buckets[bucket_index].next = entry;
-
-#if FOUNDATION_DEVELOPER
-        this->stats.collisions += 1;
-#endif
-    } else {
-        this->buckets[bucket_index].next    = null;
-        this->buckets[bucket_index].hash    = hash;
-        this->buckets[bucket_index].key     = k;
-        this->buckets[bucket_index].value   = v;
-        this->bucket_occupied[bucket_index] = true;
-    }
-    
-    ++this->count;
-
-#if FOUNDATION_DEVELOPER
-    this->stats.load_factor = (f32) this->count / (f32) this->bucket_count;
-#endif
+    V *value = this->push(k);
+    *value = v;
 }
 
 template<typename K, typename V>
@@ -174,6 +147,42 @@ void Chained_Hash_Table<K, V>::remove(K const &k) {
 #if FOUNDATION_DEVELOPER
     this->stats.load_factor = (f32) this->count / (f32) this->bucket_count;
 #endif
+}
+
+template<typename K, typename V>
+V *Chained_Hash_Table<K, V>::push(K const &k) {
+    assert(!this->query(k));
+
+    u64 hash = this->hash(k);
+    u64 bucket_index = hash & this->bucket_mask;
+
+    Entry *entry;
+
+    if(this->bucket_occupied[bucket_index]) {
+        entry = (Entry *) this->allocator->allocate(sizeof(Entry));
+        entry->next  = this->buckets[bucket_index].next;
+        entry->hash  = hash;
+        entry->key   = k;
+        this->buckets[bucket_index].next = entry;
+
+#if FOUNDATION_DEVELOPER
+        this->stats.collisions += 1;
+#endif
+    } else {
+        entry = &this->buckets[bucket_index];
+        entry->next    = null;
+        entry->hash    = hash;
+        entry->key     = k;
+        this->bucket_occupied[bucket_index] = true;
+    }
+    
+    ++this->count;
+
+#if FOUNDATION_DEVELOPER
+    this->stats.load_factor = (f32) this->count / (f32) this->bucket_count;
+#endif
+
+    return &entry->value;
 }
 
 template<typename K, typename V>
@@ -267,31 +276,10 @@ void Probed_Hash_Table<K, V>::destroy() {
 
 template<typename K, typename V>
 void Probed_Hash_Table<K, V>::add(K const &k, V const &v) {
-    if(this->count == this->bucket_count) return;
+    V *value = this->push(k);
+    if(!value) return; // Hash table is full!
 
-    assert(!this->query(k));
-    
-    u64 hash = this->hash(k);
-    u64 slot = hash & this->bucket_mask;
-
-    while(this->buckets[slot].state == HASH_TABLE_ENTRY_Used) {
-#if FOUNDATION_DEVELOPER
-        this->stats.collisions += 1;
-#endif
-
-        slot = (slot + 1) & this->bucket_mask;
-    }
-
-    this->buckets[slot].state = HASH_TABLE_ENTRY_Used;
-    this->buckets[slot].hash  = hash;
-    this->buckets[slot].key   = k;
-    this->buckets[slot].value = v;
-
-    ++this->count;
-    
-#if FOUNDATION_DEVELOPER
-    this->stats.load_factor = (f64) this->count / (f64) this->bucket_count;
-#endif
+    *value = v;
 }
 
 template<typename K, typename V>
@@ -312,6 +300,36 @@ void Probed_Hash_Table<K, V>::remove(K const &k) {
 #if FOUNDATION_DEVELOPER
     this->stats.load_factor = (f64) this->count / (f64) this->bucket_count;
 #endif
+}
+
+template<typename K, typename V>
+V *Probed_Hash_Table<K, V>::push(K const &k) {
+    if(this->count == this->bucket_count) return null;
+
+    assert(!this->query(k));
+    
+    u64 hash = this->hash(k);
+    u64 slot = hash & this->bucket_mask;
+
+    while(this->buckets[slot].state == HASH_TABLE_ENTRY_Used) {
+#if FOUNDATION_DEVELOPER
+        this->stats.collisions += 1;
+#endif
+
+        slot = (slot + 1) & this->bucket_mask;
+    }
+
+    this->buckets[slot].state = HASH_TABLE_ENTRY_Used;
+    this->buckets[slot].hash  = hash;
+    this->buckets[slot].key   = k;
+
+    ++this->count;
+    
+#if FOUNDATION_DEVELOPER
+    this->stats.load_factor = (f64) this->count / (f64) this->bucket_count;
+#endif
+
+    return &this->buckets[slot].value;
 }
 
 template<typename K, typename V>
