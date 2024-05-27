@@ -230,9 +230,12 @@ m4<T> m4_rotate(const m4<T> &matrix, T angle, T x, T y, T z) {
     result[2][2] = z * z * _cos_inv + _cos;
     result[2][3] = 0;
 
-    result[3] = { 0, 0, 0, 1 };
+    result[3][0] = 0;
+    result[3][1] = 0;
+    result[3][2] = 0;
+    result[3][3] = 1;
     
-    return result;    
+    return matrix * result;    
 }
 
 template<typename T>

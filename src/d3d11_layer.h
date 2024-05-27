@@ -106,10 +106,13 @@ struct Shader {
 };
 
 struct Frame_Buffer_Color_Attachment {
+    b8 create_shader_view;
     s32 w, h;
     u32 format; // DXGI_FORMAT
-    ID3D11RenderTargetView *view;
+    ID3D11RenderTargetView *render_view;
     ID3D11Texture2D *texture;
+    ID3D11ShaderResourceView *shader_view;
+    ID3D11SamplerState *sampler;
 };
 
 struct Frame_Buffer_Depth_Attachment {
@@ -186,11 +189,12 @@ void bind_shader(Shader *shader);
 
 void create_frame_buffer(Frame_Buffer *frame_buffer, u8 samples = 1);
 void destroy_frame_buffer(Frame_Buffer *frame_buffer);
-void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, b8 hdr = false);
+void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, b8 create_shader_view = false, b8 hdr = false);
 void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h);
 void resize_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s64 index, s32 w, s32 h);
 void resize_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h);
 void resize_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h);
+void bind_frame_buffer_color_attachment_to_shader(Frame_Buffer *frame_buffer, s64 attachment_index, s64 index_in_shader);
 void bind_frame_buffer(Frame_Buffer *frame_buffer);
 void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b);
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);
