@@ -79,6 +79,17 @@ string os_get_executable_directory();
 
 /* -------------------------------------------------- Timing -------------------------------------------------- */
 
+struct System_Time {
+    u16 millisecond;
+    u16 second;
+    u16 minute;
+    u16 hour;
+    u16 day;
+    u16 month;
+    u16 year;
+};
+
+System_Time os_get_system_time();
 Hardware_Time os_get_hardware_time();
 f64 os_convert_hardware_time(Hardware_Time input, Time_Unit unit);
 f64 os_convert_hardware_time(f64 input, Time_Unit unit);

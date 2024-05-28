@@ -403,6 +403,21 @@ string os_get_executable_directory() {
 LARGE_INTEGER __win32_performance_frequency;
 b8 __win32_performance_frequency_set = false;
 
+System_Time os_get_system_time() {
+    SYSTEMTIME win32;
+    GetLocalTime(&win32);
+
+    System_Time system;
+    system.year        = win32.wYear;
+    system.month       = win32.wMonth;
+    system.day         = win32.wDay;
+    system.hour        = win32.wHour;
+    system.minute      = win32.wMinute;
+    system.second      = win32.wSecond;
+    system.millisecond = win32.wMilliseconds;
+    return system;
+}
+
 Hardware_Time os_get_hardware_time() {
     LARGE_INTEGER counter;
     QueryPerformanceCounter(&counter);

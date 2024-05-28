@@ -51,6 +51,9 @@ qt<T> operator/(qt<T> const &lhs, T const &rhs) { return qt<T>(lhs.x / rhs, lhs.
 /* ------------------------------------------------ QT Algebra ------------------------------------------------ */
 
 template<typename T>
+T qt_dot(qt<T> const &lhs, qt<T> const &rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w; }
+
+template<typename T>
 qt<T> qt_length(qt<T> const &q) { return static_cast<T>(sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w)); }
 
 template<typename T>
@@ -62,6 +65,12 @@ qt<T> qt_normalize(qt<T> const &q) { T denom = 1 / qt_length(q); return qt<T>(q.
 
 
 /* ----------------------------------------------- QT Rotation ----------------------------------------------- */
+
+template<typename T>
+static inline
+T qt_mix(T const &lhs, T const &rhs, T const &t) {
+    return lhs * t + rhs * (static_cast<T>(1) - t);
+}
 
 template<typename T>
 qt<T> qt_conjugate(qt<T> const &q) { return qt<T>(-q.x, -q.y, -q.z, q.w); }
@@ -84,6 +93,52 @@ v3<T> qt_rotate(qt<T> const &q, v3<T> const &v) {
                           2 * u_dot_v * q.z + (w_squared - u_dot_u) * v.z + 2 * q.w * u_cross_v.z);
 
     return rotated;
+}
+
+template<typename T>
+qt<T> qt_slerp(qt<T> const &lhs, qt<T> const &rhs, T t) {
+    T theta = qt_dot(lhs, rhs);
+    qt<T> _rhs;
+
+    if(theta < static_cast<T>(0)) {
+        theta = -theta;
+        _rhs  = -rhs;
+    } else {
+        _rhs = rhs;
+    }
+
+    qt<T> result;
+    if(theta < static_cast<T>(1)) {
+        T angle = static_cast<T>(acos(theta));
+        result = (lhs * static_cast<T>(sin((1 - t) * angle)) + _rhs * static_cast<T>(sin(t * angle))) / static_cast<T>(sin(angle));
+    } else {
+        result = qt<T>(qt_mix(lhs.x, _rhs.x, t), qt_mix(lhs.y, _rhs.y, t), qt_mix(lhs.z, _rhs.z, t), qt_mix(lhs.w, _rhs.w, t));        
+    }
+
+    return result;
+}
+
+template<typename T>
+qt<T> qt_slerp_long(qt<T> const &lhs, qt<T> const &rhs, T t) {
+    T theta = qt_dot(lhs, rhs);
+    qt<T> _rhs;
+
+    if(theta > static_cast<T>(0)) {
+        theta = -theta;
+        _rhs  = -rhs;
+    } else {
+        _rhs = rhs;
+    }
+
+    qt<T> result;
+    if(theta < static_cast<T>(1)) {
+        T angle = static_cast<T>(acos(theta));
+        result = lhs * static_cast<T>(sin((1 - t) * angle)) + _rhs * static_cast<T>(sin(t * angle));
+    } else {
+        result = qt<T>(qt_mix(lhs.x, _rhs.x, t), qt_mix(lhs.y, _rhs.y, t), qt_mix(lhs.z, _rhs.z, t), qt_mix(lhs.w, _rhs.w, t));        
+    }
+
+    return result;
 }
 
 

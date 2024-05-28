@@ -2,6 +2,7 @@
 
 #include "foundation.h"
 #include "strings.h"
+#include "error.h"
 
 //
 // Forward declarations to avoid having to include the D3D11 headers here.
@@ -155,6 +156,7 @@ struct Pipeline_State {
 void create_d3d11_context(Window *window);
 void destroy_d3d11_context(Window *window);
 void swap_d3d11_buffers(Window *window);
+void clear_d3d11_state();
 Frame_Buffer *get_default_frame_buffer(Window *window);
 void resize_default_frame_buffer(Window *window);
 
@@ -173,8 +175,8 @@ void update_vertex_data(Vertex_Buffer_Array *array, s64 index, f32 *data, u64 fl
 void bind_vertex_buffer_array(Vertex_Buffer_Array *array);
 void draw_vertex_buffer_array(Vertex_Buffer_Array *array);
 
-void create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints);
-void create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints);
+Error_Code create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints);
+Error_Code create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints);
 void destroy_texture(Texture *texture);
 void bind_texture(Texture *texture, s64 index_in_shader);
 
@@ -183,7 +185,8 @@ void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer);
 void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data);
 void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, Shader_Type shader_types);
 
-void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count);
+Error_Code create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count);
+Error_Code create_shader_from_memory(Shader *shader, string _string, string name, Shader_Input_Specification *inputs, s64 input_count);
 void destroy_shader(Shader *shader);
 void bind_shader(Shader *shader);
 

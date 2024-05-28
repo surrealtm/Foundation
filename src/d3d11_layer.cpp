@@ -60,7 +60,13 @@ void create_d3d11_device() {
     if(d3d_device != null) return;
 
     D3D_DRIVER_TYPE driver = D3D_DRIVER_TYPE_HARDWARE;
+
+#if FOUNDATION_DEVELOPER
     UINT flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_DEBUG;
+#else
+    UINT flags = D3D11_CREATE_DEVICE_SINGLETHREADED;
+#endif
+
     UINT sdk = D3D11_SDK_VERSION;
     
     D3D11_CALL(D3D11CreateDevice(null, driver, null, flags, null, 0, sdk, &d3d_device, &d3d_feature_level, &d3d_context));
@@ -99,7 +105,7 @@ DXGI_FORMAT d3d11_format(u8 channels, D3D11_Data_Type data_type) {
         case 1: format = DXGI_FORMAT_R8_UNORM; break;
         case 2: format = DXGI_FORMAT_R8G8_UNORM; break;
         case 4: format = DXGI_FORMAT_R8G8B8A8_UNORM; break;
-        default: foundation_error("Invalid channel count for a D3D11 format."); break;
+        default: format = (DXGI_FORMAT) -1; break; // Invalid channel count
         }
     } break;
 
@@ -109,12 +115,12 @@ DXGI_FORMAT d3d11_format(u8 channels, D3D11_Data_Type data_type) {
         case 2: format = DXGI_FORMAT_R32G32_FLOAT; break;
         case 3: format = DXGI_FORMAT_R32G32B32_FLOAT; break;
         case 4: format = DXGI_FORMAT_R32G32B32A32_FLOAT; break;
-        default: foundation_error("Invalid channel count for a D3D11 format."); break;
+        default: format = (DXGI_FORMAT) -1; break; // Invalid channel count
         }
     } break;
 
     default:
-        foundation_error("Invalid data type for a D3D11 format."); break;
+        format = (DXGI_FORMAT) -2; break; // Invalid data type
         break;
     }
 
@@ -195,6 +201,10 @@ void destroy_d3d11_context(Window *window) {
 void swap_d3d11_buffers(Window *window) {
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
     d3d11->swapchain->Present(1, 0);
+}
+
+void clear_d3d11_state() {
+    d3d_context->ClearState();
 }
 
 Frame_Buffer *get_default_frame_buffer(Window *window) {
@@ -332,7 +342,7 @@ void draw_vertex_buffer_array(Vertex_Buffer_Array *array) {
 
 /* --------------------------------------------------- Texture --------------------------------------------------- */
 
-void create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints) {
+Error_Code create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints) {
     char *cstring = to_cstring(Default_Allocator, file_path);
     defer { free_cstring(Default_Allocator, cstring); };
 
@@ -343,29 +353,34 @@ void create_texture_from_file(Texture *texture, string file_path, Texture_Hints 
     // leave 1 or 2 channels as they are...)
     u8 *buffer = stbi_load(cstring, &w, &h, &channels, 4);
     if(!buffer) {
-        foundation_error("Failed to load texture '%.*s' from disk: %s.", (u32) file_path.count, file_path.data, stbi_failure_reason());
-        return;
+        set_custom_error_message(stbi_failure_reason());
+        return ERROR_Custom_Error_Message;
     }
     
-    create_texture_from_memory(texture, buffer, w, h, 4, hints); // 'channels' contains the original channels in the file, not the converted output which we forced to 4
+    Error_Code error = create_texture_from_memory(texture, buffer, w, h, 4, hints); // 'channels' contains the original channels in the file, not the converted output which we forced to 4
 
     stbi_image_free(buffer);
+    return error;
 }
 
-void create_texture_from_memory(Texture *texture, u8 *bitmap, s32 w, s32 h, u8 channels, Texture_Hints hints) {
+Error_Code create_texture_from_memory(Texture *texture, u8 *bitmap, s32 w, s32 h, u8 channels, Texture_Hints hints) {
+    DXGI_FORMAT format = d3d11_format(channels, D3D11_UByte);
+    D3D11_FILTER filter = d3d11_filter(hints);
+    D3D11_TEXTURE_ADDRESS_MODE texture_address_mode = d3d11_texture_address_mode(hints);
+    
+    if(format == -1) return ERROR_D3D11_Invalid_Channel_Count;
+    if(format == -2) return ERROR_D3D11_Invalid_Data_Type;
+
     texture->w = w;
     texture->h = h;
     texture->channels = channels;
 
-    D3D11_FILTER filter = d3d11_filter(hints);
-    D3D11_TEXTURE_ADDRESS_MODE texture_address_mode = d3d11_texture_address_mode(hints);
-    
     D3D11_TEXTURE2D_DESC texture_description{};
     texture_description.Width              = texture->w;
     texture_description.Height             = texture->h;
     texture_description.MipLevels          = 1;
     texture_description.ArraySize          = 1;
-    texture_description.Format             = d3d11_format(texture->channels, D3D11_UByte);
+    texture_description.Format             = format;
     texture_description.SampleDesc.Count   = 1;
     texture_description.SampleDesc.Quality = 0;
     texture_description.Usage              = D3D11_USAGE_DEFAULT;
@@ -392,12 +407,14 @@ void create_texture_from_memory(Texture *texture, u8 *bitmap, s32 w, s32 h, u8 c
     D3D11_CALL(d3d_device->CreateTexture2D(&texture_description, &subresource, &texture->handle));
     D3D11_CALL(d3d_device->CreateShaderResourceView(texture->handle, null, &texture->view));
     D3D11_CALL(d3d_device->CreateSamplerState(&sampler_description, &texture->sampler));
+
+    return Success;
 }
 
 void destroy_texture(Texture *texture) {
-    texture->sampler->Release();
-    texture->view->Release();
-    texture->handle->Release();
+    if(texture->sampler) texture->sampler->Release();
+    if(texture->view) texture->view->Release();
+    if(texture->handle) texture->handle->Release();
     texture->sampler  = null;
     texture->view     = null;
     texture->handle   = null;
@@ -407,6 +424,8 @@ void destroy_texture(Texture *texture) {
 }
 
 void bind_texture(Texture *texture, s64 index_in_shader) {
+    if(!texture->sampler || !texture->view) return;
+    
     d3d_context->PSSetSamplers((UINT) index_in_shader, 1, &texture->sampler);
     d3d_context->PSSetShaderResources((UINT) index_in_shader, 1, &texture->view);
 }
@@ -452,29 +471,36 @@ void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_sh
 
 /* -------------------------------------------------- Shader -------------------------------------------------- */
 
-void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count) {
+Error_Code create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count) {
     foundation_assert(input_count < D3D11_MAX_SHADER_INPUTS);
 
+    string file_content = os_read_file(Default_Allocator, file_path);
+    if(!file_content.count) return ERROR_File_Not_Found;
+
+    Error_Code error = create_shader_from_memory(shader, file_content, file_path, inputs, input_count);
+    os_free_file_content(Default_Allocator, &file_content);
+    return error;
+}
+
+Error_Code create_shader_from_memory(Shader *shader, string _string, string name, Shader_Input_Specification *inputs, s64 input_count) {
+    Error_Code error_code = Success;
     ID3DBlob *error_blob = null;
 
-    string file_content = os_read_file(Default_Allocator, file_path);
-    if(!file_content.count) {
-        foundation_error("Failed to load shader '%.*s' from disk: The file does not exist.", (u32) file_path.count, file_path.data);
-        return;
-    }
-
-    char *file_path_cstring = to_cstring(Default_Allocator, file_path);
-    D3DCompile(file_content.data, file_content.count, file_path_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->vertex_blob, &error_blob);
+    char *name_cstring = to_cstring(Default_Allocator, name);
+    D3DCompile(_string.data, _string.count, name_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->vertex_blob, &error_blob);
     
     if(!error_blob) {
-        D3DCompile(file_content.data, file_content.count, file_path_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->pixel_blob, &error_blob);
+        // If the vertex shader already failed, then the error blob is already filled out and we would just
+        // overwrite these error messages here, which we don't want to do.
+        D3DCompile(_string.data, _string.count, name_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->pixel_blob, &error_blob);
     }
 
     if(shader->vertex_blob && shader->pixel_blob) {
-        D3D11_CALL(d3d_device->CreateVertexShader(shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), null, &shader->vertex_shader));
-        D3D11_CALL(d3d_device->CreatePixelShader(shader->pixel_blob->GetBufferPointer(), shader->pixel_blob->GetBufferSize(), null, &shader->pixel_shader));
+        HRESULT vertex_result = d3d_device->CreateVertexShader(shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), null, &shader->vertex_shader);
+        HRESULT pixel_result  = d3d_device->CreatePixelShader(shader->pixel_blob->GetBufferPointer(), shader->pixel_blob->GetBufferSize(), null, &shader->pixel_shader);
 
-        if(shader->vertex_shader && shader->pixel_shader) {
+        if(SUCCEEDED(vertex_result) && SUCCEEDED(pixel_result)) {
+            foundation_assert(shader->vertex_shader != null && shader->pixel_shader != null);
             D3D11_INPUT_ELEMENT_DESC input_element_description[D3D11_MAX_SHADER_INPUTS];
 
             for(s64 i = 0; i < input_count; ++i) {                
@@ -483,20 +509,27 @@ void create_shader_from_file(Shader *shader, string file_path, Shader_Input_Spec
                 };
             }
 
-            D3D11_CALL(d3d_device->CreateInputLayout(input_element_description, (UINT) input_count, shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), &shader->input_layout));
+            HRESULT result = d3d_device->CreateInputLayout(input_element_description, (UINT) input_count, shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), &shader->input_layout);
+
+            if(!SUCCEEDED(result)) {
+                error_code = ERROR_D3D11_Invalid_Shader_Inputs;
+                destroy_shader(shader);
+            }
         } else {
-            foundation_error("Failed to create shader '%.*s'.", (u32) file_path.count, file_path.data);
+            error_code = ERROR_Custom_Error_Message;
+            set_custom_error_message("The shader uses unsupported bytecode on this device.");
             destroy_shader(shader);
         }
     } else {
-        foundation_assert(error_blob != null);
-        foundation_error("Failed to compile shader '%.*s': '%s'.", (u32) file_path.count, file_path.data, error_blob->GetBufferPointer());
+        error_code = ERROR_Custom_Error_Message;
+        set_custom_error_message((char *) error_blob->GetBufferPointer());
         destroy_shader(shader);
     }
     
-    free_cstring(Default_Allocator, file_path_cstring);
-    os_free_file_content(Default_Allocator, &file_content);
+    free_cstring(Default_Allocator, name_cstring);
     if(error_blob) error_blob->Release();
+
+    return error_code;
 }
 
 void destroy_shader(Shader *shader) {
@@ -505,9 +538,17 @@ void destroy_shader(Shader *shader) {
     if(shader->vertex_shader) shader->vertex_shader->Release();
     if(shader->pixel_shader)  shader->pixel_shader->Release();
     if(shader->input_layout)  shader->input_layout->Release();
+
+    shader->vertex_blob   = null;
+    shader->pixel_blob    = null;
+    shader->vertex_shader = null;
+    shader->pixel_shader  = null;
+    shader->input_layout  = null;
 }
 
 void bind_shader(Shader *shader) {
+    if(!shader->vertex_shader || !shader->pixel_shader || !shader->input_layout) return;
+
     d3d_context->VSSetShader(shader->vertex_shader, null, 0);
     d3d_context->PSSetShader(shader->pixel_shader, null, 0);
     d3d_context->IASetInputLayout(shader->input_layout);
