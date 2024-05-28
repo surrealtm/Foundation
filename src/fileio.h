@@ -87,7 +87,7 @@ struct Binary_Writer {
 	void destroy();
 	void flush();
 
-	void write(void *data, s64 size_in_bytes);
+	void write(const void *data, s64 size_in_bytes);
 	void write_u8(u8 value);
 	void write_u16(u16 value);
 	void write_u32(u32 value);

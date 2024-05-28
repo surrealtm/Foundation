@@ -41,7 +41,12 @@ D3D_FEATURE_LEVEL d3d_feature_level;
 
 
 
-/* ------------------------------------------------ Setup Code ------------------------------------------------ */
+/* --------------------------------------------- Internal Helpers --------------------------------------------- */
+
+enum D3D11_Data_Type {
+    D3D11_UByte,
+    D3D11_Float32,
+};
 
 static
 void d3d11_call_wrapper(HRESULT result, const char *assertion_text) {
@@ -55,48 +60,12 @@ void d3d11_call_wrapper(HRESULT result, const char *assertion_text) {
 }
 
 static
-void create_d3d11_device() {
-    ++d3d_device_usage_count;
-    if(d3d_device != null) return;
+DXGI_FORMAT d3d11_format(u8 channels, D3D11_Data_Type data_type, Texture_Hints hints = TEXTURE_HINT_None) {
+    if(hints & TEXTURE_COMPRESS_BC7) {
+        if(data_type != D3D11_UByte) return (DXGI_FORMAT) -2; // Invalid data type
+        return DXGI_FORMAT_BC7_UNORM;
+    }
 
-    D3D_DRIVER_TYPE driver = D3D_DRIVER_TYPE_HARDWARE;
-
-#if FOUNDATION_DEVELOPER
-    UINT flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_DEBUG;
-#else
-    UINT flags = D3D11_CREATE_DEVICE_SINGLETHREADED;
-#endif
-
-    UINT sdk = D3D11_SDK_VERSION;
-    
-    D3D11_CALL(D3D11CreateDevice(null, driver, null, flags, null, 0, sdk, &d3d_device, &d3d_feature_level, &d3d_context));
-
-    D3D11_CALL(d3d_device->QueryInterface(__uuidof(IDXGIDevice2), (void **) &dxgi_device));
-    D3D11_CALL(dxgi_device->GetParent(__uuidof(IDXGIAdapter), (void **) &dxgi_adapter));
-    D3D11_CALL(dxgi_adapter->GetParent(__uuidof(IDXGIFactory2), (void **) &dxgi_factory));
-}
-
-static
-void destroy_d3d11() {
-    --d3d_device_usage_count;
-    if(d3d_device_usage_count > 0) return;
-    
-    dxgi_factory->Release();
-    dxgi_adapter->Release();
-    dxgi_device->Release();
-    d3d_context->Release();
-    d3d_device->Release();
-    d3d_context = null;
-    d3d_device  = null;
-}
-
-enum D3D11_Data_Type {
-    D3D11_UByte,
-    D3D11_Float32,
-};
-
-static
-DXGI_FORMAT d3d11_format(u8 channels, D3D11_Data_Type data_type) {
     DXGI_FORMAT format;
 
     switch(data_type) {
@@ -156,6 +125,45 @@ D3D11_TEXTURE_ADDRESS_MODE d3d11_texture_address_mode(Texture_Hints hints) {
     return output;
 }
 
+
+
+/* ---------------------------------------------- Context Setup ---------------------------------------------- */
+
+static
+void create_d3d11_device() {
+    ++d3d_device_usage_count;
+    if(d3d_device != null) return;
+
+    D3D_DRIVER_TYPE driver = D3D_DRIVER_TYPE_HARDWARE;
+
+#if FOUNDATION_DEVELOPER
+    UINT flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_DEBUG;
+#else
+    UINT flags = D3D11_CREATE_DEVICE_SINGLETHREADED;
+#endif
+
+    UINT sdk = D3D11_SDK_VERSION;
+    
+    D3D11_CALL(D3D11CreateDevice(null, driver, null, flags, null, 0, sdk, &d3d_device, &d3d_feature_level, &d3d_context));
+
+    D3D11_CALL(d3d_device->QueryInterface(__uuidof(IDXGIDevice2), (void **) &dxgi_device));
+    D3D11_CALL(dxgi_device->GetParent(__uuidof(IDXGIAdapter), (void **) &dxgi_adapter));
+    D3D11_CALL(dxgi_adapter->GetParent(__uuidof(IDXGIFactory2), (void **) &dxgi_factory));
+}
+
+static
+void destroy_d3d11() {
+    --d3d_device_usage_count;
+    if(d3d_device_usage_count > 0) return;
+    
+    dxgi_factory->Release();
+    dxgi_adapter->Release();
+    dxgi_device->Release();
+    d3d_context->Release();
+    d3d_device->Release();
+    d3d_context = null;
+    d3d_device  = null;
+}
 
 void create_d3d11_context(Window *window) {
     create_d3d11_device();
@@ -233,7 +241,7 @@ void resize_default_frame_buffer(Window *window) {
 
 
 
-/* ------------------------------------------------ Vertex Buffer ------------------------------------------------ */
+/* ---------------------------------------------- Vertex Buffer ----------------------------------------------- */
 
 void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology, b8 allow_updates) {
     foundation_assert(float_count % dimensions == 0, "Expected byte_count to be a multiple of dimensions.");
@@ -290,7 +298,7 @@ void draw_vertex_buffer(Vertex_Buffer *buffer) {
 
 
 
-/* --------------------------------------------- Vertex Buffer Array --------------------------------------------- */
+/* -------------------------------------------- Vertex Buffer Array ------------------------------------------- */
 
 void create_vertex_buffer_array(Vertex_Buffer_Array *array, Vertex_Buffer_Topology topology) {
     array->topology = topology;
@@ -340,7 +348,7 @@ void draw_vertex_buffer_array(Vertex_Buffer_Array *array) {
 
 
 
-/* --------------------------------------------------- Texture --------------------------------------------------- */
+/* ------------------------------------------------- Texture ------------------------------------------------- */
 
 Error_Code create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints) {
     char *cstring = to_cstring(Default_Allocator, file_path);
@@ -363,8 +371,23 @@ Error_Code create_texture_from_file(Texture *texture, string file_path, Texture_
     return error;
 }
 
-Error_Code create_texture_from_memory(Texture *texture, u8 *bitmap, s32 w, s32 h, u8 channels, Texture_Hints hints) {
-    DXGI_FORMAT format = d3d11_format(channels, D3D11_UByte);
+Error_Code create_texture_from_compressed_file(Texture *texture, string file_path, Texture_Hints hints) {
+    string file_content = os_read_file(Default_Allocator, file_path);
+    if(!file_content.count) {
+        return ERROR_File_Not_Found;
+    }
+
+    s32 width    = *(s32 *) &file_content.data[0];
+    s32 height   = *(s32 *) &file_content.data[4];
+    s32 channels = *(s32 *) &file_content.data[8];
+    u8 *data     =  (u8  *) &file_content.data[12];
+    Error_Code error = create_texture_from_memory(texture, data, width, height, (u8) channels, hints | TEXTURE_COMPRESS_BC7);
+    os_free_file_content(Default_Allocator, &file_content);
+    return error;
+}
+
+Error_Code create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints) {
+    DXGI_FORMAT format = d3d11_format(channels, D3D11_UByte, hints);
     D3D11_FILTER filter = d3d11_filter(hints);
     D3D11_TEXTURE_ADDRESS_MODE texture_address_mode = d3d11_texture_address_mode(hints);
     
@@ -387,11 +410,21 @@ Error_Code create_texture_from_memory(Texture *texture, u8 *bitmap, s32 w, s32 h
     texture_description.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
     texture_description.CPUAccessFlags     = 0;
     texture_description.MiscFlags          = 0;
+
+    u32 pitch, slice_pitch;
+
+    if(hints & TEXTURE_COMPRESS_BC7) {
+        pitch = 16 * (texture->w / 4);
+        slice_pitch = pitch * (texture->h / 4);
+    } else {
+        pitch = texture->w * texture->channels;
+        slice_pitch = pitch * texture->h;
+    }
     
     D3D11_SUBRESOURCE_DATA subresource{};
-    subresource.pSysMem          = bitmap;
-    subresource.SysMemPitch      = texture->w * texture->channels;
-    subresource.SysMemSlicePitch = 0;
+    subresource.pSysMem          = buffer;
+    subresource.SysMemPitch      = pitch;
+    subresource.SysMemSlicePitch = slice_pitch;
 
     D3D11_SAMPLER_DESC sampler_description{};
     sampler_description.Filter         = filter;
@@ -556,7 +589,7 @@ void bind_shader(Shader *shader) {
 
 
 
-/* ------------------------------------------------- Frame Buffer ------------------------------------------------- */
+/* ----------------------------------------------- Frame Buffer ----------------------------------------------- */
 
 static
 void create_frame_buffer_color_attachment_internal(Frame_Buffer *frame_buffer, Frame_Buffer_Color_Attachment *attachment) {

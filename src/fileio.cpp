@@ -343,7 +343,7 @@ void Binary_Writer::flush() {
 	this->buffer_position = 0;
 }
 
-void Binary_Writer::write(void *data, s64 size) {
+void Binary_Writer::write(const void *data, s64 size) {
 	s64 data_offset = 0;
 	while(size > 0) {
 		s64 batch_size = min(this->buffer_size - this->buffer_position, size);

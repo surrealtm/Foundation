@@ -5,6 +5,22 @@
 #include "error.h"
 
 //
+// :TextureCompression
+// This D3D11 abstraction layer supports the creation of compressed textures,
+// that is, loading compressed data into a texture object. It does not support
+// converting raw texture data into compressed data, since that is a little more
+// involved.
+// This layer provides procedures that load compressed textures from disk or from
+// a buffer. It expects a certain data layout here for convenience. If that layout
+// is not provided, the user must manually parse and pass this information (texture
+// width / height...). The layout inside the buffer is essentially the following:
+//    s32 width;
+//    s32 height;
+//    s32 channels;
+//    u8 data[..];
+//
+
+//
 // Forward declarations to avoid having to include the D3D11 headers here.
 //
 
@@ -60,14 +76,19 @@ struct Vertex_Buffer_Array {
 };
 
 enum Texture_Hints {
+    TEXTURE_HINT_None = 0x0,
+
     TEXTURE_FILTER_Nearest = 0x1,
     TEXTURE_FILTER_Linear  = 0x2,
-    TEXTURE_FILTER         = 0x3,
+    TEXTURE_FILTER         = TEXTURE_FILTER_Nearest | TEXTURE_FILTER_Linear,
 
     TEXTURE_WRAP_Repeat = 0x4,
     TEXTURE_WRAP_Edge   = 0x8,
     TEXTURE_WRAP_Border = 0x10,
-    TEXTURE_WRAP        = 0x1c,
+    TEXTURE_WRAP        = TEXTURE_WRAP_Repeat | TEXTURE_WRAP_Edge | TEXTURE_WRAP_Border,
+
+    TEXTURE_COMPRESS_BC7 = 0x20,
+    TEXTURE_COMPRESS     = TEXTURE_COMPRESS_BC7,
 };
 
 BITWISE(Texture_Hints);
@@ -153,6 +174,10 @@ struct Pipeline_State {
     ID3D11BlendState *blender;
 };
 
+
+
+/* ---------------------------------------------- Context Setup ---------------------------------------------- */
+
 void create_d3d11_context(Window *window);
 void destroy_d3d11_context(Window *window);
 void swap_d3d11_buffers(Window *window);
@@ -160,12 +185,20 @@ void clear_d3d11_state();
 Frame_Buffer *get_default_frame_buffer(Window *window);
 void resize_default_frame_buffer(Window *window);
 
+
+
+/* ---------------------------------------------- Vertex Buffer ---------------------------------------------- */
+
 void create_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology, b8 allow_updates = false);
 void allocate_vertex_buffer(Vertex_Buffer *buffer, u64 float_count, u8 dimensions, Vertex_Buffer_Topology topology);
 void destroy_vertex_buffer(Vertex_Buffer *buffer);
 void update_vertex_buffer(Vertex_Buffer *buffer, f32 *data, u64 float_count);
 void bind_vertex_buffer(Vertex_Buffer *buffer);
 void draw_vertex_buffer(Vertex_Buffer *buffer);
+
+
+
+/* ------------------------------------------- Vertex Buffer Array ------------------------------------------- */
 
 void create_vertex_buffer_array(Vertex_Buffer_Array *array, Vertex_Buffer_Topology topology);
 void destroy_vertex_buffer_array(Vertex_Buffer_Array *array);
@@ -175,20 +208,37 @@ void update_vertex_data(Vertex_Buffer_Array *array, s64 index, f32 *data, u64 fl
 void bind_vertex_buffer_array(Vertex_Buffer_Array *array);
 void draw_vertex_buffer_array(Vertex_Buffer_Array *array);
 
+
+
+/* ------------------------------------------------- Texture ------------------------------------------------- */
+
 Error_Code create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints);
 Error_Code create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints);
+Error_Code create_texture_from_compressed_file(Texture *texture, string file_path, Texture_Hints hints); // :TextureCompression
 void destroy_texture(Texture *texture);
 void bind_texture(Texture *texture, s64 index_in_shader);
+
+
+
+/* ------------------------------------------ Shader Constant Buffer ------------------------------------------ */
 
 void create_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 size_in_bytes, void *initial_data = null);
 void destroy_shader_constant_buffer(Shader_Constant_Buffer *buffer);
 void update_shader_constant_buffer(Shader_Constant_Buffer *buffer, void *data);
 void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_shader, Shader_Type shader_types);
 
+
+
+/* -------------------------------------------------- Shader -------------------------------------------------- */
+
 Error_Code create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count);
 Error_Code create_shader_from_memory(Shader *shader, string _string, string name, Shader_Input_Specification *inputs, s64 input_count);
 void destroy_shader(Shader *shader);
 void bind_shader(Shader *shader);
+
+
+
+/* ----------------------------------------------- Frame Buffer ----------------------------------------------- */
 
 void create_frame_buffer(Frame_Buffer *frame_buffer, u8 samples = 1);
 void destroy_frame_buffer(Frame_Buffer *frame_buffer);
@@ -201,6 +251,10 @@ void bind_frame_buffer_color_attachment_to_shader(Frame_Buffer *frame_buffer, s6
 void bind_frame_buffer(Frame_Buffer *frame_buffer);
 void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b);
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);
+
+
+
+/* ------------------------------------------------- Pipeline ------------------------------------------------- */
 
 void create_pipeline_state(Pipeline_State *state); // User Level Input must be set before this!
 void destroy_pipeline_state(Pipeline_State *state);
