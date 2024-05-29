@@ -377,16 +377,23 @@ Error_Code create_texture_from_compressed_file(Texture *texture, string file_pat
         return ERROR_File_Not_Found;
     }
 
+    Error_Code error = create_texture_from_compressed_memory(texture, file_content, hints);
+    os_free_file_content(Default_Allocator, &file_content);
+    return error;
+}
+
+Error_Code create_texture_from_compressed_memory(Texture *texture, string file_content, Texture_Hints hints) {
     s32 width    = *(s32 *) &file_content.data[0];
     s32 height   = *(s32 *) &file_content.data[4];
     s32 channels = *(s32 *) &file_content.data[8];
     u8 *data     =  (u8  *) &file_content.data[12];
     Error_Code error = create_texture_from_memory(texture, data, width, height, (u8) channels, hints | TEXTURE_COMPRESS_BC7);
-    os_free_file_content(Default_Allocator, &file_content);
     return error;
 }
 
 Error_Code create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints) {
+    if(w <= 0 || h <= 0 || w >= 65535 || h >= 65535) return ERROR_D3D11_Invalid_Dimensions;
+    
     DXGI_FORMAT format = d3d11_format(channels, D3D11_UByte, hints);
     D3D11_FILTER filter = d3d11_filter(hints);
     D3D11_TEXTURE_ADDRESS_MODE texture_address_mode = d3d11_texture_address_mode(hints);
@@ -555,7 +562,7 @@ Error_Code create_shader_from_memory(Shader *shader, string _string, string name
         }
     } else {
         error_code = ERROR_Custom_Error_Message;
-        set_custom_error_message((char *) error_blob->GetBufferPointer());
+        set_custom_error_message((char *) error_blob->GetBufferPointer(), error_blob->GetBufferSize() - 2); // Don't include the null terminator nor the line ending at the end of this message
         destroy_shader(shader);
     }
     

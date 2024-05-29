@@ -15,6 +15,8 @@ struct Ascii_Parser {
     b8 create_from_file(string file_path);
     void destroy_file_data();
 
+	b8 finished();
+
     string read_string();
     u8 read_u8();
     u16 read_u16();

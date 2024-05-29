@@ -22,6 +22,42 @@ struct Chained_Hash_Table {
         V value;
     };
 
+    struct Pair {
+        u64 hash;
+        K *key;
+        V *value;
+        Pair(u64 hash, K *key, V *value) : hash(hash), key(key), value(value) {};
+    };
+
+    struct Iterator {
+        Chained_Hash_Table *table;
+        Entry *entry_pointer;
+        s64 bucket_index;
+        
+        b8 operator==(Iterator const &it) const { return this->entry_pointer == it.entry_pointer; }
+        b8 operator!=(Iterator const &it) const { return this->entry_pointer != it.entry_pointer; }
+
+        Iterator &operator++() {
+            if(this->entry_pointer->next) {
+                this->entry_pointer = this->entry_pointer->next;
+            } else {
+                do {
+                    ++this->bucket_index;
+                } while(this->bucket_index < this->table->bucket_count && !this->table->bucket_occupied[this->bucket_index]);
+
+                if(this->bucket_index == this->table->bucket_count) {
+                    this->entry_pointer = null;
+                } else {
+                    this->entry_pointer = &this->table->buckets[this->bucket_index];
+                }
+            }
+
+            return *this;
+        }
+
+        Pair operator*() { return Pair(this->entry_pointer->hash, &this->entry_pointer->key, &this->entry_pointer->value); }
+    };
+
     Allocator *allocator = Default_Allocator;
     Hash_Procedure hash;
     Comparison_Procedure compare;
@@ -44,6 +80,9 @@ struct Chained_Hash_Table {
     void remove(K const &k);
     V *push(K const &k);
     V *query(K const &k);
+
+    Iterator begin();
+    Iterator end();
 
 #if FOUNDATION_DEVELOPER
     f64 expected_number_of_collisions();
@@ -68,6 +107,37 @@ struct Probed_Hash_Table {
         V value;
     };
 
+    struct Pair {
+        u64 hash;
+        K *key;
+        V *value;
+        Pair(u64 hash, K *key, V *value) : hash(hash), key(key), value(value) {};
+    };
+
+    struct Iterator {
+        Probed_Hash_Table<K, V> *table;
+        s64 bucket_index;
+        Entry *bucket_pointer;
+
+        b8 operator==(Iterator const &it) { return this->bucket_pointer == it.bucket_pointer; }
+        b8 operator!=(Iterator const &it) { return this->bucket_pointer != it.bucket_pointer; }
+        Iterator &operator++() {
+            do {
+                ++this->bucket_index;
+            } while(this->bucket_index < this->table->bucket_count && this->table->buckets[this->bucket_index].state != HASH_TABLE_ENTRY_Used);
+
+            if(this->bucket_index < this->table->bucket_count) {
+                this->bucket_pointer = &this->table->buckets[this->bucket_index];
+            } else {
+                this->bucket_pointer = null;
+            }
+
+            return *this;
+        }
+
+        Pair operator*() { return Pair(this->bucket_pointer->hash, &this->bucket_pointer->key, &this->bucket_pointer->value); }
+    };
+    
     Allocator *allocator = Default_Allocator;
     Hash_Procedure hash;
     Comparison_Procedure compare;
@@ -90,6 +160,9 @@ struct Probed_Hash_Table {
     V *push(K const &k);
     V *query(K const &k);
 
+    Iterator begin();
+    Iterator end();
+    
 #if FOUNDATION_DEVELOPER
     f64 expected_number_of_collisions();
 #endif

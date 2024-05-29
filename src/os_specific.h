@@ -63,6 +63,10 @@ b8 os_delete_directory(string file_path);
 b8 os_file_exists(string file_path);
 b8 os_directory_exists(string file_path);
 
+u64 os_get_file_creation_time(string file_path);
+u64 os_get_file_modification_time(string file_path);
+u64 os_get_file_access_time(string file_path);
+
 
 
 /* ------------------------------------------------ File Paths ------------------------------------------------ */
@@ -74,6 +78,26 @@ s64 os_search_path_for_directory_slash_reverse(string file_path);
 void os_set_working_directory(string file_path);
 string os_get_working_directory();
 string os_get_executable_directory();
+
+enum Files_In_Folder_Flags {
+    FILES_IN_FOLDER_Non_Recursive     = 0x1,
+    FILES_IN_FOLDER_Recursive         = 0x2,
+    FILES_IN_FOLDER_Just_Files        = 0x4,
+    FILES_IN_FOLDER_Files_And_Folders = 0x8,
+    FILES_IN_FOLDER_Put_Original_Path_Into_Output_Paths = 0x10, // Include the original path in the output to get the sort of 'absolute' path of the file.
+
+    FILES_IN_FOLDER_Default           = FILES_IN_FOLDER_Recursive | FILES_IN_FOLDER_Files_And_Folders | FILES_IN_FOLDER_Put_Original_Path_Into_Output_Paths, // Non Recursive Files and Folders, including the original path
+};
+
+BITWISE(Files_In_Folder_Flags);
+
+struct Files_In_Folder {
+    string *file_paths;
+    s64 count;
+};
+
+Files_In_Folder os_get_files_in_folder(string file_path, Allocator *allocator, Files_In_Folder_Flags flags = FILES_IN_FOLDER_Default);
+void os_free_files_in_folder(Files_In_Folder *files, Allocator *allocator);
 
 
 

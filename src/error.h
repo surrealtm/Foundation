@@ -13,6 +13,7 @@ enum Error_Code {
     /* D3D11 Layer Errors */
     ERROR_D3D11_Invalid_Channel_Count,
     ERROR_D3D11_Invalid_Data_Type,
+    ERROR_D3D11_Invalid_Dimensions,
     ERROR_D3D11_Erroneous_Shader,
     ERROR_D3D11_Invalid_Shader_Inputs,
     
@@ -22,4 +23,5 @@ enum Error_Code {
 string error_string(Error_Code code);
 void set_custom_error_message(string message);
 void set_custom_error_message(const char *message);
+void set_custom_error_message(const char *message, s64 count);
 string get_custom_error_message();

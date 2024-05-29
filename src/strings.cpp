@@ -491,8 +491,8 @@ u8 *String_Builder::grow(s64 count) {
         // current content, and content in the future...)
 		Block *block = (Block *) Default_Allocator->allocate(sizeof(Block));
 		block->next  = null;
-		block->count = 0;
-		pointer = block->data;;
+		block->count = count;
+		pointer = block->data;
 		this->current->next = block;
 		this->current       = block;
 	} else {

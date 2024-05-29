@@ -349,6 +349,36 @@ b8 os_directory_exists(string file_path) {
 	return success;	
 }
 
+u64 os_get_file_creation_time(string file_path) {
+	char *cstring = to_cstring(Default_Allocator, file_path);
+	
+    FILETIME filetime;
+    GetFileTime(cstring, &filetime, null, null);
+    
+	free_cstring(Default_Allocator, cstring);
+    return (s64) filetime.dwLowDateTime | ((s64) filetime.dwHighDateTime << 32);
+}
+
+u64 os_get_file_modification_time(string file_path) {
+	char *cstring = to_cstring(Default_Allocator, file_path);
+	
+    FILETIME filetime;
+    GetFileTime(cstring, null, null, &filetime);
+    
+	free_cstring(Default_Allocator, cstring);
+    return (s64) filetime.dwLowDateTime | ((s64) filetime.dwHighDateTime << 32);
+}
+
+u64 os_get_file_access_time(string file_path) {
+	char *cstring = to_cstring(Default_Allocator, file_path);
+	
+    FILETIME filetime;
+    GetFileTime(cstring, null, &filetime, null);
+    
+	free_cstring(Default_Allocator, cstring);
+    return (s64) filetime.dwLowDateTime | ((s64) filetime.dwHighDateTime << 32);
+}
+
 
 
 /* ------------------------------------------------ File Paths ------------------------------------------------ */
@@ -394,6 +424,82 @@ string os_get_executable_directory() {
     s64 folder_length = os_search_path_for_directory_slash_reverse(path_view);
     if(folder_length == -1) folder_length = path_view.count;
     return make_string(Default_Allocator, path, folder_length);
+}
+
+
+
+static
+void internal_get_files_in_folder(string file_path, Resizable_Array<string> *files, Files_In_Folder_Flags flags) {
+    string concatenation = concatenate_strings(Default_Allocator, file_path, "\\*"_s); // The win32 requires this "search pattern" to list all the files in the given folder path...
+    defer { deallocate_string(Default_Allocator, &concatenation); };
+    
+    char *cstring = to_cstring(Default_Allocator, concatenation);
+    defer { free_cstring(Default_Allocator, cstring); };
+
+    WIN32_FIND_DATAA find_data;
+    HANDLE find_handle = FindFirstFileA(cstring, &find_data);
+    
+    while(find_handle != INVALID_HANDLE_VALUE) {
+        string file_name_view = string_view((u8 *) find_data.cFileName, cstring_length(find_data.cFileName));
+
+        if(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY && !strings_equal(file_name_view, "."_s) && !strings_equal(file_name_view, ".."_s)) {
+            if(flags & FILES_IN_FOLDER_Files_And_Folders) {
+                if(flags & FILES_IN_FOLDER_Put_Original_Path_Into_Output_Paths) {
+                    String_Builder builder;
+                    builder.create(files->allocator);
+                    builder.append_string(file_path);
+                    builder.append_string("\\");
+                    builder.append_string(file_name_view);
+                    files->add(builder.finish());
+                } else {
+                    files->add(copy_string(files->allocator, file_name_view));
+                }
+            }
+
+            if(flags & FILES_IN_FOLDER_Recursive) {
+                String_Builder builder;
+                builder.create(Default_Allocator);
+                builder.append_string(file_path);
+                builder.append_string("\\");
+                builder.append_string(file_name_view);
+                string folder_name = builder.finish();
+                internal_get_files_in_folder(folder_name, files, flags);
+                deallocate_string(Default_Allocator, &folder_name);
+            }
+        } else if(!(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            if(flags & FILES_IN_FOLDER_Put_Original_Path_Into_Output_Paths) {
+                String_Builder builder;
+                builder.create(files->allocator);
+                builder.append_string(file_path);
+                builder.append_string("\\");
+                builder.append_string(file_name_view);
+                files->add(builder.finish());
+            } else {
+                files->add(copy_string(files->allocator, file_name_view));
+            }
+        }
+        
+        if(!FindNextFileA(find_handle, &find_data)) break;
+    }
+
+    FindClose(find_handle);
+}
+
+Files_In_Folder os_get_files_in_folder(string file_path, Allocator *allocator, Files_In_Folder_Flags flags) {
+    Resizable_Array<string> temp;
+    temp.allocator = allocator;    
+    internal_get_files_in_folder(file_path, &temp, flags);
+    
+    Files_In_Folder files;
+    files.count = temp.count;
+    files.file_paths = temp.data;
+    return files;
+}
+
+void os_free_files_in_folder(Files_In_Folder *folder, Allocator *allocator) {
+    allocator->deallocate(folder->file_paths);
+    folder->file_paths = null;
+    folder->count = 0;
 }
 
 

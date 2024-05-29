@@ -213,8 +213,9 @@ void draw_vertex_buffer_array(Vertex_Buffer_Array *array);
 /* ------------------------------------------------- Texture ------------------------------------------------- */
 
 Error_Code create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints);
-Error_Code create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints);
 Error_Code create_texture_from_compressed_file(Texture *texture, string file_path, Texture_Hints hints); // :TextureCompression
+Error_Code create_texture_from_compressed_memory(Texture *texture, string file_content, Texture_Hints hints); // :TextureCompression
+Error_Code create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints);
 void destroy_texture(Texture *texture);
 void bind_texture(Texture *texture, s64 index_in_shader);
 

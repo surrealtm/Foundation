@@ -270,31 +270,32 @@ void load_glyph_set(Font *font, Glyph_Set glyphs_to_load, Font_Creation_Helper *
 
 
 
-b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load) {
+Error_Code create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load) {
+    string file_content = os_read_file(Default_Allocator, file_path);
+    if(!file_content.count) ERROR_File_Not_Found;
+    
+    Error_Code error = create_font_from_memory(font, file_content, size, filter, glyphs_to_load);
+    os_free_file_content(Default_Allocator, &file_content);
+    return error;
+}
+    
+Error_Code create_font_from_memory(Font *font, string _data, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load) {
     memset(font, 0, sizeof(Font)); // Make sure we don't have any uninitialized data in here.
 
     font->filter = filter;
 
-    string file_content = os_read_file(Default_Allocator, file_path);
-    if(!file_content.count) {
-        foundation_error("Failed to load the font '%.*s' from disk: The file does not exist.", (u32) file_path.count, file_path.data);
-        return false;
-    }
-
-    defer { os_free_file_content(Default_Allocator, &file_content); };
-
     FT_Library library;
     if(FT_Init_FreeType(&library)) {
-        foundation_error("Failed to initialize the FreeType library.");
-        return false;
+        set_custom_error_message("Failed to initialize the FreeType library.");
+        return ERROR_Custom_Error_Message;
     }
 
     defer { FT_Done_FreeType(library); };    
 
     FT_Face face;
-    if(FT_New_Memory_Face(library, file_content.data, (FT_Long) file_content.count, 0, &face)) {
-        foundation_error("Failed to create the FreeType font face.");
-        return false;
+    if(FT_New_Memory_Face(library, _data.data, (FT_Long) _data.count, 0, &face)) {
+        set_custom_error_message("Failed to create the FreeType Font Face.");
+        return ERROR_Custom_Error_Message;
     }
 
     defer { FT_Done_Face(face); };
@@ -324,7 +325,7 @@ b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter fil
 
     load_glyph_set(font, glyphs_to_load, &creation_helper);
     
-    return true;
+    return Success;
 }
 
 void destroy_font(Font *font) {

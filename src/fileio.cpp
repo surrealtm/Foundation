@@ -6,8 +6,12 @@
 
 /* -------------------------------------------- Helper Procedures -------------------------------------------- */
 
-b8 __is_alpha_character(u8 c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_');
+static
+b8 is_string_character(u8 c) {
+    return (c >= 'a' && c <= 'z') || 
+		(c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') ||
+		(c == '_' || c == '\\' || c == '/' || c == '.');
 }
 
 
@@ -34,6 +38,10 @@ void Ascii_Parser::destroy_file_data() {
     deallocate_string(Default_Allocator, &this->data);
 }
 
+b8 Ascii_Parser::finished() {
+	return this->position == this->data.count;
+}
+
 string Ascii_Parser::read_string() {
     //
     // Skip empty characters.
@@ -49,7 +57,7 @@ string Ascii_Parser::read_string() {
 
     s64 string_start = this->position;
 
-    while(this->position < this->data.count && __is_alpha_character(this->data[this->position])) {
+    while(this->position < this->data.count && is_string_character(this->data[this->position])) {
         ++this->position;
     }
 

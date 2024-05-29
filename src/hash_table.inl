@@ -197,6 +197,35 @@ V *Chained_Hash_Table<K, V>::query(K const &k) {
     return entry ? &entry->value : null;
 }
 
+template<typename K, typename V>
+typename Chained_Hash_Table<K, V>::Iterator Chained_Hash_Table<K, V>::begin() {
+    Iterator iterator;
+
+    iterator.table = this;
+    iterator.bucket_index  = 0;
+
+    while(iterator.bucket_index < this->bucket_count && !this->bucket_occupied[iterator.bucket_index]) {
+        ++iterator.bucket_index;
+    }
+
+    if(iterator.bucket_index != this->bucket_count) {
+        iterator.entry_pointer = &this->buckets[iterator.bucket_index];
+    } else {
+        iterator.entry_pointer = null;
+    }
+    
+    return iterator;
+}
+
+template<typename K, typename V>
+typename Chained_Hash_Table<K, V>::Iterator Chained_Hash_Table<K, V>::end() {
+    Iterator iterator;
+    iterator.table         = this;
+    iterator.entry_pointer = null;
+    iterator.bucket_index  = this->bucket_count;
+    return iterator;
+}
+
 #if FOUNDATION_DEVELOPER
 template<typename K, typename V>
 f64 Chained_Hash_Table<K, V>::expected_number_of_collisions() {
@@ -347,6 +376,33 @@ V *Probed_Hash_Table<K, V>::query(K const &k) {
     return &this->buckets[current_slot].value;
 }
 
+template<typename K, typename V>
+typename Probed_Hash_Table<K, V>::Iterator Probed_Hash_Table<K, V>::begin() {
+    Iterator iterator;
+    iterator.table = this;
+    iterator.bucket_index = 0;
+
+    while(iterator.bucket_index < this->bucket_count && this->buckets[iterator.bucket_index].state != HASH_TABLE_ENTRY_Used) {
+        ++iterator.bucket_index;
+    }
+
+    if(iterator.bucket_index < this->bucket_count) {
+        iterator.bucket_pointer = &this->buckets[iterator.bucket_index];
+    } else {
+        iterator.bucket_pointer = null;
+    }
+    
+    return iterator;
+}
+
+template<typename K, typename V>
+typename Probed_Hash_Table<K, V>::Iterator Probed_Hash_Table<K, V>::end() {
+    Iterator iterator;
+    iterator.table         = this;
+    iterator.bucket_index  = this->bucket_count;
+    iterator.bucket_pointer = null;
+    return iterator;
+}
 
 #if FOUNDATION_DEVELOPER
 template<typename K, typename V>

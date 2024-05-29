@@ -12,6 +12,7 @@ string error_string_table[] = {
     /* D3D11 Layer Errors */
     "Invalid number of channels"_s,
     "Invalid data type"_s,
+    "Invalid dimensions"_s,
     "The shader contained some errors"_s,
     "The shader input specification did not match up"_s,
     
@@ -35,6 +36,11 @@ void set_custom_error_message(string message) {
 
 void set_custom_error_message(const char *message) {
     internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), strlen(message));
+    strncpy_s(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), message, internal_custom_error_message_count);
+}
+
+void set_custom_error_message(const char *message, s64 count) {
+    internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), count);
     strncpy_s(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), message, internal_custom_error_message_count);
 }
 

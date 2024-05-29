@@ -2,6 +2,7 @@
 
 #include "foundation.h"
 #include "strings.h"
+#include "error.h"
 
 enum Text_Alignment {
     /* Horizontal Alignment */
@@ -92,7 +93,8 @@ struct Text_Mesh {
     Font_Atlas **atlasses; // 1 Atlas per glyph.
 };
 
-b8 create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load);
+Error_Code create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load);
+Error_Code create_font_from_memory(Font *font, string _data, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load);
 void destroy_font(Font *font);
 
 Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment alignment, Allocator *allocator);
