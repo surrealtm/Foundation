@@ -511,9 +511,39 @@ void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_sh
 
 /* -------------------------------------------------- Shader -------------------------------------------------- */
 
-Error_Code create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count) {
-    foundation_assert(input_count < D3D11_MAX_SHADER_INPUTS);
+static
+Error_Code create_shader_from_blob(Shader *shader, void *vertex, s64 vertex_size, void *pixel, s64 pixel_size, Shader_Input_Specification *inputs, s64 input_count) {
+    Error_Code error_code = Success;
+    
+    HRESULT vertex_result = d3d_device->CreateVertexShader(vertex, vertex_size, null, &shader->vertex_shader);
+    HRESULT pixel_result  = d3d_device->CreatePixelShader(pixel, pixel_size, null, &shader->pixel_shader);
 
+    if(SUCCEEDED(vertex_result) && SUCCEEDED(pixel_result)) {
+        foundation_assert(shader->vertex_shader != null && shader->pixel_shader != null);
+        D3D11_INPUT_ELEMENT_DESC input_element_description[D3D11_MAX_SHADER_INPUTS];
+
+        for(s64 i = 0; i < input_count; ++i) {                
+            input_element_description[i] = {
+                inputs[i].name, 0, d3d11_format(inputs[i].dimensions, D3D11_Float32), inputs[i].vertex_buffer_index, 0, D3D11_INPUT_PER_VERTEX_DATA, 0
+            };
+        }
+
+        HRESULT result = d3d_device->CreateInputLayout(input_element_description, (UINT) input_count, vertex, vertex_size, &shader->input_layout);
+
+        if(!SUCCEEDED(result)) {
+            error_code = ERROR_D3D11_Invalid_Shader_Inputs;
+            destroy_shader(shader);
+        }
+    } else {
+        error_code = ERROR_Custom_Error_Message;
+        set_custom_error_message("The shader uses unsupported bytecode on this device.");
+        destroy_shader(shader);
+    }
+    
+    return error_code;
+}
+
+Error_Code create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count) {
     string file_content = os_read_file(Default_Allocator, file_path);
     if(!file_content.count) return ERROR_File_Not_Found;
 
@@ -524,42 +554,27 @@ Error_Code create_shader_from_file(Shader *shader, string file_path, Shader_Inpu
 
 Error_Code create_shader_from_memory(Shader *shader, string _string, string name, Shader_Input_Specification *inputs, s64 input_count) {
     Error_Code error_code = Success;
-    ID3DBlob *error_blob = null;
+    ID3DBlob *error_blob = null, *vertex_blob = null, *pixel_blob = null;
+
+    UINT compilation_flags = D3DCOMPILE_ENABLE_STRICTNESS;
+
+#if FOUNDATION_DEVELOPER
+    compilation_flags |= D3DCOMPILE_DEBUG;
+#endif
 
     char *name_cstring = to_cstring(Default_Allocator, name);
-    D3DCompile(_string.data, _string.count, name_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->vertex_blob, &error_blob);
+    D3DCompile(_string.data, _string.count, name_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", compilation_flags, 0, &vertex_blob, &error_blob);
     
     if(!error_blob) {
         // If the vertex shader already failed, then the error blob is already filled out and we would just
         // overwrite these error messages here, which we don't want to do.
-        D3DCompile(_string.data, _string.count, name_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0, &shader->pixel_blob, &error_blob);
+        D3DCompile(_string.data, _string.count, name_cstring, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", compilation_flags, 0, &pixel_blob, &error_blob);
     }
 
-    if(shader->vertex_blob && shader->pixel_blob) {
-        HRESULT vertex_result = d3d_device->CreateVertexShader(shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), null, &shader->vertex_shader);
-        HRESULT pixel_result  = d3d_device->CreatePixelShader(shader->pixel_blob->GetBufferPointer(), shader->pixel_blob->GetBufferSize(), null, &shader->pixel_shader);
-
-        if(SUCCEEDED(vertex_result) && SUCCEEDED(pixel_result)) {
-            foundation_assert(shader->vertex_shader != null && shader->pixel_shader != null);
-            D3D11_INPUT_ELEMENT_DESC input_element_description[D3D11_MAX_SHADER_INPUTS];
-
-            for(s64 i = 0; i < input_count; ++i) {                
-                input_element_description[i] = {
-                    inputs[i].name, 0, d3d11_format(inputs[i].dimensions, D3D11_Float32), inputs[i].vertex_buffer_index, 0, D3D11_INPUT_PER_VERTEX_DATA, 0
-                };
-            }
-
-            HRESULT result = d3d_device->CreateInputLayout(input_element_description, (UINT) input_count, shader->vertex_blob->GetBufferPointer(), shader->vertex_blob->GetBufferSize(), &shader->input_layout);
-
-            if(!SUCCEEDED(result)) {
-                error_code = ERROR_D3D11_Invalid_Shader_Inputs;
-                destroy_shader(shader);
-            }
-        } else {
-            error_code = ERROR_Custom_Error_Message;
-            set_custom_error_message("The shader uses unsupported bytecode on this device.");
-            destroy_shader(shader);
-        }
+    if(vertex_blob && pixel_blob) {
+        error_code = create_shader_from_blob(shader, vertex_blob->GetBufferPointer(), vertex_blob->GetBufferSize(), pixel_blob->GetBufferPointer(), pixel_blob->GetBufferSize(), inputs, input_count);
+        vertex_blob->Release();
+        pixel_blob->Release();
     } else {
         error_code = ERROR_Custom_Error_Message;
         set_custom_error_message((char *) error_blob->GetBufferPointer(), error_blob->GetBufferSize() - 2); // Don't include the null terminator nor the line ending at the end of this message
@@ -572,15 +587,30 @@ Error_Code create_shader_from_memory(Shader *shader, string _string, string name
     return error_code;
 }
 
+Error_Code create_shader_from_compiled_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count) {
+    string file_content = os_read_file(Default_Allocator, file_path);
+    if(!file_content.count) return ERROR_File_Not_Found;
+
+    Error_Code error = create_shader_from_compiled_memory(shader, file_content, file_path, inputs, input_count);
+    os_free_file_content(Default_Allocator, &file_content);
+    return error;
+}
+
+Error_Code create_shader_from_compiled_memory(Shader *shader, string _string, string name, Shader_Input_Specification *inputs, s64 input_count) {
+    s64 vertex_size_in_bytes = *(s64 *) &_string.data[0];
+    s64 pixel_size_in_bytes = *(s64 *) &_string.data[8];
+    void *vertex_pointer = &_string.data[16];
+    void *pixel_pointer = &_string.data[16 + vertex_size_in_bytes];
+
+    Error_Code error_code = create_shader_from_blob(shader, vertex_pointer, vertex_size_in_bytes, pixel_pointer, pixel_size_in_bytes, inputs, input_count);
+    return error_code;
+}
+
 void destroy_shader(Shader *shader) {
-    if(shader->vertex_blob)   shader->vertex_blob->Release();
-    if(shader->pixel_blob)    shader->pixel_blob->Release();
     if(shader->vertex_shader) shader->vertex_shader->Release();
     if(shader->pixel_shader)  shader->pixel_shader->Release();
     if(shader->input_layout)  shader->input_layout->Release();
 
-    shader->vertex_blob   = null;
-    shader->pixel_blob    = null;
     shader->vertex_shader = null;
     shader->pixel_shader  = null;
     shader->input_layout  = null;
@@ -592,6 +622,61 @@ void bind_shader(Shader *shader) {
     d3d_context->VSSetShader(shader->vertex_shader, null, 0);
     d3d_context->PSSetShader(shader->pixel_shader, null, 0);
     d3d_context->IASetInputLayout(shader->input_layout);
+}
+
+
+Compiled_Shader_Output compile_shader_from_file(string file_path) {
+    string _string = os_read_file(Default_Allocator, file_path);
+    if(!_string.count) {
+        Compiled_Shader_Output output;
+        output.error = ERROR_File_Not_Found;
+        return output;
+    }
+
+    Compiled_Shader_Output output;
+    output.error = Success;
+    
+    ID3DBlob *error_blob = null, *vertex_blob = null, *pixel_blob = null;
+
+    UINT compilation_flags = D3DCOMPILE_ENABLE_STRICTNESS; // No debug here since this is probably baking the shader for shipping.
+
+    D3DCompile(_string.data, _string.count, null, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", compilation_flags, 0, &vertex_blob, &error_blob);
+    
+    if(!error_blob) {
+        // If the vertex shader already failed, then the error blob is already filled out and we would just
+        // overwrite these error messages here, which we don't want to do.
+        D3DCompile(_string.data, _string.count, null, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", compilation_flags, 0, &pixel_blob, &error_blob);
+    }
+
+    if(vertex_blob && pixel_blob) {
+        output.vertex_size_in_bytes = vertex_blob->GetBufferSize();
+        output.vertex_blob = Default_Allocator->allocate(output.vertex_size_in_bytes);
+        output.pixel_size_in_bytes = pixel_blob->GetBufferSize();
+        output.pixel_blob = Default_Allocator->allocate(output.pixel_size_in_bytes);
+
+        memcpy(output.vertex_blob, vertex_blob->GetBufferPointer(), output.vertex_size_in_bytes);
+        memcpy(output.pixel_blob, pixel_blob->GetBufferPointer(), output.pixel_size_in_bytes);
+
+        vertex_blob->Release();
+        pixel_blob->Release();
+    } else {
+        output.error = ERROR_Custom_Error_Message;
+        set_custom_error_message((char *) error_blob->GetBufferPointer(), error_blob->GetBufferSize() - 2); // Don't include the null terminator nor the line ending at the end of this message
+        error_blob->Release();
+    }
+    
+    os_free_file_content(Default_Allocator, &_string);
+    return output;
+}
+
+void destroy_compiled_shader_output(Compiled_Shader_Output *output) {
+    Default_Allocator->deallocate(output->vertex_blob);
+    output->vertex_blob = null;
+    output->vertex_size_in_bytes = 0;
+
+    Default_Allocator->deallocate(output->pixel_blob);
+    output->pixel_blob = null;
+    output->pixel_size_in_bytes = 0;
 }
 
 

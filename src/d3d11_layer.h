@@ -17,7 +17,18 @@
 //    s32 width;
 //    s32 height;
 //    s32 channels;
-//    u8 data[..];
+//    u8 data[...];
+//
+
+//
+// :ShaderCompilation
+// Similar to :TextureCompression, we allow for offline shader compilation. The user
+// can then just pass in the compiled shader binary, which should increase load
+// performance. The layout for compiled shader output is the the following:
+//    s64 vertex_size_in_bytes;
+//    s64 pixel_size_in_bytes;
+//    void vertex_blob[...];
+//    void pixel_blob[...];
 //
 
 //
@@ -119,9 +130,15 @@ struct Shader_Constant_Buffer {
     ID3D11Buffer *handle;
 };
 
+struct Compiled_Shader_Output {
+    Error_Code error;
+    void *vertex_blob;
+    s64 vertex_size_in_bytes;
+    void *pixel_blob;
+    s64 pixel_size_in_bytes;
+};
+
 struct Shader {
-    ID3DBlob *vertex_blob;
-    ID3DBlob *pixel_blob;
     ID3D11VertexShader *vertex_shader;
     ID3D11PixelShader *pixel_shader;
     ID3D11InputLayout *input_layout;
@@ -234,8 +251,13 @@ void bind_shader_constant_buffer(Shader_Constant_Buffer *buffer, s64 index_in_sh
 
 Error_Code create_shader_from_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count);
 Error_Code create_shader_from_memory(Shader *shader, string _string, string name, Shader_Input_Specification *inputs, s64 input_count);
+Error_Code create_shader_from_compiled_file(Shader *shader, string file_path, Shader_Input_Specification *inputs, s64 input_count); // :ShaderCompilation
+Error_Code create_shader_from_compiled_memory(Shader *shader, string _string, string name, Shader_Input_Specification *inputs, s64 input_count); // :ShaderCompilation
 void destroy_shader(Shader *shader);
 void bind_shader(Shader *shader);
+
+Compiled_Shader_Output compile_shader_from_file(string file_path);
+void destroy_compiled_shader_output(Compiled_Shader_Output *output);
 
 
 
