@@ -52,9 +52,9 @@ void Resizable_Array<T>::maybe_shrink() {
 template<typename T>
 void Resizable_Array<T>::clear() {
     this->allocator->deallocate(this->data);
-    this->count = 0;
+    this->count     = 0;
     this->allocated = 0;
-    this->data = null;
+    this->data      = null;
 }
 
 template<typename T>

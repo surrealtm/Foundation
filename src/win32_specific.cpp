@@ -352,31 +352,46 @@ b8 os_directory_exists(string file_path) {
 u64 os_get_file_creation_time(string file_path) {
 	char *cstring = to_cstring(Default_Allocator, file_path);
 	
+    u64 value;
     FILETIME filetime;
-    GetFileTime(cstring, &filetime, null, null);
+    if(GetFileTime(cstring, &filetime, null, null)) {
+        value = (u64) filetime.dwLowDateTime | ((u64) filetime.dwHighDateTime << 32);
+    } else {
+        value = 0;
+    }
     
 	free_cstring(Default_Allocator, cstring);
-    return (s64) filetime.dwLowDateTime | ((s64) filetime.dwHighDateTime << 32);
+    return value;
 }
 
 u64 os_get_file_modification_time(string file_path) {
 	char *cstring = to_cstring(Default_Allocator, file_path);
 	
+    u64 value;
     FILETIME filetime;
-    GetFileTime(cstring, null, null, &filetime);
+    if(GetFileTime(cstring, null, null, &filetime)) {
+        value = (u64) filetime.dwLowDateTime | ((u64) filetime.dwHighDateTime << 32);
+    } else {
+        value = 0;
+    }
     
 	free_cstring(Default_Allocator, cstring);
-    return (s64) filetime.dwLowDateTime | ((s64) filetime.dwHighDateTime << 32);
+    return value;
 }
 
 u64 os_get_file_access_time(string file_path) {
 	char *cstring = to_cstring(Default_Allocator, file_path);
 	
+    u64 value;
     FILETIME filetime;
-    GetFileTime(cstring, null, &filetime, null);
+    if(GetFileTime(cstring, null, &filetime, null)) {
+        value = (u64) filetime.dwLowDateTime | ((u64) filetime.dwHighDateTime << 32);
+    } else {
+        value = 0;
+    }
     
 	free_cstring(Default_Allocator, cstring);
-    return (s64) filetime.dwLowDateTime | ((s64) filetime.dwHighDateTime << 32);
+    return value;
 }
 
 
