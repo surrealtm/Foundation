@@ -63,9 +63,14 @@ b8 os_delete_directory(string file_path);
 b8 os_file_exists(string file_path);
 b8 os_directory_exists(string file_path);
 
-u64 os_get_file_creation_time(string file_path);
-u64 os_get_file_modification_time(string file_path);
-u64 os_get_file_access_time(string file_path);
+struct File_Information {
+    s64 file_size_in_bytes;
+    s64 creation_time;
+    s64 last_access_time;
+    s64 last_modification_time;
+};
+
+File_Information os_get_file_information(string file_path);
 
 
 

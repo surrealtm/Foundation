@@ -40,5 +40,6 @@ void create_text_input(Text_Input *input);
 void update_text_input(Text_Input *input, Window *window, Font *font); // The font is used for rendering data (e.g. the cursor position requires knowledge of the string width in pixels...)
 void clear_text_input(Text_Input *input);
 void toggle_text_input_activeness(Text_Input *input, b8 active);
+void set_text_input_string(Text_Input *input, string string);
 string text_input_string_view(Text_Input *input);
 string text_input_selected_string_view(Text_Input *input);
