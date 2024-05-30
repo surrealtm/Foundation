@@ -197,6 +197,10 @@ void window_sleep(f32 seconds);
 void window_ensure_frame_time(s64 frame_start, s64 frame_end, f32 requested_fps);
 
 
+void set_clipboard_data(Window *window, string data); // Pretty sure linux requires the window here...
+string get_clipboard_data(Window *window, Allocator *allocator);
+void deallocate_clipboard_data(Allocator *allocator, string *data);
+
 
 struct Window_Buffer {
     s32 width, height;

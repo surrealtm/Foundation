@@ -184,7 +184,9 @@ LRESULT CALLBACK win32_callback(HWND hwnd, UINT message, WPARAM wparam, LPARAM l
         // Some special text handling characters are not included in the WM_CHAR message, since these do
         // not actually procedure characters. They are still tied to text input (similar to backspace, which
         // is handled in WM_CHAR for some reason), therefore register these unicodes manually here.
-        if(key == KEY_Arrow_Left || key == KEY_Arrow_Right || key == KEY_Backspace || key == KEY_Delete || key == KEY_Enter || key == KEY_Home || key == KEY_End || key == KEY_V || key == KEY_C || key == KEY_A || key == KEY_X) {
+        if(key == KEY_Arrow_Left || key == KEY_Arrow_Right || key == KEY_Backspace || key == KEY_Delete || key == KEY_Enter || key == KEY_Home || key == KEY_End) {
+            win32_add_control_text_input_event(window, key);
+        } else if(window->keys[KEY_Control] & KEY_Down && (key == KEY_V || key == KEY_C || key == KEY_A || key == KEY_X)) {
             win32_add_control_text_input_event(window, key);
         }
     } break;
@@ -660,6 +662,56 @@ void window_ensure_frame_time(s64 frame_start, s64 frame_end, f32 requested_fps)
 }
 
 
+void set_clipboard_data(Window *window, string data) {
+#if FOUNDATION_WIN32
+    HGLOBAL clipboard_handle = GlobalAlloc(GMEM_MOVEABLE, data.count + 1);
+    if(clipboard_handle == INVALID_HANDLE_VALUE) return;
+
+    char *clipboard_data = (char *) GlobalLock(clipboard_handle);
+    memcpy(clipboard_data, data.data, data.count);
+    clipboard_data[data.count] = 0;
+    GlobalUnlock(clipboard_handle);
+
+    if(!OpenClipboard(null)) {
+        GlobalFree(clipboard_handle);
+        return;
+    }
+
+    EmptyClipboard();
+    SetClipboardData(CF_TEXT, clipboard_handle);
+    CloseClipboard();
+#endif
+}
+
+string get_clipboard_data(Window *window, Allocator *allocator) {
+#if FOUNDATION_WIN32
+    if(!IsClipboardFormatAvailable(CF_TEXT)) return string{};
+
+    if(!OpenClipboard(null)) return string{};
+
+    HGLOBAL clipboard_handle = GetClipboardData(CF_TEXT);
+    char *clipboard_data = (char *) GlobalLock(clipboard_handle);
+
+    s64 string_length = cstring_length(clipboard_data);
+    string result = allocate_string(allocator, string_length);
+    memcpy(result.data, clipboard_data, string_length);
+
+    GlobalUnlock(clipboard_handle);
+    CloseClipboard();
+
+    return result;
+#endif
+}
+
+void deallocate_clipboard_data(Allocator *allocator, string *data) {
+#if FOUNDATION_WIN32
+    deallocate_string(allocator, data);
+#endif
+}
+
+
+
+/* -------------------------------------------- Window Buffer API -------------------------------------------- */
 
 void acquire_window_buffer(Window *window, Window_Buffer *buffer) {
     s64 pixels = window->w * window->h * 4;

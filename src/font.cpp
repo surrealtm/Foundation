@@ -46,10 +46,8 @@ Font_Glyph *find_glyph(Font *font, s64 character) {
 
 static
 s64 find_glyph_index_in_advance_table(s64 character) {
-    if(character == 0) return 0;
-    
-    if(character >= 32 && character <= 255) {
-        return character - 31;
+    if(character >= 0 && character <= 255) {
+        return character;
     }
 
     return -1;
@@ -190,7 +188,7 @@ u32 load_glyph(Font *font, FT_ULong character, Font_Creation_Helper *helper) {
 
     s16 unkerned_advance = (s16) freetype_unit_to_horizontal_pixels(helper->face, helper->face->glyph->advance.x);
 
-    const s64 advance_count = 224; // We only support kerning between Ascii characters (for now).
+    const s64 advance_count = 256; // We only support kerning between Ascii characters (for now).
     glyph->advances = (s16 *) Default_Allocator->allocate(advance_count * sizeof(s16));
 
     if(helper->apply_kerning) {
@@ -304,10 +302,10 @@ Error_Code create_font_from_memory(Font *font, string _data, s16 size, Font_Filt
     os_get_desktop_dpi(&xdpi, &ydpi);
     FT_Set_Char_Size(face, 0, size * 72, xdpi, ydpi);
 
-    font->line_height  = freetype_unit_to_vertical_pixels(face, face->height);
-    font->ascender     = freetype_unit_to_vertical_pixels(face, face->ascender);
-    font->descender    = freetype_unit_to_vertical_pixels(face, face->descender);
-    font->glyph_height = font->ascender - font->descender;
+    font->line_height  =  freetype_unit_to_vertical_pixels(face, face->height);
+    font->ascender     =  freetype_unit_to_vertical_pixels(face, face->ascender);
+    font->descender    = -freetype_unit_to_vertical_pixels(face, face->descender); // This is always a negative value in freetype by convention, but I think it better to be a positive one...
+    font->glyph_height = font->ascender + font->descender;
 
     Font_Creation_Helper creation_helper;
     creation_helper.face          = face;
@@ -471,14 +469,14 @@ s32 get_string_width_in_pixels(Font *font, string text) {
 
     for(s64 i = 0; i < text.count; ++i) {
         Font_Glyph *glyph = find_glyph(font, text[i]);
-        if(!glyph || glyph->atlas_index == -1) glyph = find_default_glyph(font);
+        if(!glyph) glyph = find_default_glyph(font);
         
         if(i == 0 && glyph->cursor_offset_x < 0) width -= glyph->cursor_offset_x;
 
         if(i + 1 < text.count) {
             width += find_glyph_advance(glyph, text[i + 1]);
         } else {
-            width += glyph->bitmap_width + glyph->cursor_offset_x;
+            width += find_glyph_advance(glyph, text[i]); // This should work as a heuristic also for glyphs without a bitmap, e.g. the space character
         }
     }
 
