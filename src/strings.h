@@ -63,6 +63,7 @@ b8 cstring_ends_with_ignore_case(const char *lhs, const char *rhs);
 
 string operator "" _s(const char *literal, size_t size);
 string strltr(char *literal); // Build a string from a string literal
+string strltr(const char *literal); // Build a string from a string literal
 string string_view(u8 *data, s64 count);
 string make_string(Allocator *allocator, u8 *data, s64 count);
 string allocate_string(Allocator *allocator, s64 count);
