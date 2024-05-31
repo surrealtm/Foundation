@@ -157,6 +157,13 @@ string strltr(char *literal) {
 	return _string;
 }
 
+string strltr(const char *literal) {
+	string _string;
+	_string.count = cstring_length(literal);
+	_string.data  = (u8 *) literal;
+	return _string;
+}
+
 string string_view(u8 *data, s64 count) {
 	string _string;
 	_string.count = count;

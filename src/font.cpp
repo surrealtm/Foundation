@@ -383,7 +383,7 @@ Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment 
     if(alignment & TEXT_ALIGNMENT_Top) {
         cy += font->ascender;
     } else if(alignment & TEXT_ALIGNMENT_Median) {
-        cy += (font->ascender + font->descender) / 2;
+        cy += font->ascender / 2;
     }
 
     s64 non_empty_glyph_index = 0;

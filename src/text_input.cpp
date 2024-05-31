@@ -314,6 +314,15 @@ void toggle_text_input_activeness(Text_Input *input, b8 active) {
     input->time_of_last_input = os_get_hardware_time();
 }
 
+void set_text_input_string(Text_Input *input, string string) {
+    // Don't clear out the rendering data here, that seems to look better.
+    input->count              = 0;
+    input->cursor             = 0;
+    input->time_of_last_input = os_get_hardware_time();
+    clear_selection(input);
+    insert_text(input, string);
+}
+
 string text_input_string_view(Text_Input *input) {
     return string_view(input->buffer, input->count);
 }

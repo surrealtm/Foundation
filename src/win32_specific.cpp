@@ -349,49 +349,21 @@ b8 os_directory_exists(string file_path) {
 	return success;	
 }
 
-u64 os_get_file_creation_time(string file_path) {
+File_Information os_get_file_information(string file_path) {
 	char *cstring = to_cstring(Default_Allocator, file_path);
-	
-    u64 value;
-    FILETIME filetime;
-    if(GetFileTime(cstring, &filetime, null, null)) {
-        value = (u64) filetime.dwLowDateTime | ((u64) filetime.dwHighDateTime << 32);
-    } else {
-        value = 0;
-    }
-    
-	free_cstring(Default_Allocator, cstring);
-    return value;
-}
 
-u64 os_get_file_modification_time(string file_path) {
-	char *cstring = to_cstring(Default_Allocator, file_path);
-	
-    u64 value;
-    FILETIME filetime;
-    if(GetFileTime(cstring, null, null, &filetime)) {
-        value = (u64) filetime.dwLowDateTime | ((u64) filetime.dwHighDateTime << 32);
-    } else {
-        value = 0;
-    }
-    
-	free_cstring(Default_Allocator, cstring);
-    return value;
-}
+    File_Information result = { 0 };
 
-u64 os_get_file_access_time(string file_path) {
-	char *cstring = to_cstring(Default_Allocator, file_path);
-	
-    u64 value;
-    FILETIME filetime;
-    if(GetFileTime(cstring, null, &filetime, null)) {
-        value = (u64) filetime.dwLowDateTime | ((u64) filetime.dwHighDateTime << 32);
-    } else {
-        value = 0;
+    WIN32_FILE_ATTRIBUTE_DATA win32_data;
+    if(GetFileAttributesExA(cstring, GetFileExInfoStandard, &win32_data)) {
+        result.file_size_in_bytes     = ((u64) win32_data.nFileSizeHigh << 32) | (u64) win32_data.nFileSizeLow;
+        result.creation_time          = ((u64) win32_data.ftCreationTime.dwHighDateTime << 32) | (u64) win32_data.ftCreationTime.dwLowDateTime;
+        result.last_access_time       = ((u64) win32_data.ftLastAccessTime.dwHighDateTime << 32) | (u64) win32_data.ftLastAccessTime.dwLowDateTime;
+        result.last_modification_time = ((u64) win32_data.ftLastWriteTime.dwHighDateTime << 32) | (u64) win32_data.ftLastWriteTime.dwLowDateTime;
     }
     
 	free_cstring(Default_Allocator, cstring);
-    return value;
+    return result;
 }
 
 
