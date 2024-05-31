@@ -3,14 +3,15 @@
 #include "foundation.h"
 #include "memutils.h"
 #include "strings.h"
+#include "error.h"
 
 typedef u32 Client_Id;
 
 #define INVALID_CLIENT_ID ((Client_Id) -1)
 #define DEFAULT_VIRTUAL_CONNECTION_MAGIC 75
 
-#define PACKET_SIZE 1028 // The total size of a packet (one unit being sent over the network). Should be small enough to avoid fragmentation during routing but big enough to hold the biggest message.
-#define PACKET_HEADER_SIZE sizeof(Packet_Header)
+#define PACKET_SIZE        1028 // The total size of a packet (one unit being sent over the network). Should be small enough to avoid fragmentation during routing but big enough to hold the biggest message.
+#define PACKET_HEADER_SIZE 20 // The serialized (packed) size of the Packet_Header struct.
 #define PACKET_BODY_SIZE   (PACKET_SIZE - PACKET_HEADER_SIZE)
 
 #define VIRTUAL_CONNECTION_BUFFER_SIZE PACKET_SIZE
@@ -42,7 +43,8 @@ enum Packet_Type {
     PACKET_Connection_Request     = 0x1,
     PACKET_Connection_Established = 0x2,
     PACKET_Connection_Closed      = 0x3,
-    PACKET_Message                = 0x4,
+    PACKET_Ping                   = 0x4,
+    PACKET_Message                = 0x5,
 };
 
 struct Packet_Header {
@@ -58,7 +60,7 @@ struct Packet_Header {
 struct Packet {
     Packet_Header header;
     u8 body[PACKET_BODY_SIZE];
-    s64 body_size; // Used for creating and parsing the body.
+    s64 body_size = 0; // Used for creating and parsing the body.
 };
 
 struct Virtual_Connection_Info {
@@ -108,8 +110,8 @@ struct Virtual_Connection {
 
 /* ------------------------------------------- Connection Handling ------------------------------------------- */
 
-b8 create_client_connection(Virtual_Connection *connection, Connection_Type type, string host, u16 port);
-b8 create_server_connection(Virtual_Connection *connection, Connection_Type type, u16 port);
+Error_Code create_client_connection(Virtual_Connection *connection, Connection_Type type, string host, u16 port);
+Error_Code create_server_connection(Virtual_Connection *connection, Connection_Type type, u16 port);
 void destroy_connection(Virtual_Connection *connection);
 
 Virtual_Connection create_remote_client_connection(Virtual_Connection *server); // Creates a virtual connection object around the current remote socket of a UDP server, to "fake" an actual connection which doesn't exist in the UDP protocol.
@@ -118,3 +120,27 @@ b8 accept_remote_client_connection(Virtual_Connection *server, Virtual_Connectio
 void send_packet(Virtual_Connection *connection, Packet *packet);
 void send_reliable_packet(Virtual_Connection *connection, Packet *packet);
 b8 read_packet(Virtual_Connection *connection);
+
+
+
+/* --------------------------------------------- Packet Handling --------------------------------------------- */
+
+//
+// The system packets have a 'spam_count' parameter, which essentially just means 'send this packet x times'.
+// This is done to fight potential packet loss during the handshake (or destruction), since these packets may
+// be lost, but without a connection we cannot do the proper UDP reliable packets handling.
+// Therefore we just send the packet multiple times and hope that at least one does eventually arrive, at which
+// point the other ones will just be ignored by the receiver.
+//
+
+void send_connection_request_packet(Virtual_Connection *connection, s64 spam_count = 1);
+void send_connection_established_packet(Virtual_Connection *connection, s64 spam_count = 1);
+void send_connection_closed_packet(Virtual_Connection *connection, s64 spam_count = 1);
+void send_ping_packet(Virtual_Connection *connection);
+b8 wait_until_connection_established(Virtual_Connection *connection, f32 timeout_in_seconds = 0.f);
+
+
+
+/* ------------------------------------------ Lower Level Utilities ------------------------------------------ */
+
+b8 remote_sockets_equal(Remote_Socket lhs, Remote_Socket rhs);

@@ -1,5 +1,6 @@
 #include "socket.h"
 #include "strings.h"
+#include "os_specific.h"
 
 
 /* ------------------------------------------- Win32 Implementation ------------------------------------------- */
@@ -14,8 +15,17 @@ static_assert(sizeof(Remote_Socket) >= sizeof(Win32_Remote_Socket), "Remote_Sock
 
 static s64 wsa_references = 0;
 
+//
+// :WSAErrorHandling
+// WSA has some terrible error handling. Most of the procedures return success or set
+// the LastError on failure, (which can then easily be queried), the other procedures however
+// return the error code and don't set the last error.
+// That would require a lot more effort to propagate the error message through the abstraction
+// layers, so for the second kind of procedures, we just manually set the last wsa error...
+// Definitely not very clean, but should do the trick for now.
+//
 static
-string wsa_error_string(s32 error_code) {
+string win32_error_string(s32 error_code) {
     string result;
 
 #define error(value) case value: result = strltr(#value); break;
@@ -91,8 +101,35 @@ string wsa_error_string(s32 error_code) {
 }
 
 static
-string last_wsa_error_string() {
-    return wsa_error_string(WSAGetLastError());
+string win32_last_error_string() {
+    return win32_error_string(WSAGetLastError());
+}
+
+static
+Error_Code win32_get_error_code() {
+    Error_Code error_code;
+    s32 wsa = WSAGetLastError();
+
+    switch(wsa) {
+    case WSAEADDRINUSE:     error_code = ERROR_WINSOCK_Address_In_Use;        break;
+    case WSAEADDRNOTAVAIL:  error_code = ERROR_WINSOCK_Address_Not_Available; break;
+    case WSAENETDOWN:       error_code = ERROR_WINSOCK_Network_Down;          break;
+    case WSAENETUNREACH:    error_code = ERROR_WINSOCK_Network_Unreachable;   break;
+    case WSAENETRESET:      error_code = ERROR_WINSOCK_Network_Reset;         break;
+    case WSAECONNABORTED:   error_code = ERROR_WINSOCK_Connection_Aborted;    break;
+    case WSAECONNRESET:     error_code = ERROR_WINSOCK_Connection_Reset;      break;
+    case WSAECONNREFUSED:   error_code = ERROR_WINSOCK_Connection_Refused;    break;
+    case WSAEHOSTDOWN:      error_code = ERROR_WINSOCK_Host_Down;             break;
+    case WSAEHOSTUNREACH:   error_code = ERROR_WINSOCK_Host_Unreachable;      break;
+    case WSAHOST_NOT_FOUND: error_code = ERROR_WINSOCK_Host_Not_Found;        break;
+        
+    default:
+        set_custom_error_message(win32_error_string(wsa));
+        error_code = ERROR_Custom_Error_Message;
+        break;
+    }
+
+    return error_code;
 }
 
 static
@@ -125,6 +162,11 @@ void win32_copy_remote(Win32_Remote_Socket *dst, Win32_Remote_Socket *src) {
 }
 
 static
+b8 win32_remote_sockets_equal(Win32_Remote_Socket *lhs, Win32_Remote_Socket *rhs) {
+    return lhs->sin_family == rhs->sin_family && lhs->sin_port == rhs->sin_port && lhs->sin_addr.S_un.S_addr == rhs->sin_addr.S_un.S_addr;
+}
+
+static
 b8 win32_initialize() {
     if(wsa_references > 0) return true;
 
@@ -140,11 +182,6 @@ static
 void win32_cleanup() {
     --wsa_references;
     if(wsa_references == 0) WSACleanup();
-}
-
-static
-b8 win32_remote_sockets_equal(Win32_Remote_Socket *lhs, Win32_Remote_Socket *rhs) {
-    return lhs->sin_family == rhs->sin_family && lhs->sin_port == rhs->sin_port && lhs->sin_addr.S_un.S_addr == rhs->sin_addr.S_un.S_addr;
 }
 
 static
@@ -168,57 +205,60 @@ void win32_destroy_socket(Socket *socket) {
 }
 
 static
-Socket win32_create_server_socket(Connection_Type type, u16 port) {
-    if(!win32_initialize()) return INVALID_SOCKET;
+Error_Code win32_create_server_socket(Socket *socket, Connection_Type type, u16 port) {
+    if(!win32_initialize()) return win32_get_error_code();
 
     int result;
-    Socket socket = win32_create_socket(type);
-    if(socket == INVALID_SOCKET) return INVALID_SOCKET;
+    *socket = win32_create_socket(type);
+    if(*socket == INVALID_SOCKET) return win32_get_error_code();
     
     sockaddr_in address;
     address.sin_family = AF_INET; // IPv4
     address.sin_port   = htons(port);
     address.sin_addr.S_un.S_addr = INADDR_ANY;
 
-    result = bind(socket, (sockaddr *) &address, sizeof(sockaddr_in));
+    result = bind(*socket, (sockaddr *) &address, sizeof(sockaddr_in));
     if(result == SOCKET_ERROR) {
-        win32_destroy_socket(&socket);
-        return INVALID_SOCKET;
+        Error_Code error = win32_get_error_code();
+        win32_destroy_socket(socket);
+        return error;
     }
 
     if(type == CONNECTION_TCP) {
-        result = listen(socket, SOMAXCONN);
+        result = listen(*socket, SOMAXCONN);
         if(result == SOCKET_ERROR) {
-            win32_destroy_socket(&socket);
-            return INVALID_SOCKET;
+            Error_Code error = win32_get_error_code();
+            win32_destroy_socket(socket);
+            return error;
         }
     }
 
 #if VIRTUAL_CONNECTION_NON_BLOCKING
-    if(!win32_set_socket_to_non_blocking(socket)) {
-        win32_destroy_socket(&socket);
-        return INVALID_SOCKET;
+    if(!win32_set_socket_to_non_blocking(*socket)) {
+        Error_Code error = win32_get_error_code();
+        win32_destroy_socket(socket);
+        return error;
     }
 #endif
 
-    return socket;
+    return Success;
 }
 
 static
-Socket win32_create_client_socket(Connection_Type type, string host, u16 port, Win32_Remote_Socket *out_remote) {
-    if(!win32_initialize()) return INVALID_SOCKET;
+Error_Code win32_create_client_socket(Socket *socket, Connection_Type type, string host, u16 port, Win32_Remote_Socket *out_remote) {
+    if(!win32_initialize()) return win32_get_error_code();
 
     int result;
-    Socket socket = win32_create_socket(type);
-    if(socket == INVALID_SOCKET) return INVALID_SOCKET;
+    *socket = win32_create_socket(type);
+    if(*socket == INVALID_SOCKET) return win32_get_error_code();
     
-    addrinfo hints;
+    addrinfo hints{};
     hints.ai_family = AF_INET; // IPv4
     hints.ai_socktype = win32_socket_type_for_connection_type(type);
     hints.ai_protocol = win32_protocol_type_for_connection_type(type);
 
     char port_string[8];
-    sprintf_s(port_string, sizeof(port_string), "%d", port);
+    sprintf_s(port_string, sizeof(port_string), "%u", port);
 
     char *host_string = to_cstring(Default_Allocator, host);
     defer { free_cstring(Default_Allocator, host_string); };
@@ -226,33 +266,36 @@ Socket win32_create_client_socket(Connection_Type type, string host, u16 port, W
     Win32_Remote_Socket remote;
     addrinfo *host_address;
 
-    result = getaddrinfo(host_string, port_string, &hints, &host_address);
+    result = GetAddrInfoA(host_string, port_string, &hints, &host_address);
     defer { freeaddrinfo(host_address); };
 
     if(result != 0) {
-        win32_destroy_socket(&socket);
-        return INVALID_SOCKET;
+        Error_Code error = win32_get_error_code();
+        win32_destroy_socket(socket);
+        return error;
     }
 
     if(type == CONNECTION_UDP) {
         remote = *((sockaddr_in *) host_address->ai_addr);
     }
 
-    result = connect(socket, host_address->ai_addr, (int) host_address->ai_addrlen);
+    result = connect(*socket, host_address->ai_addr, (int) host_address->ai_addrlen);
     if(result != 0) {
-        win32_destroy_socket(&socket);
-        return INVALID_SOCKET;
+        Error_Code error = win32_get_error_code();
+        win32_destroy_socket(socket);
+        return error;
     }
 
 #if VIRTUAL_CONNECTION_NON_BLOCKING
-    if(!win32_set_socket_to_non_blocking(socket)) {
-        win32_destroy_socket(&socket);
-        return INVALID_SOCKET;
+    if(!win32_set_socket_to_non_blocking(*socket)) {
+        Error_Code error = win32_get_error_code();
+        win32_destroy_socket(socket);
+        return error;
     }
 #endif
 
     *out_remote = remote;
-    return socket;
+    return Success;
 }
 
 static
@@ -399,23 +442,24 @@ b8 extract_incoming_packet_from_buffer_if_available(Virtual_Connection *connecti
     connection->incoming_packet.header.remote_ack_id    = deserialize<u32>(connection);
     connection->incoming_packet.header.remote_ack_field = deserialize<u32>(connection);
     connection->incoming_packet.header.packet_type      = deserialize<u8>(connection);
+    assert(connection->incoming_buffer_offset == PACKET_HEADER_SIZE);
     deserialize(connection, connection->incoming_packet.body, connection->incoming_packet.header.packet_size - PACKET_HEADER_SIZE);
 
     // Move any additional data in the buffer to the front for the next read_packet call.
     memmove(connection->incoming_buffer, &connection->incoming_buffer[connection->incoming_packet.header.packet_size], connection->incoming_buffer_size - connection->incoming_packet.header.packet_size);
     connection->incoming_buffer_size -= connection->incoming_packet.header.packet_size;
     
-    return true;
+    return connection->incoming_packet.header.magic == connection->info.magic;
 }
 
 
 
 /* ------------------------------------------- Connection Handling ------------------------------------------- */
 
-b8 create_client_connection(Virtual_Connection *connection, Connection_Type type, string host, u16 port) {
-    connection->socket = win32_create_client_socket(type, host, port, (Win32_Remote_Socket *) &connection->remote);
-    if(connection->socket == INVALID_SOCKET) return false;
-
+Error_Code create_client_connection(Virtual_Connection *connection, Connection_Type type, string host, u16 port) {
+    Error_Code result = win32_create_client_socket(&connection->socket, type, host, port, (Win32_Remote_Socket *) &connection->remote);
+    if(result != Success) return result;
+    
     connection->type   = type;
     connection->status = CONNECTION_Connecting;
     connection->info   = Virtual_Connection_Info();
@@ -424,13 +468,13 @@ b8 create_client_connection(Virtual_Connection *connection, Connection_Type type
     connection->unacked_reliable_packets = Linked_List<Packet>();
     connection->unacked_reliable_packets.allocator = Default_Allocator;
     
-    return true;
+    return Success;
 }
 
-b8 create_server_connection(Virtual_Connection *connection, Connection_Type type, u16 port) {
-    connection->socket = win32_create_server_socket(type, port);
-    if(connection->socket == INVALID_SOCKET) return false;
-
+Error_Code create_server_connection(Virtual_Connection *connection, Connection_Type type, u16 port) {
+    Error_Code result = win32_create_server_socket(&connection->socket, type, port);
+    if(result != Success) return result;
+        
     connection->type    = type;
     connection->status = CONNECTION_Good;
     connection->info   = Virtual_Connection_Info();
@@ -439,7 +483,7 @@ b8 create_server_connection(Virtual_Connection *connection, Connection_Type type
     connection->unacked_reliable_packets = Linked_List<Packet>();
     connection->unacked_reliable_packets.allocator = Default_Allocator;
 
-    return true;
+    return Success;
 }
 
 void destroy_connection(Virtual_Connection *connection) {
@@ -498,11 +542,12 @@ void send_packet(Virtual_Connection *connection, Packet *packet) {
     serialize(connection, packet->header.packet_size);
     serialize(connection, packet->header.magic);
     serialize(connection, packet->header.client_id);
+    serialize(connection, packet->header.sequence_id);
     serialize(connection, packet->header.remote_ack_id);
     serialize(connection, packet->header.remote_ack_field);
     serialize(connection, packet->header.packet_type);
+    assert(connection->outgoing_buffer_size == PACKET_HEADER_SIZE);
     serialize(connection, packet->body, packet->body_size);
-
     assert(connection->outgoing_buffer_size == packet->header.packet_size);
 
     b8 success;
@@ -546,4 +591,69 @@ b8 read_packet(Virtual_Connection *connection) {
     win32_copy_remote((Win32_Remote_Socket *) &connection->remote, (Win32_Remote_Socket *) &remote);
     
     return extract_incoming_packet_from_buffer_if_available(connection);
+}
+
+
+
+/* --------------------------------------------- Packet Handling --------------------------------------------- */
+
+void send_connection_request_packet(Virtual_Connection *connection, s64 spam_count) {
+    Packet packet;
+    packet.header.packet_type = PACKET_Connection_Request;
+    packet.body_size = 0;
+
+    for(s64 i = 0; i < spam_count; ++i) {
+        send_packet(connection, &packet);
+    }
+}
+
+void send_connection_established_packet(Virtual_Connection *connection, s64 spam_count) {
+    Packet packet;
+    packet.header.packet_type = PACKET_Connection_Established;
+    packet.body_size = 0;
+
+    for(s64 i = 0; i < spam_count; ++i) {
+        send_packet(connection, &packet);
+    }
+}
+
+void send_connection_closed_packet(Virtual_Connection *connection, s64 spam_count) {
+    Packet packet;
+    packet.header.packet_type = PACKET_Connection_Closed;
+    packet.body_size = 0;
+
+    for(s64 i = 0; i < spam_count; ++i) {
+        send_packet(connection, &packet);
+    }
+}
+
+void send_ping_packet(Virtual_Connection *connection) {
+    Packet packet;
+    packet.header.packet_type = PACKET_Ping;
+    packet.body_size = 0;
+    send_packet(connection, &packet);
+}
+
+b8 wait_until_connection_established(Virtual_Connection *connection, f32 timeout_in_seconds) {
+    Hardware_Time start = os_get_hardware_time();
+
+    b8 success = false;
+    
+    while(timeout_in_seconds <= 0.f || os_convert_hardware_time(os_get_hardware_time() - start, Seconds) < timeout_in_seconds) {
+        if(read_packet(connection) && connection->incoming_packet.header.packet_type == PACKET_Connection_Established) {
+            connection->info.client_id = connection->incoming_packet.header.client_id;
+            success = true;
+            break;
+        }
+    }
+
+    return success;
+}
+
+
+
+/* ------------------------------------------ Lower Level Utilities ------------------------------------------ */
+
+b8 remote_sockets_equal(Remote_Socket lhs, Remote_Socket rhs) {
+    return win32_remote_sockets_equal((Win32_Remote_Socket *) lhs, (Win32_Remote_Socket *) rhs);
 }

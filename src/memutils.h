@@ -248,9 +248,11 @@ struct Linked_List {
 
 	Linked_List_Node<T> *make_node(T const &value);
 
+    void clear();
 	void add(T const &value);
 	void remove_node(Linked_List_Node<T> *node);
 	void remove_value(T const &value);
+	void remove_value_pointer(T *value_pointer);
 	void remove(s64 index);
 	T *push();
 	T pop();

@@ -152,6 +152,21 @@ Linked_List_Node<T> *Linked_List<T>::make_node(T const &value) {
 }
 
 template<typename T>
+void Linked_List<T>::clear() {
+    Linked_List_Node<T> *node = this->head;
+
+    while(node) {
+        auto next = node->next;
+        this->allocator->deallocate(node);
+        node = next;
+    }
+
+    this->head = null;
+    this->tail = null;
+    this->count = 0;
+}
+
+template<typename T>
 void Linked_List<T>::add(T const &value) {
     Linked_List_Node<T> *node = this->make_node(value);
 		
@@ -194,7 +209,18 @@ template<typename T>
 void Linked_List<T>::remove_value(T const &value) {
     Linked_List_Node<T> *node = this->head;
 
-    while(node && node->value != value) {
+    while(node && node->data != value) {
+        node = node->next;
+    }
+
+    this->remove_node(node);
+}
+
+template<typename T>
+void Linked_List<T>::remove_value_pointer(T *value_pointer) {
+    Linked_List_Node<T> *node = this->head;
+
+    while(node && &node->data != value_pointer) {
         node = node->next;
     }
 

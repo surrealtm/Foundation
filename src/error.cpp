@@ -15,7 +15,19 @@ string error_string_table[] = {
     "Invalid dimensions"_s,
     "The shader contained some errors"_s,
     "The shader input specification did not match up"_s,
-    
+
+    /* Socket Errors */
+    "Address In Use"_s,
+    "Address Not Available"_s,
+    "Network Down"_s,
+    "Network Unreachable"_s,
+    "Network Reset"_s,
+    "Connection Aborted"_s,
+    "Connection Reset"_s,
+    "Connection Refused"_s,
+    "Host Down"_s,
+    "Host Unreachable"_s,
+    "Host Not Found"_s,
 };
 
 static_assert(ARRAY_COUNT(error_string_table) == ERROR_COUNT, "The error_string_table has the wrong size.");
