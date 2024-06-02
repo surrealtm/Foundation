@@ -7,6 +7,10 @@
 
 typedef u32 Client_Id;
 
+//
+// Socket Module Constants
+//
+
 #define INVALID_CLIENT_ID ((Client_Id) -1)
 #define DEFAULT_VIRTUAL_CONNECTION_MAGIC 75
 
@@ -16,6 +20,18 @@ typedef u32 Client_Id;
 
 #define VIRTUAL_CONNECTION_BUFFER_SIZE PACKET_SIZE
 #define VIRTUAL_CONNECTION_NON_BLOCKING true // Calls to the underlying socket APIs can be blocking or non-blocking. We use non-blocking by default here to use it as an immediate mode API (where we check if some data has arrived, instead of waiting until some data arrives)
+
+#define VIRTUAL_CONNECTION_MAX_RELIABLE_PACKETS 128 // How big the unacked_reliable_packets can grow at most. If the connection is really really bad, we might get too few acks for reliable packets, leading to huge memory consumption. In that case, just drop the oldest reliable packets. This should (hopefully) never happen in reality.
+
+
+//
+// Developer Options
+//
+#if FOUNDATION_DEVELOPER
+#define SOCKET_DEBUG_PRINT false
+#define SOCKET_PACKET_LOSS 50 // Percentage of packets to drop randomly to simulate packet loss. Must be an integer because of C++ shittiness
+#endif
+
 
 typedef u64 Socket; // SOCKET on win32 is a UINT_PTR.
 typedef u8 Remote_Socket[16]; // sockaddr_in on win32 is a struct of 16 bytes.
@@ -48,29 +64,30 @@ enum Packet_Type {
 };
 
 struct Packet_Header {
-    u16 packet_size; // The total size in bytes of this packet, including the header. Used in TCP streams to read the complete packet before parsing it.
-    u8 magic; // If the magic number of an incoming packet does not match the magic of a virtual connection, that packet is silently ignored.
-    u32 client_id; // The client that sent this packet, only valid after the handshake is complete. Used to map packets to clients in the server.
-    u32 sequence_id; // The sequential id for this packet by the sender.
-    u32 remote_ack_id; // The highest packet id that arrived from the receiver on the sender.
-    u32 remote_ack_field; // The bitfield for the last 32 packet ids (starting from remote_ack_id), 1 if the packet has been received, 0 if it hasn't.
-    u8 packet_type; // One of Packet_Type, used for filtering system packets from user-defined messages.
+    u16 packet_size;                  // The total size in bytes of this packet, including the header. Used in TCP streams to read the complete packet before parsing it.
+    u8 magic;                         // If the magic number of an incoming packet does not match the magic of a virtual connection, that packet is silently ignored.
+    u32 sender_client_id;             // The client id when sending from client to server, so that the server can quickly map a packet to a "logical" client. Meaningless when the server sends data to the client.
+    u32 sender_sequence_id;           // The sequential id for this packet from the sender.
+    u32 ack_id_for_remote_packets;    // The sequence id of the latest remote packet that has reached the sender of this packet.
+    u32 ack_field_for_remote_packets; // A bitfield representing whether a remote packet id has reached the sender of this packet.
+    u8 packet_type;                   // One of Packet_Type, used for filtering system packets from user-defined messages.
 };
 
 struct Packet {
     Packet_Header header;
     u8 body[PACKET_BODY_SIZE];
-    s64 body_size = 0; // Used for creating and parsing the body.
+    s64 body_offset = 0; // Used for parsing the body.
+    s64 body_size = 0; // Used for creating the body.
 };
 
 struct Virtual_Connection_Info {
-    u8 magic              = DEFAULT_VIRTUAL_CONNECTION_MAGIC; // Remote packets with a different magic will be silently ignored.
-    u32 client_id         = INVALID_CLIENT_ID; // The client id this connection was assigned to after the handshake.
-    u32 remote_ack_id     = (u32) -1; // The sequence id of the latest remote packet that has reached local.
-    u32 remote_ack_field  = 0; // A bit field representing the latest 32 packets (starting from remote_ack_id), 1 means it arrived at remote, 0 means it hasn't (yet).
-    u32 local_sequence_id = 0; // The sequential id of the next packet to be created locally.
-    u32 local_ack_id      = (u32) -1; // The sequence id of the latest local packet that has been acked to local by remote.
-    u32 local_ack_field   = 0; // A bit field representing the latest 32 packets (starting from local_ack_id), 1 means it has been acked by remote, 0 means it hasn't (yet).
+    u8 magic                          = DEFAULT_VIRTUAL_CONNECTION_MAGIC; // Remote packets with a different magic will be silently ignored.
+    u32 client_id                     = INVALID_CLIENT_ID; // The client id this connection was assigned to after the handshake.
+    u32 sequence_id_for_local_packets = 1; // The sequential id of the next packet to be sent from local to remote.
+    u32 ack_id_for_remote_packets     = 0; // The sequence id of the latest remote packet that has reached local.
+    u32 ack_field_for_remote_packets  = 0; // A bitfield representing whether a remote packet id has reached local.
+    u32 ack_id_for_local_packets      = 0; // The sequence id of the last local packet which has been acked by remote.
+    u32 ack_field_for_local_packets   = 0; // A bitfield representing whether a local packet id has been acked by remote.
 };
 
 struct Virtual_Connection {
@@ -117,9 +134,22 @@ void destroy_connection(Virtual_Connection *connection);
 Virtual_Connection create_remote_client_connection(Virtual_Connection *server); // Creates a virtual connection object around the current remote socket of a UDP server, to "fake" an actual connection which doesn't exist in the UDP protocol.
 b8 accept_remote_client_connection(Virtual_Connection *server, Virtual_Connection *client); // Tries to accept an incoming TCP client connection.
 
-void send_packet(Virtual_Connection *connection, Packet *packet);
-void send_reliable_packet(Virtual_Connection *connection, Packet *packet);
+void send_packet(Virtual_Connection *connection, Packet *packet, Packet_Type packet_type);
+void send_reliable_packet(Virtual_Connection *connection, Packet *packet, Packet_Type packet_type);
 b8 read_packet(Virtual_Connection *connection);
+
+
+
+/* ------------------------------------------ Packet Acknowledgement ------------------------------------------ */
+
+//
+// This takes the information passed in the packet header from the sender to the connection (receiver) and
+// handles all reliable packet things.
+// The important thing here is that the connection must be the one that was used for sending the reliable
+// packets, which is trivial for a client, but on a server, the connection which reads the packet is usually
+// not the one sending the packets (every client most likely gets its own connection).
+//
+void update_virtual_connection_information_for_packet(Virtual_Connection *connection, Packet_Header *header);
 
 
 

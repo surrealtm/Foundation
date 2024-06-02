@@ -72,7 +72,7 @@ struct Allocator {
 	u64 query_allocation_size(void *pointer); // Returns the original allocation size which returned this pointer. Not all allocation strategies support this.
 
 	template<typename T>
-	T *New() { T *ptr = (T *) this->allocate(sizeof(T)); *ptr = T(); return ptr; }
+	T *New() { T *raw = (T *) this->allocate(sizeof(T)); *raw = T(); return raw; }
 
 	void debug_print(u32 indent);
 };

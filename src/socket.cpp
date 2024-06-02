@@ -3,6 +3,11 @@
 #include "os_specific.h"
 
 
+#if SOCKET_PACKET_LOSS > 0
+# include "random.h"
+#endif
+
+
 /* ------------------------------------------- Win32 Implementation ------------------------------------------- */
 
 #if FOUNDATION_WIN32
@@ -426,30 +431,109 @@ void deserialize(Virtual_Connection *connection, void *dst, s64 bytes) {
 }
 
 static
-b8 extract_incoming_packet_from_buffer_if_available(Virtual_Connection *connection) {
-    if(connection->incoming_buffer_size < PACKET_HEADER_SIZE) return false; // We haven't even read in a complete packet header yet, so there is no way a complete packet is there.
+b8 is_complete_packet_in_incoming_buffer(Virtual_Connection *connection) {
+    if(connection->incoming_buffer_size < PACKET_HEADER_SIZE) return false;
 
     connection->incoming_buffer_offset = 0;
     u16 peek_packet_size = deserialize<u16>(connection);
     connection->incoming_buffer_offset = 0;
-    
-    if(peek_packet_size > connection->incoming_buffer_size) return false;
 
-    connection->incoming_packet.header.packet_size      = deserialize<u16>(connection);
-    connection->incoming_packet.header.magic            = deserialize<u8>(connection);
-    connection->incoming_packet.header.client_id        = deserialize<u32>(connection);
-    connection->incoming_packet.header.sequence_id      = deserialize<u32>(connection);
-    connection->incoming_packet.header.remote_ack_id    = deserialize<u32>(connection);
-    connection->incoming_packet.header.remote_ack_field = deserialize<u32>(connection);
-    connection->incoming_packet.header.packet_type      = deserialize<u8>(connection);
-    assert(connection->incoming_buffer_offset == PACKET_HEADER_SIZE);
-    deserialize(connection, connection->incoming_packet.body, connection->incoming_packet.header.packet_size - PACKET_HEADER_SIZE);
+    return connection->incoming_buffer_size >= peek_packet_size;
+}
 
-    // Move any additional data in the buffer to the front for the next read_packet call.
-    memmove(connection->incoming_buffer, &connection->incoming_buffer[connection->incoming_packet.header.packet_size], connection->incoming_buffer_size - connection->incoming_packet.header.packet_size);
-    connection->incoming_buffer_size -= connection->incoming_packet.header.packet_size;
+
+
+/* ------------------------------------------ Packet Acknowledgement ------------------------------------------ */
+
+static
+Linked_List_Node<Packet> *find_unacked_reliable_packet_iterator(Virtual_Connection *connection, u32 sequence_id) {
+    for(auto *it = connection->unacked_reliable_packets.head; it != null; it = it->next) {
+        if(it->data.header.sender_sequence_id == sequence_id) return it;
+    }
     
-    return connection->incoming_packet.header.magic == connection->info.magic;
+    return null;
+}
+
+static
+b8 query_ack_field(Virtual_Connection *connection, u32 index_in_field, u32 *sequence_id) {
+    u32 ack_field_size  = min(connection->info.ack_id_for_local_packets, 32);
+    u32 packet_offset   = ack_field_size - index_in_field - 1;
+    b8 packet_was_acked = (connection->info.ack_field_for_local_packets & (0x1 << packet_offset)) != 0;
+    *sequence_id        = connection->info.ack_id_for_local_packets - packet_offset;
+    return packet_was_acked;
+}
+
+void update_virtual_connection_information_for_packet(Virtual_Connection *connection, Packet_Header *header) {
+    if(header->sender_sequence_id > connection->info.ack_id_for_remote_packets) {
+        //
+        // This packet is the latest one we have received from remote. UDP does not ensure the order,
+        // so we might very well read packets out of order, but that means that the ack data in these
+        // packets is outdated, even if we receive them later. Ignore them.
+        //
+        u32 ack_delta_for_remote_packets = header->sender_sequence_id - connection->info.ack_id_for_remote_packets;
+        u32 ack_delta_for_local_packets  = header->ack_id_for_remote_packets - max(connection->info.ack_id_for_local_packets, 32); // If the ack id is smaller than 32, we can still store additional bits in the ack field and may not need to give up packets just yet.
+        
+        //
+        // Look for potentially dropped packets. We consider a packet dropped if we haven't received an ack
+        // for that package, but for a package with a sequence id at least 32 bigger (since we can keep
+        // 32 acks in the ack field).
+        //
+        if(header->ack_id_for_remote_packets > 32) {
+            // Look at all the packets in the ack field which will no longer fit into the ack field after
+            // this packet's information (ack_delta_for_local_packets). If the ack for that packet has not
+            // been received, consider it dropped.
+            
+            for(u32 i = 0; i < ack_delta_for_local_packets; ++i) {
+                u32 packet_sequence_id;
+                b8 packet_was_dropped = !query_ack_field(connection, i, &packet_sequence_id);
+
+                if(packet_was_dropped) {
+#if SOCKET_DEBUG_PRINT
+                    printf("Packet '%u' was dropped.\n", packet_sequence_id); // We are missing the 7, 8, 9....
+#endif
+                        
+                    auto *it = find_unacked_reliable_packet_iterator(connection, packet_sequence_id);
+                    if(it) { // We should always find it, ... I think.
+                        // Resend the packet. This updates the packet header stored in the list.
+                        send_packet(connection, &it->data, (Packet_Type) it->data.header.packet_type);
+                    }
+                }
+            }
+        }
+        
+        //
+        // Update the connection info based on the packet header.
+        //
+        connection->info.ack_id_for_remote_packets    = header->sender_sequence_id;
+        connection->info.ack_field_for_remote_packets = (connection->info.ack_field_for_remote_packets << ack_delta_for_remote_packets) | 0x1;
+        connection->info.ack_id_for_local_packets     = header->ack_id_for_remote_packets;
+        connection->info.ack_field_for_local_packets  = header->ack_field_for_remote_packets;
+    } else if(connection->info.ack_id_for_remote_packets < header->sender_sequence_id + 32) {
+        // This packet isn't the latest one we have received from remote. But we still want to ack that packet,
+        // so that remote won't send it again to us. Note that if the sequence id is "older" than 32, we ignore
+        // it because remote (probably) has considered it dropped by now.
+        u32 delta = connection->info.ack_id_for_remote_packets - header->sender_sequence_id;
+        connection->info.ack_field_for_remote_packets = connection->info.ack_field_for_remote_packets | (0x1 << delta);
+    }
+
+    //
+    // Find packets that have been ack'ed through this packet header (meaning they haven't been acked before,
+    // but are now). We now know they have arrived at remote, and we don't need to bother with them anymore.
+    //
+    for(u32 i = 0; i < min(connection->info.ack_id_for_local_packets, 32); ++i) {
+        u32 packet_sequence_id;
+        b8 packet_was_acked = query_ack_field(connection, i, &packet_sequence_id);
+
+        if(packet_was_acked) {
+            auto *it = find_unacked_reliable_packet_iterator(connection, packet_sequence_id);
+            if(it) { // We should always find it, ... I think.
+#if SOCKET_DEBUG_PRINT
+                printf("Packet '%u' was acked.\n", packet_sequence_id);
+#endif
+                connection->unacked_reliable_packets.remove_node(it);
+            }
+        }
+    }
 }
 
 
@@ -488,6 +572,7 @@ Error_Code create_server_connection(Virtual_Connection *connection, Connection_T
 
 void destroy_connection(Virtual_Connection *connection) {
     win32_destroy_socket(&connection->socket);
+    connection->unacked_reliable_packets.clear();
     connection->status = CONNECTION_Closed;
     connection->type   = CONNECTION_Unknown;
 }
@@ -524,32 +609,47 @@ b8 accept_remote_client_connection(Virtual_Connection *server, Virtual_Connectio
     return true;
 }
 
-void send_packet(Virtual_Connection *connection, Packet *packet) {
+void send_packet(Virtual_Connection *connection, Packet *packet, Packet_Type packet_type) {
     if(connection->status == CONNECTION_Closed) return;
 
     assert(PACKET_HEADER_SIZE + packet->body_size <= PACKET_SIZE);
 
-    packet->header.packet_size      = (u16) (PACKET_HEADER_SIZE + packet->body_size);
-    packet->header.magic            = connection->info.magic;
-    packet->header.client_id        = connection->info.client_id;
-    packet->header.remote_ack_id    = connection->info.remote_ack_id;
-    packet->header.remote_ack_field = connection->info.remote_ack_field;
-    packet->header.sequence_id      = connection->info.local_sequence_id;
-
-    ++connection->info.local_sequence_id;
+    packet->header.packet_size                  = (u16) (PACKET_HEADER_SIZE + packet->body_size);
+    packet->header.magic                        = connection->info.magic;
+    packet->header.sender_client_id             = connection->info.client_id;
+    packet->header.sender_sequence_id           = connection->info.sequence_id_for_local_packets;
+    packet->header.ack_id_for_remote_packets    = connection->info.ack_id_for_remote_packets;
+    packet->header.ack_field_for_remote_packets = connection->info.ack_field_for_remote_packets;
+    packet->header.packet_type                  = packet_type;
+    
+    ++connection->info.sequence_id_for_local_packets;
     connection->outgoing_buffer_size = 0;
     
     serialize(connection, packet->header.packet_size);
     serialize(connection, packet->header.magic);
-    serialize(connection, packet->header.client_id);
-    serialize(connection, packet->header.sequence_id);
-    serialize(connection, packet->header.remote_ack_id);
-    serialize(connection, packet->header.remote_ack_field);
+    serialize(connection, packet->header.sender_client_id);
+    serialize(connection, packet->header.sender_sequence_id);
+    serialize(connection, packet->header.ack_id_for_remote_packets);
+    serialize(connection, packet->header.ack_field_for_remote_packets);
     serialize(connection, packet->header.packet_type);
     assert(connection->outgoing_buffer_size == PACKET_HEADER_SIZE);
     serialize(connection, packet->body, packet->body_size);
     assert(connection->outgoing_buffer_size == packet->header.packet_size);
 
+#if (SOCKET_PACKET_LOSS > 0)
+    u32 chance = get_random_u32(0, 100);
+    if(chance < SOCKET_PACKET_LOSS) {
+#if SOCKET_DEBUG_PRINT
+        printf("Dropping packet '%u'.\n", packet->header.sender_sequence_id);
+#endif
+        return;
+    }
+#endif
+    
+#if SOCKET_DEBUG_PRINT
+    printf("Sending packet '%u'.\n", packet->header.sender_sequence_id);
+#endif
+    
     b8 success;
     
     switch(connection->type) {
@@ -560,37 +660,81 @@ void send_packet(Virtual_Connection *connection, Packet *packet) {
     if(!success) destroy_connection(connection);
 }
 
+void send_reliable_packet(Virtual_Connection *connection, Packet *packet, Packet_Type packet_type) {
+    if(connection->status == CONNECTION_Closed) return;
+
+    send_packet(connection, packet, packet_type);
+
+    const s64 too_many_reliable_packets = 64;
+    
+#if SOCKET_DEBUG_PRINT
+    if(connection->unacked_reliable_packets.count >= too_many_reliable_packets) {
+        printf("Too many unacked reliable packets in virtual connection, dropping the oldest one.\n");
+    }
+#endif
+    
+    if(connection->unacked_reliable_packets.count >= too_many_reliable_packets) {
+        connection->unacked_reliable_packets.remove(0);
+    }
+    
+    connection->unacked_reliable_packets.add(*packet); // send_packet fills out information like the sequence_id, which the packet needs.
+}
+
 b8 read_packet(Virtual_Connection *connection) {
     if(connection->status == CONNECTION_Closed) return false;
 
-    // If the connection is based on TCP, we may still have a complete packet in the buffer from the last
-    // network read. Try to parse that one first.
-    if(extract_incoming_packet_from_buffer_if_available(connection)) return true;
+    // Only actually read from the network if two conditions are met:
+    //   1. There isn't a complete packet in the incoming buffer already (which mostly happens on tcp, where
+    //      the reads don't correspond 1:1 to the sends).
+    //   2. There is still some space in the incoming buffer.
+    // We might actually softlock ourselves if the incoming buffer is too small to hold a complete packet,
+    // but I don't care about that right now.
+    if(!is_complete_packet_in_incoming_buffer(connection) && connection->incoming_buffer_size < sizeof(connection->incoming_buffer)) {
+        Socket_Result result = SOCKET_No_Data;
+        Remote_Socket remote;
+        s64 received;
 
-    // No more space in the incoming buffer. If we got here, it means extract_incoming_packet_from_buffer_if_available
-    // has failed, but we also cannot read in additional data, which probably means we are soft-locked?
-    if(connection->incoming_buffer_size == sizeof(connection->incoming_buffer)) return false;
+        switch(connection->type) {
+        case CONNECTION_UDP:
+            result = win32_receive_socket_data_udp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received, (Win32_Remote_Socket *) &remote);
+            break;
+        case CONNECTION_TCP:
+            result = win32_receive_socket_data_tcp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received);
+            break;
+        }
 
-    Socket_Result result = SOCKET_No_Data;
-    Remote_Socket remote;
-    s64 received;
-
-    switch(connection->type) {
-    case CONNECTION_UDP:
-        result = win32_receive_socket_data_udp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received, (Win32_Remote_Socket *) &remote);
-        break;
-    case CONNECTION_TCP:
-        result = win32_receive_socket_data_tcp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received);
-        break;
+        if(result == SOCKET_New_Data) {
+            connection->incoming_buffer_size += received;
+            connection->status = CONNECTION_Good; // Since we've received something, assume that the connection is fine.
+            win32_copy_remote((Win32_Remote_Socket *) &connection->remote, (Win32_Remote_Socket *) &remote);
+        }
     }
 
-    if(result == SOCKET_No_Data) return false;
+    b8 actually_read_packet = is_complete_packet_in_incoming_buffer(connection);
+    if(actually_read_packet) {
+        // Copy the packet data from the incoming buffer into the readable packet in the connection.
+        connection->incoming_packet.header.packet_size                  = deserialize<u16>(connection);
+        connection->incoming_packet.header.magic                        = deserialize<u8>(connection);
+        connection->incoming_packet.header.sender_client_id             = deserialize<u32>(connection);
+        connection->incoming_packet.header.sender_sequence_id           = deserialize<u32>(connection);
+        connection->incoming_packet.header.ack_id_for_remote_packets    = deserialize<u32>(connection);
+        connection->incoming_packet.header.ack_field_for_remote_packets = deserialize<u32>(connection);
+        connection->incoming_packet.header.packet_type                  = deserialize<u8>(connection);
+        assert(connection->incoming_buffer_offset == PACKET_HEADER_SIZE);
+        deserialize(connection, connection->incoming_packet.body, connection->incoming_packet.header.packet_size - PACKET_HEADER_SIZE);
+        connection->incoming_packet.body_offset = 0;
+        connection->incoming_packet.body_size   = connection->incoming_packet.header.packet_size - PACKET_HEADER_SIZE;
+        
+        // Move any additional data in the buffer to the front for the next read_packet call.
+        memmove(connection->incoming_buffer, &connection->incoming_buffer[connection->incoming_packet.header.packet_size], connection->incoming_buffer_size - connection->incoming_packet.header.packet_size);
+        connection->incoming_buffer_size -= connection->incoming_packet.header.packet_size;
 
-    connection->incoming_buffer_size += received;
-    connection->status = CONNECTION_Good; // Since we've received something, assume that the connection is fine.
-    win32_copy_remote((Win32_Remote_Socket *) &connection->remote, (Win32_Remote_Socket *) &remote);
+#if SOCKET_DEBUG_PRINT
+        printf("Received packet '%u'.\n", connection->incoming_packet.header.sender_sequence_id);
+#endif
+    }
     
-    return extract_incoming_packet_from_buffer_if_available(connection);
+    return actually_read_packet && connection->incoming_packet.header.magic == connection->info.magic;
 }
 
 
@@ -599,39 +743,35 @@ b8 read_packet(Virtual_Connection *connection) {
 
 void send_connection_request_packet(Virtual_Connection *connection, s64 spam_count) {
     Packet packet;
-    packet.header.packet_type = PACKET_Connection_Request;
     packet.body_size = 0;
 
     for(s64 i = 0; i < spam_count; ++i) {
-        send_packet(connection, &packet);
+        send_packet(connection, &packet, PACKET_Connection_Request);
     }
 }
 
 void send_connection_established_packet(Virtual_Connection *connection, s64 spam_count) {
     Packet packet;
-    packet.header.packet_type = PACKET_Connection_Established;
     packet.body_size = 0;
 
     for(s64 i = 0; i < spam_count; ++i) {
-        send_packet(connection, &packet);
+        send_packet(connection, &packet, PACKET_Connection_Established);
     }
 }
 
 void send_connection_closed_packet(Virtual_Connection *connection, s64 spam_count) {
     Packet packet;
-    packet.header.packet_type = PACKET_Connection_Closed;
     packet.body_size = 0;
 
     for(s64 i = 0; i < spam_count; ++i) {
-        send_packet(connection, &packet);
+        send_packet(connection, &packet, PACKET_Connection_Closed);
     }
 }
 
 void send_ping_packet(Virtual_Connection *connection) {
     Packet packet;
-    packet.header.packet_type = PACKET_Ping;
     packet.body_size = 0;
-    send_packet(connection, &packet);
+    send_packet(connection, &packet, PACKET_Ping);
 }
 
 b8 wait_until_connection_established(Virtual_Connection *connection, f32 timeout_in_seconds) {
@@ -640,10 +780,14 @@ b8 wait_until_connection_established(Virtual_Connection *connection, f32 timeout
     b8 success = false;
     
     while(timeout_in_seconds <= 0.f || os_convert_hardware_time(os_get_hardware_time() - start, Seconds) < timeout_in_seconds) {
-        if(read_packet(connection) && connection->incoming_packet.header.packet_type == PACKET_Connection_Established) {
-            connection->info.client_id = connection->incoming_packet.header.client_id;
-            success = true;
-            break;
+        if(read_packet(connection)) {
+            update_virtual_connection_information_for_packet(connection, &connection->incoming_packet.header);
+
+            if(connection->incoming_packet.header.packet_type == PACKET_Connection_Established) {
+                connection->info.client_id = connection->incoming_packet.header.sender_client_id;
+                success = true;
+                break;
+            }
         }
     }
 
