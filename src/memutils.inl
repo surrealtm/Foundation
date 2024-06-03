@@ -136,6 +136,15 @@ T Resizable_Array<T>::pop_first() {
 }
 
 template<typename T>
+Resizable_Array<T> Resizable_Array<T>::copy() {
+    Resizable_Array<T> result;
+    result.allocator = this->allocator;
+    result.reserve(this->count);
+    for(s64 i = 0; i < this->count; ++i) result.add(this->data[i]);
+    return result;
+}
+
+template<typename T>
 T &Resizable_Array<T>::operator[](s64 index) {
     assert(index >= 0 && index < this->count);
     return this->data[index];

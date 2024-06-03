@@ -216,6 +216,7 @@ struct Resizable_Array {
     T *push();
 	T pop();
     T pop_first();
+    Resizable_Array<T> copy();
     
 	T &operator[](s64 index);
 
