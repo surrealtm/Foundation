@@ -46,7 +46,7 @@ int main() {
     constants.color = v3f(1, 1, 1);
     
     Shader_Constant_Buffer constants_buffer;
-    create_shader_constant_buffer(&constants_buffer, 0, sizeof(Constants), &constants);
+    create_shader_constant_buffer(&constants_buffer, sizeof(Constants), &constants);
     
     Shader_Input_Specification inputs[] = {
         { "POSITION", 2, 0 },
@@ -57,14 +57,14 @@ int main() {
     create_shader_from_file(&shader, "data\\shader\\rgba.hlsl"_s, inputs, ARRAY_COUNT(inputs));
 
     Texture texture;
-    create_texture_from_file(&texture, "data\\textures\\rock.png"_s);
+    create_texture_from_file(&texture, "data\\textures\\rock.png"_s, TEXTURE_FILTER_Nearest | TEXTURE_WRAP_Edge);
     
     Font font;
     create_font_from_file(&font, "C:\\Windows\\Fonts\\times.ttf"_s, 50, FONT_FILTER_Lcd_With_Alpha, GLYPH_SET_Extended_Ascii);
 
     for(Font_Atlas *atlas = font.atlas; atlas != null; atlas = atlas->next) {
         Texture *texture = Default_Allocator->New<Texture>();
-        create_texture_from_memory(texture, atlas->bitmap, atlas->w, atlas->h, atlas->channels);
+        create_texture_from_memory(texture, atlas->bitmap, atlas->w, atlas->h, atlas->channels, TEXTURE_FILTER_Nearest | TEXTURE_WRAP_Edge);
     
         atlas->user_handle = texture;
     }
@@ -78,8 +78,8 @@ int main() {
             update_window(&window);
 
             Text_Mesh text_mesh = build_text_mesh(&font, "AVWa!"_s, 100, 100, TEXT_ALIGNMENT_Left | TEXT_ALIGNMENT_Median, Default_Allocator);
-            update_vertex_data(&vertex_buffer, 0, text_mesh.vertices, text_mesh.vertex_count * 2);
-            update_vertex_data(&vertex_buffer, 1, text_mesh.uvs, text_mesh.vertex_count * 2);
+            update_vertex_data(&vertex_buffer, 0, text_mesh.vertices, text_mesh.glyph_count * 6 * 2);
+            update_vertex_data(&vertex_buffer, 1, text_mesh.uvs, text_mesh.glyph_count * 6 * 2);
             free_text_mesh(&text_mesh, Default_Allocator);
 
             constants.color.x = cosf(total_time) * 0.5f + 0.5f;
@@ -90,7 +90,7 @@ int main() {
             clear_frame_buffer(&my_frame_buffer, .1f, .1f, .1f);
             
             bind_shader(&shader);
-            bind_shader_constant_buffer(&constants_buffer, SHADER_Vertex | SHADER_Pixel);
+            bind_shader_constant_buffer(&constants_buffer, 0, SHADER_Vertex | SHADER_Pixel);
             bind_vertex_buffer_array(&vertex_buffer);
             bind_pipeline_state(&pipeline_state);
             bind_texture((Texture *) font.atlas->user_handle, 0);

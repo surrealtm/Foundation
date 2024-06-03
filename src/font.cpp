@@ -263,6 +263,8 @@ void load_glyph_set(Font *font, Glyph_Set glyphs_to_load, Font_Creation_Helper *
         
         font->loaded_glyph_sets |= GLYPH_SET_Extended_Ascii;
     } break;
+
+    default: break; // So that clang doesn't complain
     }
 }
 
@@ -270,7 +272,7 @@ void load_glyph_set(Font *font, Glyph_Set glyphs_to_load, Font_Creation_Helper *
 
 Error_Code create_font_from_file(Font *font, string file_path, s16 size, Font_Filter filter, Glyph_Set glyphs_to_load) {
     string file_content = os_read_file(Default_Allocator, file_path);
-    if(!file_content.count) ERROR_File_Not_Found;
+    if(!file_content.count) return ERROR_File_Not_Found;
     
     Error_Code error = create_font_from_memory(font, file_content, size, filter, glyphs_to_load);
     os_free_file_content(Default_Allocator, &file_content);

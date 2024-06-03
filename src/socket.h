@@ -2,7 +2,7 @@
 
 #include "foundation.h"
 #include "memutils.h"
-#include "strings.h"
+#include "string_type.h"
 #include "error.h"
 
 typedef u32 Client_Id;

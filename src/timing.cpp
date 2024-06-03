@@ -309,8 +309,10 @@ s64 _tmFindInsertionSortIndex(_tm_Summary_Entry *entry, Timing_Output_Sorting so
             }
         }
         break;
+
+    default: break; // So that clang doesn't complain
     }
-    
+
     return index;
 }
 
@@ -620,7 +622,11 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         if(thread->timeline.count == 0) continue;
 
         if(mode & TIMING_OUTPUT_Timeline) {
-            s32 header_length = sprintf_s(header_buffer, " THREAD TIMELINE - %d ", thread->thread_id);            
+#if FOUNDATION_WIN32
+            s32 header_length = sprintf_s(header_buffer, " THREAD TIMELINE - %d ", thread->thread_id);
+#else
+            s32 header_length = sprintf(header_buffer, " THREAD TIMELINE - %d ", thread->thread_id);
+#endif
             s32 half_length = (s32) (__TM_PRINT_HEADER_SIZE + 10 - header_length + 1) / 2;
 
             _tmPrintHeader();
@@ -638,7 +644,11 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
     if(mode & TIMING_OUTPUT_Summary) {
         _tmInternalBuildSortedSummary(sorting);
 
-        s32 header_length = sprintf_s(header_buffer, " PROFILING SUMMARY ");            
+#if FOUNDATION_WIN32
+        s32 header_length = sprintf_s(header_buffer, " PROFILING SUMMARY ");
+#else
+        s32 header_length = sprintf(header_buffer, " PROFILING SUMMARY ");
+#endif
         s32 half_length = (s32) (__TM_PRINT_HEADER_SIZE + 10 - header_length + 1) / 2;
             
         _tmPrintHeader();
@@ -658,7 +668,11 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
         f32 space;
         Memory_Unit space_unit = get_best_memory_unit(total_overhead_space, &space);
 
-        s32 header_length = sprintf_s(header_buffer, " PROFILING OVERHEAD ");            
+#if FOUNDATION_WIN32
+        s32 header_length = sprintf_s(header_buffer, " PROFILING OVERHEAD ");
+#else
+        s32 header_length = sprintf(header_buffer, " PROFILING OVERHEAD ");
+#endif
         s32 half_length = (s32) (__TM_PRINT_HEADER_SIZE + 10 - header_length + 1) / 2;
     
         _tmPrintHeader();

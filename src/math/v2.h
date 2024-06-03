@@ -79,4 +79,4 @@ template<typename T>
 T v2_length2(v2<T> const &v) { return v.x * v.x + v.y * v.y; }
 
 template<typename T>
-v2<T> v2_normalize(v2<T> const &v) { T denom = 1 / v2_length(v); return v2<T>(v.x * denom, v2.y * denom); }
+v2<T> v2_normalize(v2<T> const &v) { T denom = 1 / v2_length(v); return v2<T>(v.x * denom, v.y * denom); }

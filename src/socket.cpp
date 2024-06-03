@@ -1,11 +1,12 @@
 #include "socket.h"
-#include "strings.h"
 #include "os_specific.h"
 
 
 #if SOCKET_PACKET_LOSS > 0
 # include "random.h"
 #endif
+
+// @Incomplete: Make serialization respect the endianess
 
 
 /* ------------------------------------------- Win32 Implementation ------------------------------------------- */
@@ -657,6 +658,7 @@ void send_packet(Virtual_Connection *connection, Packet *packet, Packet_Type pac
     switch(connection->type) {
     case CONNECTION_UDP: success = win32_send_socket_data_udp(connection->socket, (Win32_Remote_Socket *) connection->remote, connection->outgoing_buffer, connection->outgoing_buffer_size); break;
     case CONNECTION_TCP: success = win32_send_socket_data_tcp(connection->socket, connection->outgoing_buffer, connection->outgoing_buffer_size); break;
+    default: break; // So that clang doesn't complain
     }
 
     if(!success) destroy_connection(connection);
@@ -703,6 +705,7 @@ b8 read_packet(Virtual_Connection *connection) {
         case CONNECTION_TCP:
             result = win32_receive_socket_data_tcp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received);
             break;
+        default: break; // So that clang doesn't complain
         }
 
         if(result == SOCKET_New_Data) {

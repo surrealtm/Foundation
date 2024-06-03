@@ -43,17 +43,17 @@ string error_string(Error_Code code) {
 
 void set_custom_error_message(string message) {
     internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), message.count);
-    strncpy_s(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), (const char *) message.data, internal_custom_error_message_count);
+    copy_cstring(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), (const char *) message.data, internal_custom_error_message_count);
 }
 
 void set_custom_error_message(const char *message) {
     internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), strlen(message));
-    strncpy_s(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), message, internal_custom_error_message_count);
+    copy_cstring(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), message, internal_custom_error_message_count);
 }
 
 void set_custom_error_message(const char *message, s64 count) {
     internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), count);
-    strncpy_s(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), message, internal_custom_error_message_count);
+    copy_cstring(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), message, internal_custom_error_message_count);
 }
 
 string get_custom_error_message() {

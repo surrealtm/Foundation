@@ -1,7 +1,7 @@
 #pragma once
 
 #include "foundation.h"
-#include "strings.h"
+#include "string_type.h"
 
 #define WINDOW_PLATFORM_STATE_SIZE 16 // This is the highest size of internal platform data needed to be stored, to avoid a memory allocation here (and to avoid platform headers in here...)
 #define WINDOW_GRAPHICS_STATE_SIZE 264 // This is the highest size of graphics data needed to be stored, to avoid a memory allocation here.

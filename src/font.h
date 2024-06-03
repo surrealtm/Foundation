@@ -1,7 +1,7 @@
 #pragma once
 
 #include "foundation.h"
-#include "strings.h"
+#include "string_type.h"
 #include "error.h"
 
 enum Text_Alignment {

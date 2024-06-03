@@ -244,7 +244,7 @@ u8 Binary_Parser::read_u8() {
 u16 Binary_Parser::read_u16() {
 	u16 *pointer = (u16 *) this->read(sizeof(u16));
 	u16 value = *pointer;
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap2(&value);
 #endif
 	return value;
@@ -253,7 +253,7 @@ u16 Binary_Parser::read_u16() {
 u32 Binary_Parser::read_u32() {
 	u32 *pointer = (u32 *) this->read(sizeof(u32));
 	u32 value = *pointer;
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap4(&value);
 #endif
 	return value;
@@ -262,7 +262,7 @@ u32 Binary_Parser::read_u32() {
 u64 Binary_Parser::read_u64() {
 	u64 *pointer = (u64 *) this->read(sizeof(u64));
 	u64 value = *pointer;
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap8(&value);
 #endif
 	return value;
@@ -277,7 +277,7 @@ s8 Binary_Parser::read_s8() {
 s16 Binary_Parser::read_s16() {
 	s16 *pointer = (s16 *) this->read(sizeof(s16));
 	s16 value = *pointer;
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap2(&value);
 #endif
 	return value;
@@ -286,7 +286,7 @@ s16 Binary_Parser::read_s16() {
 s32 Binary_Parser::read_s32() {
 	s32 *pointer = (s32 *) this->read(sizeof(s32));
 	s32 value = *pointer;
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap4(&value);
 #endif
 	return value;
@@ -295,7 +295,7 @@ s32 Binary_Parser::read_s32() {
 s64 Binary_Parser::read_s64() {
 	s64 *pointer = (s64 *) this->read(sizeof(s64));
 	s64 value = *pointer;
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap8(&value);
 #endif
 	return value;
@@ -304,7 +304,7 @@ s64 Binary_Parser::read_s64() {
 f32 Binary_Parser::read_f32() {
 	f32 *pointer = (f32 *) this->read(sizeof(f32));
 	f32 value = *pointer;
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap4(&value);
 #endif
 	return value;
@@ -313,7 +313,7 @@ f32 Binary_Parser::read_f32() {
 f64 Binary_Parser::read_f64() {
 	f64 *pointer = (f64 *) this->read(sizeof(f64));
 	f64 value = *pointer;
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap8(&value);
 #endif
 	return value;
@@ -369,21 +369,21 @@ void Binary_Writer::write_u8(u8 value) {
 }
 
 void Binary_Writer::write_u16(u16 value) {
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap2(&value);
 #endif
 	this->write(&value, sizeof(u16));
 }
 
 void Binary_Writer::write_u32(u32 value) {
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap4(&value);
 #endif
 	this->write(&value, sizeof(u32));
 }
 
 void Binary_Writer::write_u64(u64 value) {
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap8(&value);
 #endif
 	this->write(&value, sizeof(u64));
@@ -394,35 +394,35 @@ void Binary_Writer::write_s8(s8 value) {
 }
 
 void Binary_Writer::write_s16(s16 value) {
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap2(&value);
 #endif
 	this->write(&value, sizeof(s16));
 }
 
 void Binary_Writer::write_s32(s32 value) {
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap4(&value);
 #endif
 	this->write(&value, sizeof(s32));
 }
 
 void Binary_Writer::write_s64(s64 value) {
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap8(&value);
 #endif
 	this->write(&value, sizeof(s64));
 }
 
 void Binary_Writer::write_f32(f32 value) {
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap4(&value);
 #endif
 	this->write(&value, sizeof(f32));
 }
 
 void Binary_Writer::write_f64(f64 value) {
-#if !LITTLE_ENDIAN
+#if !FOUNDATION_LITTLE_ENDIAN
 	byteswap8(&value);
 #endif
 	this->write(&value, sizeof(f64));

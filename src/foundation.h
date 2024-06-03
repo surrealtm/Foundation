@@ -6,6 +6,12 @@
 #include <stdio.h>  // For printf
 #include <memory.h> // For memset, memcpy...
 
+#if FOUNDATION_WIN32
+# define PRIu64 "llu"
+# define PRId64 "lld"
+# define PRIx64 "llx"
+# define FOUNDATION_LITTLE_ENDIAN true
+
 typedef unsigned char      u8;
 typedef unsigned short     u16;
 typedef unsigned long      u32;
@@ -20,6 +26,31 @@ typedef float  f32;
 typedef double f64;
 
 typedef bool b8;
+
+#elif FOUNDATION_LINUX
+# define PRIu64 "llu"
+# define PRId64 "lld"
+# define PRIx64 "llx"
+# define FOUNDATION_LITTLE_ENDIAN true
+
+typedef unsigned char      u8;
+typedef unsigned short     u16;
+typedef unsigned int       u32;
+typedef unsigned long long u64;
+
+typedef signed char      s8;
+typedef signed short     s16;
+typedef signed int       s32;
+typedef signed long long s64;
+
+typedef float  f32;
+typedef double f64;
+
+typedef bool b8;
+
+#else
+# error "This platform is not supported."
+#endif
 
 #define null 0
 
@@ -54,15 +85,6 @@ constexpr f32 MIN_F32 = -3.40282347e38F;
 constexpr f32 F32_EPSILON = 1e-5f;
 constexpr f64 F64_EPSILON = 1e-8f;
 
-#if FOUNDATION_WIN32
-# define PRIu64 "llu"
-# define PRId64 "lld"
-# define PRIx64 "llx"
-# define LITTLE_ENDIAN true
-#else
-# error "This platform is not supported."
-#endif
-
 static_assert(sizeof(b8)  == 1,                     "Invalid size for b8.");
 static_assert(sizeof(u8)  == 1 && sizeof(s8)  == 1, "Invalid size for u8 / s8.");
 static_assert(sizeof(u16) == 2 && sizeof(s16) == 2, "Invalid size for u16 / s16.");
@@ -82,12 +104,12 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 
 #define ARRAY_COUNT(_array) (sizeof(_array) / sizeof((_array)[0]))
 
-#define foundation_error(format, ...) foundation_do_assertion_fail(__FILE__ "," STRINGIFY(__LINE__), format, __VA_ARGS__)
+#define foundation_error(format, ...) foundation_do_assertion_fail(__FILE__ "," STRINGIFY(__LINE__), format, ##__VA_ARGS__)
 
 #if !FOUNDATION_USE_DEFAULT_ASSERT
 # if _DEBUG
-#  define assert(expr, ...) ((!!(expr)) || foundation_do_assertion_fail(STRINGIFY(expr), __VA_ARGS__))
-#  define foundation_assert(expr, ...) ((!!(expr)) || foundation_do_assertion_fail(STRINGIFY(expr), __VA_ARGS__))
+#  define assert(expr, ...) ((!!(expr)) || foundation_do_assertion_fail(STRINGIFY(expr), ##__VA_ARGS__))
+#  define foundation_assert(expr, ...) ((!!(expr)) || foundation_do_assertion_fail(STRINGIFY(expr), ##__VA_ARGS__))
 # else
 #  define assert(expr, ...)
 #  define foundation_assert(expr, ...)

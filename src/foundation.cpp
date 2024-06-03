@@ -12,7 +12,11 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
     if(*format != 0) {    
         va_list args;
         va_start(args, format);
+#if FOUNDATION_WIN32
         message_length = (u32) vsprintf_s(message, sizeof(message), format, args);
+#else
+        message_length = (u32) vsprintf(message, format, args);
+#endif
         va_end(args);
 
         header_length = message_length + strlen("*  Assertion Failed: ") + 3;
@@ -62,7 +66,7 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
 }
 
 const char *time_unit_suffix(Time_Unit unit) {
-    const char *string = "(UnknownTimeUnit)";
+    const char *string;
 
     switch(unit) {
     case Nanoseconds:  string = "ns"; break;
@@ -70,6 +74,7 @@ const char *time_unit_suffix(Time_Unit unit) {
     case Milliseconds: string = "ms"; break;
     case Seconds:      string = "s";  break;
     case Minutes:      string = "m";  break;
+    default: string = "<>"; break;
     }
     
     return string;

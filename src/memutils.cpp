@@ -197,7 +197,7 @@ void Memory_Arena::create(u64 reserved, u64 requested_commit_size) {
 	assert(this->base == null);
 	assert(reserved != 0);
 	
-	if(this->base = os_reserve_memory(reserved)) {
+	if((this->base = os_reserve_memory(reserved)) != null) {
 		this->page_size   = os_get_page_size();
 		this->commit_size = requested_commit_size ? align_to(requested_commit_size, this->page_size, u64) : this->page_size * 3;
 		this->reserved    = align_to(reserved, this->page_size, u64);
@@ -564,7 +564,7 @@ Allocator Memory_Pool::allocator() {
 /* -------------------------------------------------- Utils -------------------------------------------------- */
 
 const char *memory_unit_suffix(Memory_Unit unit) {
-	const char *string = "(UnknownMemoryUnit)";
+	const char *string;
 
 	switch(unit) {
 	case Bytes:      string = "b"; break;
@@ -572,6 +572,7 @@ const char *memory_unit_suffix(Memory_Unit unit) {
 	case Megabytes:  string = "mb"; break;
 	case Gigabytes:  string = "gb"; break;
 	case Terrabytes: string = "tb"; break;
+    default: string = "<>"; break;
 	}
 
 	return string;
@@ -599,6 +600,7 @@ f64 convert_to_memory_unit(s64 bytes, Memory_Unit target_unit) {
 	case Megabytes:  decimal = (f64) bytes / 1000000.0; break;
 	case Gigabytes:  decimal = (f64) bytes / 1000000000.0; break;
 	case Terrabytes: decimal = (f64) bytes / 1000000000000.0; break;
+    default: decimal = 1; break;
 	}
 
 	return decimal;

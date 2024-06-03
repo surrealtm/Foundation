@@ -169,7 +169,7 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
 
             if(event->type == TEXT_INPUT_EVENT_Control) {               
                 switch(event->control) {
-                case KEY_Enter:       input->entered_this_frame = true; break;
+                case KEY_Enter: input->entered_this_frame = true; break;
 
                 case KEY_Backspace:
                     if(input->selection_active) {
@@ -252,6 +252,8 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                     insert_text(input, string);
                     deallocate_clipboard_data(Default_Allocator, &string);
                 } break;
+
+                default: break; // So that clang doesn't complain
                 }
             } else if(event->type == TEXT_INPUT_EVENT_Character) {
                 if(input->selection_active) erase_selection(input);

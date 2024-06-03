@@ -1,6 +1,6 @@
 #pragma once
 
-#include "strings.h"
+#include "string_type.h"
 
 enum Error_Code {
     Success = 0,

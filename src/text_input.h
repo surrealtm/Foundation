@@ -1,7 +1,7 @@
 #pragma once
 
 #include "foundation.h"
-#include "strings.h"
+#include "string_type.h"
 
 #define TEXT_INPUT_BUFFER_SIZE 512
 
