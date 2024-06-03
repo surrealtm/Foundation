@@ -63,10 +63,11 @@ T *Data_Array<T>::push_with_id(Data_Array_Id id) {
     this->indirection[id]   = this->count;
     this->id[this->count]   = id;
     this->data[this->count] = T();
-
+    T *ptr = &this->data[this->count];
+    
     ++this->count;
 
-    return id;
+    return ptr;
 }
 
 template<typename T>

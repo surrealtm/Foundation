@@ -11,7 +11,7 @@ struct qt {
 
 typedef qt<float> qtf;
 typedef qt<double> qtd;
-typedef qt<signed int> qti;
+typedef qt<signed long> qti;
 
 
 

@@ -584,6 +584,8 @@ Virtual_Connection create_remote_client_connection(Virtual_Connection *server) {
     client.type   = server->type;
     win32_copy_remote((Win32_Remote_Socket *) client.remote, (Win32_Remote_Socket *) server->remote);
     client.info.magic = server->info.magic;
+    client.unacked_reliable_packets = Linked_List<Packet>();
+    client.unacked_reliable_packets.allocator = Default_Allocator;
     return client;
 }
 

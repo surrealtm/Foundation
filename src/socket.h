@@ -29,7 +29,7 @@ typedef u32 Client_Id;
 //
 #if FOUNDATION_DEVELOPER
 #define SOCKET_DEBUG_PRINT false
-#define SOCKET_PACKET_LOSS 50 // Percentage of packets to drop randomly to simulate packet loss. Must be an integer because of C++ shittiness
+#define SOCKET_PACKET_LOSS 0 // Percentage of packets to drop randomly to simulate packet loss. Must be an integer because of C++ shittiness
 #endif
 
 

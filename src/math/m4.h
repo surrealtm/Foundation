@@ -53,7 +53,7 @@ struct m4 {
 
 typedef m4<float> m4f;
 typedef m4<double> m4d;
-typedef m4<signed int> m4i;
+typedef m4<signed long> m4i;
 
 
 

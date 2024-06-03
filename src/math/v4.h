@@ -11,7 +11,7 @@ struct v4 {
 
 typedef v4<float> v4f;
 typedef v4<double> v4d;
-typedef v4<signed int> v4i;
+typedef v4<signed long> v4i;
 
 
 
