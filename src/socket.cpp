@@ -117,17 +117,17 @@ Error_Code win32_get_error_code() {
     s32 wsa = WSAGetLastError();
 
     switch(wsa) {
-    case WSAEADDRINUSE:     error_code = ERROR_WINSOCK_Address_In_Use;        break;
-    case WSAEADDRNOTAVAIL:  error_code = ERROR_WINSOCK_Address_Not_Available; break;
-    case WSAENETDOWN:       error_code = ERROR_WINSOCK_Network_Down;          break;
-    case WSAENETUNREACH:    error_code = ERROR_WINSOCK_Network_Unreachable;   break;
-    case WSAENETRESET:      error_code = ERROR_WINSOCK_Network_Reset;         break;
-    case WSAECONNABORTED:   error_code = ERROR_WINSOCK_Connection_Aborted;    break;
-    case WSAECONNRESET:     error_code = ERROR_WINSOCK_Connection_Reset;      break;
-    case WSAECONNREFUSED:   error_code = ERROR_WINSOCK_Connection_Refused;    break;
-    case WSAEHOSTDOWN:      error_code = ERROR_WINSOCK_Host_Down;             break;
-    case WSAEHOSTUNREACH:   error_code = ERROR_WINSOCK_Host_Unreachable;      break;
-    case WSAHOST_NOT_FOUND: error_code = ERROR_WINSOCK_Host_Not_Found;        break;
+    case WSAEADDRINUSE:     error_code = ERROR_SOCKET_Address_In_Use;        break;
+    case WSAEADDRNOTAVAIL:  error_code = ERROR_SOCKET_Address_Not_Available; break;
+    case WSAENETDOWN:       error_code = ERROR_SOCKET_Network_Down;          break;
+    case WSAENETUNREACH:    error_code = ERROR_SOCKET_Network_Unreachable;   break;
+    case WSAENETRESET:      error_code = ERROR_SOCKET_Network_Reset;         break;
+    case WSAECONNABORTED:   error_code = ERROR_SOCKET_Connection_Aborted;    break;
+    case WSAECONNRESET:     error_code = ERROR_SOCKET_Connection_Reset;      break;
+    case WSAECONNREFUSED:   error_code = ERROR_SOCKET_Connection_Refused;    break;
+    case WSAEHOSTDOWN:      error_code = ERROR_SOCKET_Host_Down;             break;
+    case WSAEHOSTUNREACH:   error_code = ERROR_SOCKET_Host_Unreachable;      break;
+    case WSAHOST_NOT_FOUND: error_code = ERROR_SOCKET_Host_Not_Found;        break;
         
     default:
         set_custom_error_message(win32_error_string(wsa));
@@ -144,7 +144,7 @@ s32 win32_socket_type_for_connection_type(Connection_Type type) {
 
     switch(type) {
     case CONNECTION_TCP: type_id = SOCK_STREAM; break;
-    case CONNECTION_UDP: type_id = SOCK_DGRAM; break;
+    case CONNECTION_UDP: type_id = SOCK_DGRAM;  break;
     }
 
     return type_id;
@@ -191,58 +191,45 @@ void win32_cleanup() {
 }
 
 static
-Socket win32_create_socket(Connection_Type type) {
-    Socket id = socket(AF_INET, win32_socket_type_for_connection_type(type), 0);
-    return id; // id may be INVALID_SOCKET!
-}
-
-static
-b8 win32_set_socket_to_non_blocking(Socket socket) {
-    if(socket == INVALID_SOCKET) return false;
-
-    u_long nonblocking = true;
-    return ioctlsocket(socket, FIONBIO, &nonblocking) == 0;
-}
-
-static
 void win32_destroy_socket(Socket *socket) {
     closesocket(*socket);
     *socket = INVALID_SOCKET;
 }
 
 static
-Error_Code win32_create_server_socket(Socket *socket, Connection_Type type, u16 port) {
+Error_Code win32_create_server_socket(Socket *sock, Connection_Type type, u16 port) {
     if(!win32_initialize()) return win32_get_error_code();
 
     int result;
-    *socket = win32_create_socket(type);
-    if(*socket == INVALID_SOCKET) return win32_get_error_code();
+    *sock = socket(AF_INET, win32_socket_type_for_connection_type(type), 0);
+    if(*sock == INVALID_SOCKET) return win32_get_error_code();
     
     sockaddr_in address;
     address.sin_family = AF_INET; // IPv4
     address.sin_port   = htons(port);
     address.sin_addr.S_un.S_addr = INADDR_ANY;
 
-    result = bind(*socket, (sockaddr *) &address, sizeof(sockaddr_in));
+    result = bind(*sock, (sockaddr *) &address, sizeof(sockaddr_in));
     if(result == SOCKET_ERROR) {
         Error_Code error = win32_get_error_code();
-        win32_destroy_socket(socket);
+        win32_destroy_socket(sock);
         return error;
     }
 
     if(type == CONNECTION_TCP) {
-        result = listen(*socket, SOMAXCONN);
+        result = listen(*sock, SOMAXCONN);
         if(result == SOCKET_ERROR) {
             Error_Code error = win32_get_error_code();
-            win32_destroy_socket(socket);
+            win32_destroy_socket(sock);
             return error;
         }
     }
 
 #if VIRTUAL_CONNECTION_NON_BLOCKING
-    if(!win32_set_socket_to_non_blocking(*socket)) {
+    u_long nonblocking = true;
+    if(ioctlsocket(*sock, FIONBIO, &nonblocking) != 0) {
         Error_Code error = win32_get_error_code();
-        win32_destroy_socket(socket);
+        win32_destroy_socket(sock);
         return error;
     }
 #endif
@@ -251,12 +238,12 @@ Error_Code win32_create_server_socket(Socket *socket, Connection_Type type, u16 
 }
 
 static
-Error_Code win32_create_client_socket(Socket *socket, Connection_Type type, string host, u16 port, Win32_Remote_Socket *out_remote) {
+Error_Code win32_create_client_socket(Socket *sock, Connection_Type type, string host, u16 port, Win32_Remote_Socket *out_remote) {
     if(!win32_initialize()) return win32_get_error_code();
 
     int result;
-    *socket = win32_create_socket(type);
-    if(*socket == INVALID_SOCKET) return win32_get_error_code();
+    *sock = socket(AF_INET, win32_socket_type_for_connection_type(type), 0);
+    if(*sock == INVALID_SOCKET) return win32_get_error_code();
     
     addrinfo hints{};
     hints.ai_family = AF_INET; // IPv4
@@ -277,7 +264,7 @@ Error_Code win32_create_client_socket(Socket *socket, Connection_Type type, stri
 
     if(result != 0) {
         Error_Code error = win32_get_error_code();
-        win32_destroy_socket(socket);
+        win32_destroy_socket(sock);
         return error;
     }
 
@@ -285,17 +272,18 @@ Error_Code win32_create_client_socket(Socket *socket, Connection_Type type, stri
         remote = *((sockaddr_in *) host_address->ai_addr);
     }
 
-    result = connect(*socket, host_address->ai_addr, (int) host_address->ai_addrlen);
+    result = connect(*sock, host_address->ai_addr, (int) host_address->ai_addrlen);
     if(result != 0) {
         Error_Code error = win32_get_error_code();
-        win32_destroy_socket(socket);
+        win32_destroy_socket(sock);
         return error;
     }
 
 #if VIRTUAL_CONNECTION_NON_BLOCKING
-    if(!win32_set_socket_to_non_blocking(*socket)) {
+    u_long nonblocking = true;
+    if(ioctlsocket(*sock, FIONBIO, &nonblocking) != 0) {
         Error_Code error = win32_get_error_code();
-        win32_destroy_socket(socket);
+        win32_destroy_socket(sock);
         return error;
     }
 #endif
@@ -325,7 +313,8 @@ Socket_Result win32_accept_incoming_client_socket(Socket server_socket, Socket *
         result = SOCKET_New_Data;
         
 #if VIRTUAL_CONNECTION_NON_BLOCKING
-        if(!win32_set_socket_to_non_blocking(*client_socket)) {
+        u_long nonblocking = true;
+        if(ioctlsocket(*client_socket, FIONBIO, &nonblocking) != 0) {
             win32_destroy_socket(client_socket);
             result = SOCKET_Error;
         }
@@ -395,6 +384,393 @@ static
 b8 win32_send_socket_data_tcp(Socket socket, u8 *buffer, s64 buffer_size) {
     int sent = send(socket, (char *) buffer, (int) buffer_size, 0);
     return sent != SOCKET_ERROR;
+}
+
+#elif FOUNDATION_LINUX
+# include <errno.h>
+# include <unistd.h>
+# include <sys/socket.h>
+# include <netdb.h>
+# include <fcntl.h>
+
+typedef struct sockaddr_in Linux_Remote_Socket;
+
+static
+string linux_error_string(s32 error_code) {
+    string result;
+
+#define error(value) case value: result = strltr(#value); break;
+
+    switch(error_code) {
+        error(EPERM);
+        error(ENOENT);
+        error(ESRCH);
+        error(EINTR);
+        error(EIO);
+        error(ENXIO);
+        error(E2BIG);
+        error(ENOEXEC);
+        error(EBADF);
+        error(ECHILD);
+        error(EAGAIN);
+        error(ENOMEM);
+        error(EACCES);
+        error(EFAULT);
+        error(ENOTBLK);
+        error(EBUSY);
+        error(EEXIST);
+        error(EXDEV);
+        error(ENODEV);
+        error(ENOTDIR);
+        error(EISDIR);
+        error(EINVAL);
+        error(ENFILE);
+        error(EMFILE);
+        error(ENOTTY);
+        error(ETXTBSY);
+        error(EFBIG);
+        error(ENOSPC);
+        error(ESPIPE);
+        error(EROFS);
+        error(EDOM);
+        error(ERANGE);
+        error(EDEADLK);
+        error(ENAMETOOLONG);
+        error(ENOLCK);
+        error(ENOSYS);
+        error(ENOTEMPTY);
+        error(ELOOP);
+        error(ENOMSG);
+        error(EIDRM);
+        error(ECHRNG);
+        error(EL2NSYNC);
+        error(EL3HLT);
+        error(EL3RST);
+        error(ELNRNG);
+        error(EUNATCH);
+        error(ENOCSI);
+        error(EL2HLT);
+        error(EBADE);
+        error(EBADR);
+        error(EXFULL);
+        error(ENOANO);
+        error(EBADRQC);
+        error(EBADSLT);
+        error(EBFONT);
+        error(ENOSTR);
+        error(ENODATA);
+        error(ETIME);
+        error(ENOSR);
+        error(ENONET);
+        error(ENOPKG);
+        error(EREMOTE);
+        error(ENOLINK);
+        error(EADV);
+        error(ESRMNT);
+        error(ECOMM);
+        error(EPROTO);
+        error(EMULTIHOP);
+        error(EDOTDOT);
+        error(EBADMSG);
+        error(EOVERFLOW);
+        error(ENOTUNIQ);
+        error(EBADFD);
+        error(EREMCHG);
+        error(ELIBACC);
+        error(ELIBBAD);
+        error(ELIBSCN);
+        error(ELIBMAX);
+        error(ELIBEXEC);
+        error(EILSEQ);
+        error(ERESTART);
+        error(ESTRPIPE);
+        error(EUSERS);
+        error(ENOTSOCK);
+        error(EDESTADDRREQ);
+        error(EMSGSIZE);
+        error(EPROTOTYPE);
+        error(ENOPROTOOPT);
+        error(EPROTONOSUPPORT);
+        error(ESOCKTNOSUPPORT);
+        error(EOPNOTSUPP);
+        error(EPFNOSUPPORT);
+        error(EAFNOSUPPORT);
+        error(EADDRINUSE);
+        error(EADDRNOTAVAIL);
+        error(ENETDOWN);
+        error(ENETUNREACH);
+        error(ENETRESET);
+        error(ECONNABORTED);
+        error(ECONNRESET);
+        error(ENOBUFS);
+        error(EISCONN);
+        error(ENOTCONN);
+        error(ESHUTDOWN);
+        error(ETOOMANYREFS);
+        error(ETIMEDOUT);
+        error(ECONNREFUSED);
+        error(EHOSTDOWN);
+        error(EHOSTUNREACH);
+        error(EALREADY);
+        error(EINPROGRESS);
+        error(ESTALE);
+        error(EUCLEAN);
+        error(ENOTNAM);
+        error(ENAVAIL);
+        error(EISNAM);
+        error(EREMOTEIO);
+        error(EDQUOT);
+        error(ENOMEDIUM);
+        error(EMEDIUMTYPE);
+        error(ECANCELED);
+        error(ENOKEY);
+        error(EKEYEXPIRED);
+        error(EKEYREVOKED);
+        error(EKEYREJECTED);
+        error(EOWNERDEAD);
+        error(ENOTRECOVERABLE);
+        error(ERFKILL);
+        error(EHWPOISON);
+    default: result = "<UnknownSockError>"_s; break;
+    }
+
+#undef error
+    
+    return result;
+}
+
+static
+string linux_last_error_string() {
+    return linux_error_string(errno);
+}
+
+static
+Error_Code linux_get_error_code() {
+    Error_Code error_code;
+    
+    switch(errno) {
+    case EADDRINUSE:     error_code = ERROR_SOCKET_Address_In_Use;        break;
+    case EADDRNOTAVAIL:  error_code = ERROR_SOCKET_Address_Not_Available; break;
+    case ENETDOWN:       error_code = ERROR_SOCKET_Network_Down;          break;
+    case ENETUNREACH:    error_code = ERROR_SOCKET_Network_Unreachable;   break;
+    case ENETRESET:      error_code = ERROR_SOCKET_Network_Reset;         break;
+    case ECONNABORTED:   error_code = ERROR_SOCKET_Connection_Aborted;    break;
+    case ECONNRESET:     error_code = ERROR_SOCKET_Connection_Reset;      break;
+    case ECONNREFUSED:   error_code = ERROR_SOCKET_Connection_Refused;    break;
+    case EHOSTDOWN:      error_code = ERROR_SOCKET_Host_Down;             break;
+    case EHOSTUNREACH:   error_code = ERROR_SOCKET_Host_Unreachable;      break;
+    case HOST_NOT_FOUND: error_code = ERROR_SOCKET_Host_Not_Found;        break;
+
+    default:
+        set_custom_error_message(linux_error_string(errno));
+        error_code = ERROR_Custom_Error_Message;
+    }
+    
+    return error_code;
+}
+
+static
+s32 linux_socket_type_for_connection_type(Connection_Type type) {
+    s32 type_id;
+
+    switch(type) {
+    case CONNECTION_TCP: type_id = SOCK_STREAM; break;
+    case CONNECTION_UDP: type_id = SOCK_DGRAM;  break;
+    default: type_id = -1; break;
+    }
+
+    return type_id;
+}
+
+static
+void linux_copy_remote(Linux_Remote_Socket *dst, Linux_Remote_Socket *src) {
+    *dst = *src;
+}
+
+static
+b8 linux_remote_sockets_equal(Linux_Remote_Socket *lhs, Linux_Remote_Socket *rhs) {
+    return lhs->sin_family == rhs->sin_family && lhs->sin_port == rhs->sin_port && lhs->sin_addr.s_addr == rhs->sin_addr.s_addr;
+}
+
+static
+void linux_destroy_socket(Socket *socket) {
+    close(*socket);
+    *socket = -1;
+}
+
+static
+Error_Code linux_create_server_socket(Socket *sock, Connection_Type type, u16 port) {
+    int result;
+    *sock = socket(AF_INET, linux_socket_type_for_connection_type(type), 0);
+    if(*sock == -1) return linux_get_error_code();
+
+    struct sockaddr_in address;
+    address.sin_family      = AF_INET; // IPv4
+    address.sin_port        = htons(port);
+    address.sin_addr.s_addr = INADDR_ANY;
+    
+    result = bind(*sock, (sockaddr *) &address, sizeof(sockaddr_in));
+    if(result == -1) {
+        Error_Code error = linux_get_error_code();
+        linux_destroy_socket(sock);
+        return error;
+    }
+
+    if(type == CONNECTION_TCP) {
+        result = listen(*sock, SOMAXCONN);
+        if(result == -1) {
+            Error_Code error = linux_get_error_code();
+            linux_destroy_socket(sock);
+            return error;
+        }
+    }
+
+#if VIRTUAL_CONNECTION_NON_BLOCKING
+    result = fcntl(*sock, F_SETFL, fcntl(*sock, F_GETFL, 0) | O_NONBLOCK);
+    if(result == -1) {
+        Error_Code error = linux_get_error_code();
+        linux_destroy_socket(sock);
+        return error;
+    }
+#endif
+
+    return Success;
+}
+
+static
+Error_Code linux_create_client_socket(Socket *sock, Connection_Type type, string host, u16 port, Linux_Remote_Socket *out_remote) {
+    int result;
+    *sock = socket(AF_INET, linux_socket_type_for_connection_type(type), 0);
+    if(*sock == -1) return linux_get_error_code();
+
+    char *host_string = to_cstring(Default_Allocator, host);
+    defer { free_cstring(Default_Allocator, host_string); };
+
+    struct hostent *host_entry = gethostbyname(host_string);
+    if(host_entry == null) {
+        Error_Code error = linux_get_error_code();
+        linux_destroy_socket(sock);
+        return error;
+    }
+
+    Linux_Remote_Socket remote;
+    struct sockaddr_in host_address;
+
+    host_address.sin_family = AF_INET; // IPv4
+    host_address.sin_port   = htons(port);
+    memcpy(&host_address.sin_addr, host_entry->h_addr_list[0], host_entry->h_length);
+
+    if(type == CONNECTION_UDP) {
+        remote = host_address;
+    }
+    
+    result = connect(*sock, (sockaddr *) &host_address, sizeof(host_address));
+    if(result == -1) {
+        Error_Code error = linux_get_error_code();
+        linux_destroy_socket(sock);
+        return error;
+    }
+
+#if VIRTUAL_CONNECTION_NON_BLOCKING
+    result = fcntl(*sock, F_SETFL, fcntl(*sock, F_GETFL, 0) | O_NONBLOCK);
+    if(result == -1) {
+        Error_Code error = linux_get_error_code();
+        linux_destroy_socket(sock);
+        return error;
+    }
+#endif
+
+    *out_remote = remote;
+    
+    return Success;    
+}
+
+static
+Socket_Result linux_accept_incoming_client_socket(Socket server_socket, Socket *client_socket) {
+    if(server_socket == -1) return SOCKET_Error;
+
+    sockaddr client_address;
+    socklen_t client_address_size = sizeof(sockaddr);
+
+    *client_socket = accept(server_socket, &client_address, &client_address_size);
+    Socket_Result result = SOCKET_No_Data;
+
+    if(*client_socket == -1) {
+        // If the server socket is set to non-blocking, it will return with error code WSAEWOULDBLOCK if no
+        // incoming client connection is available. In that case, we just want to continue on normally.
+        if(errno != EWOULDBLOCK) {
+            result = SOCKET_Error;
+        }
+    } else {
+        result = SOCKET_New_Data;
+
+#if VIRTUAL_CONNECTION_NON_BLOCKING
+        if(fcntl(*client_socket, F_SETFL, fcntl(*client_socket, F_GETFL, 0) | O_NONBLOCK) == -1) {
+            linux_destroy_socket(client_socket);
+            result = SOCKET_Error;
+        }
+#endif        
+    }
+    
+    return result;
+}
+
+static
+Socket_Result linux_receive_socket_data_udp(Socket socket, u8 *buffer, s64 buffer_size, s64 *read, Linux_Remote_Socket *remote) {
+    socklen_t remote_size = sizeof(Linux_Remote_Socket);
+
+    *read = (s64) recvfrom(socket, (char *) buffer, (int) buffer_size, 0, (sockaddr *) remote, &remote_size);
+    Socket_Result result = SOCKET_No_Data;
+
+    if(*read < 0) {
+        // If the socket is set to non-blocking, it will return with error code WSAEWOULDBLOCK if no
+        // incoming data is available. In that case, we just want to continue on normally.
+        if(errno != EWOULDBLOCK) {
+            result = SOCKET_Error;
+        }
+    } else if(*read == 0) {
+        // If recv returned 0, it means the remote closed the connection gracefully, which means we should
+        // also shut down.
+        result = SOCKET_Error;
+    } else if(*read > 0) {
+        result = SOCKET_New_Data;
+    }
+
+    return result;
+}
+
+static
+Socket_Result linux_receive_socket_data_tcp(Socket socket, u8 *buffer, s64 buffer_size, s64 *read) {
+    *read = recv(socket, (char *) buffer, (int) buffer_size, 0);
+    Socket_Result result = SOCKET_No_Data;
+
+    if(*read < 0) {
+        // If the socket is set to non-blocking, it will return with error code WSAEWOULDBLOCK if no
+        // incoming data is available. In that case, we just want to continue on normally.
+        if(errno != EWOULDBLOCK) {
+            result = SOCKET_Error;
+        }        
+    } else if(*read == 0) {
+        // If recv returned 0, it means the remote closed the connection gracefully, which means we should
+        // also shut down.
+        result = SOCKET_Error;
+    } else if(*read > 0) {
+        result = SOCKET_New_Data;
+    }
+
+    return result;
+}
+
+static
+b8 linux_send_socket_data_udp(Socket socket, Linux_Remote_Socket *remote, u8 *buffer, s64 buffer_size) {
+    int sent = sendto(socket, (char *) buffer, (int) buffer_size, 0, (sockaddr *) remote, sizeof(Linux_Remote_Socket));
+    return sent > 0;
+}
+
+static
+b8 linux_send_socket_data_tcp(Socket socket, u8 *buffer, s64 buffer_size) {
+    int sent = send(socket, (char *) buffer, (int) buffer_size, 0);
+    return sent > 0;
 }
 
 #endif
@@ -542,7 +918,12 @@ void update_virtual_connection_information_for_packet(Virtual_Connection *connec
 /* ------------------------------------------- Connection Handling ------------------------------------------- */
 
 Error_Code create_client_connection(Virtual_Connection *connection, Connection_Type type, string host, u16 port) {
+#if FOUNDATION_WIN32
     Error_Code result = win32_create_client_socket(&connection->socket, type, host, port, (Win32_Remote_Socket *) &connection->remote);
+#elif FOUNDATION_LINUX
+    Error_Code result = linux_create_client_socket(&connection->socket, type, host, port, (Linux_Remote_Socket *) &connection->remote);
+#endif
+    
     if(result != Success) return result;
     
     connection->type   = type;
@@ -557,7 +938,12 @@ Error_Code create_client_connection(Virtual_Connection *connection, Connection_T
 }
 
 Error_Code create_server_connection(Virtual_Connection *connection, Connection_Type type, u16 port) {
+#if FOUNDATION_WIN32
     Error_Code result = win32_create_server_socket(&connection->socket, type, port);
+#elif FOUNDATION_LINUX
+    Error_Code result = linux_create_server_socket(&connection->socket, type, port);
+#endif
+    
     if(result != Success) return result;
         
     connection->type    = type;
@@ -572,7 +958,12 @@ Error_Code create_server_connection(Virtual_Connection *connection, Connection_T
 }
 
 void destroy_connection(Virtual_Connection *connection) {
+#if FOUNDATION_WIN32
     win32_destroy_socket(&connection->socket);
+#elif FOUNDATION_LINUX
+    linux_destroy_socket(&connection->socket);
+#endif
+    
     connection->unacked_reliable_packets.clear();
     connection->status = CONNECTION_Closed;
     connection->type   = CONNECTION_Unknown;
@@ -583,7 +974,13 @@ Virtual_Connection create_remote_client_connection(Virtual_Connection *server) {
     client.status = CONNECTION_Good;
     client.socket = server->socket;
     client.type   = server->type;
+
+#if FOUNDATION_WIN32
     win32_copy_remote((Win32_Remote_Socket *) client.remote, (Win32_Remote_Socket *) server->remote);
+#elif FOUNDATION_LINUX
+    linux_copy_remote((Linux_Remote_Socket *) client.remote, (Linux_Remote_Socket *) server->remote);
+#endif
+    
     client.info.magic = server->info.magic;
     client.unacked_reliable_packets = Linked_List<Packet>();
     client.unacked_reliable_packets.allocator = Default_Allocator;
@@ -594,7 +991,13 @@ b8 accept_remote_client_connection(Virtual_Connection *server, Virtual_Connectio
     if(server->status == CONNECTION_Closed) return false;
 
     Socket client_socket;
+
+#if FOUNDATION_WIN32
     Socket_Result result = win32_accept_incoming_client_socket(server->socket, &client_socket);
+#elif FOUNDATION_LINUX
+    Socket_Result result = linux_accept_incoming_client_socket(server->socket, &client_socket);    
+#endif
+    
     if(result == SOCKET_Error) {
         // If the platform's accept() failed due to an error, then the server socket got closed and so should
         // this connection.
@@ -654,13 +1057,20 @@ void send_packet(Virtual_Connection *connection, Packet *packet, Packet_Type pac
 #endif
     
     b8 success;
-    
+
+#if FOUNDATION_WIN32
     switch(connection->type) {
     case CONNECTION_UDP: success = win32_send_socket_data_udp(connection->socket, (Win32_Remote_Socket *) connection->remote, connection->outgoing_buffer, connection->outgoing_buffer_size); break;
     case CONNECTION_TCP: success = win32_send_socket_data_tcp(connection->socket, connection->outgoing_buffer, connection->outgoing_buffer_size); break;
+    }
+#elif FOUNDATION_LINUX
+    switch(connection->type) {
+    case CONNECTION_UDP: success = linux_send_socket_data_udp(connection->socket, (Linux_Remote_Socket *) connection->remote, connection->outgoing_buffer, connection->outgoing_buffer_size); break;
+    case CONNECTION_TCP: success = linux_send_socket_data_tcp(connection->socket, connection->outgoing_buffer, connection->outgoing_buffer_size); break;
     default: break; // So that clang doesn't complain
     }
-
+#endif
+    
     if(!success) destroy_connection(connection);
 }
 
@@ -698,6 +1108,7 @@ b8 read_packet(Virtual_Connection *connection) {
         Remote_Socket remote;
         s64 received;
 
+#if FOUNDATION_WIN32
         switch(connection->type) {
         case CONNECTION_UDP:
             result = win32_receive_socket_data_udp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received, (Win32_Remote_Socket *) &remote);
@@ -705,13 +1116,28 @@ b8 read_packet(Virtual_Connection *connection) {
         case CONNECTION_TCP:
             result = win32_receive_socket_data_tcp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received);
             break;
+        }
+#elif FOUNDATION_LINUX
+        switch(connection->type) {
+        case CONNECTION_UDP:
+            result = linux_receive_socket_data_udp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received, (Linux_Remote_Socket *) &remote);
+            break;
+        case CONNECTION_TCP:
+            result = linux_receive_socket_data_tcp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received);
+            break;
         default: break; // So that clang doesn't complain
         }
-
+#endif
+        
         if(result == SOCKET_New_Data) {
             connection->incoming_buffer_size += received;
             connection->status = CONNECTION_Good; // Since we've received something, assume that the connection is fine.
+
+#if FOUNDATION_WIN32
             win32_copy_remote((Win32_Remote_Socket *) &connection->remote, (Win32_Remote_Socket *) &remote);
+#elif FOUNDATION_LINUX
+            linux_copy_remote((Linux_Remote_Socket *) &connection->remote, (Linux_Remote_Socket *) &remote);
+#endif
         }
     }
 
@@ -804,5 +1230,9 @@ b8 wait_until_connection_established(Virtual_Connection *connection, f32 timeout
 /* ------------------------------------------ Lower Level Utilities ------------------------------------------ */
 
 b8 remote_sockets_equal(Remote_Socket lhs, Remote_Socket rhs) {
+#if FOUNDATION_WIN32
     return win32_remote_sockets_equal((Win32_Remote_Socket *) lhs, (Win32_Remote_Socket *) rhs);
+#elif FOUNDATION_LINUX
+    return linux_remote_sockets_equal((Linux_Remote_Socket *) lhs, (Linux_Remote_Socket *) rhs);
+#endif
 }
