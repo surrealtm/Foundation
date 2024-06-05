@@ -1,4 +1,3 @@
-#include "foundation.h"
 #include "os_specific.h"
 #include "memutils.h"
 
@@ -288,9 +287,9 @@ b8 os_create_directory(string file_path) {
         if(!os_create_directory(parent_folder)) return false;
     }
         
-    char *path_cstring = to_cstring(Default_Allocator, file_path);
-    b8 result = CreateDirectoryA(path_cstring, null);
-    free_cstring(Default_Allocator, path_cstring);
+    char *cstring = to_cstring(Default_Allocator, file_path);
+    b8 result = CreateDirectoryA(cstring, null);
+    free_cstring(Default_Allocator, cstring);
 
     return result;
 }
