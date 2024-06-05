@@ -32,7 +32,7 @@ enum Thread_State {
 
 struct Thread {
     u8 platform_data[THREAD_INTERNAL_STATE_SIZE];
-    Thread_State state;        
+    Thread_State state = THREAD_STATE_Detached;
 };
 
 

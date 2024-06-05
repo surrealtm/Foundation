@@ -139,10 +139,10 @@ Error_Code win32_get_error_code() {
 }
 
 static
-s32 win32_socket_type_for_connection_type(Connection_Type type) {
+s32 win32_socket_type_for_connection_type(Connection_Protocol protocol) {
     s32 type_id;
 
-    switch(type) {
+    switch(protocol) {
     case CONNECTION_TCP: type_id = SOCK_STREAM; break;
     case CONNECTION_UDP: type_id = SOCK_DGRAM;  break;
     }
@@ -151,10 +151,10 @@ s32 win32_socket_type_for_connection_type(Connection_Type type) {
 }
 
 static
-s32 win32_protocol_type_for_connection_type(Connection_Type type) {
+s32 win32_protocol_type_for_connection_type(Connection_Protocol protocol) {
     s32 type_id;
 
-    switch(type) {
+    switch(protocol) {
     case CONNECTION_TCP: type_id = IPPROTO_TCP; break;
     case CONNECTION_UDP: type_id = IPPROTO_UDP; break;
     }
@@ -197,11 +197,11 @@ void win32_destroy_socket(Socket *socket) {
 }
 
 static
-Error_Code win32_create_server_socket(Socket *sock, Connection_Type type, u16 port) {
+Error_Code win32_create_server_socket(Socket *sock, Connection_Protocol protocol, u16 port) {
     if(!win32_initialize()) return win32_get_error_code();
 
     int result;
-    *sock = socket(AF_INET, win32_socket_type_for_connection_type(type), 0);
+    *sock = socket(AF_INET, win32_socket_type_for_connection_type(protocol), 0);
     if(*sock == INVALID_SOCKET) return win32_get_error_code();
     
     sockaddr_in address;
@@ -216,7 +216,7 @@ Error_Code win32_create_server_socket(Socket *sock, Connection_Type type, u16 po
         return error;
     }
 
-    if(type == CONNECTION_TCP) {
+    if(protocol == CONNECTION_TCP) {
         result = listen(*sock, SOMAXCONN);
         if(result == SOCKET_ERROR) {
             Error_Code error = win32_get_error_code();
@@ -224,7 +224,7 @@ Error_Code win32_create_server_socket(Socket *sock, Connection_Type type, u16 po
             return error;
         }
     }
-
+    
 #if VIRTUAL_CONNECTION_NON_BLOCKING
     u_long nonblocking = true;
     if(ioctlsocket(*sock, FIONBIO, &nonblocking) != 0) {
@@ -238,17 +238,17 @@ Error_Code win32_create_server_socket(Socket *sock, Connection_Type type, u16 po
 }
 
 static
-Error_Code win32_create_client_socket(Socket *sock, Connection_Type type, string host, u16 port, Win32_Remote_Socket *out_remote) {
+Error_Code win32_create_client_socket(Socket *sock, Connection_Protocol protocol, string host, u16 port, Win32_Remote_Socket *out_remote) {
     if(!win32_initialize()) return win32_get_error_code();
 
     int result;
-    *sock = socket(AF_INET, win32_socket_type_for_connection_type(type), 0);
+    *sock = socket(AF_INET, win32_socket_type_for_connection_type(protocol), 0);
     if(*sock == INVALID_SOCKET) return win32_get_error_code();
     
     addrinfo hints{};
     hints.ai_family = AF_INET; // IPv4
-    hints.ai_socktype = win32_socket_type_for_connection_type(type);
-    hints.ai_protocol = win32_protocol_type_for_connection_type(type);
+    hints.ai_socktype = win32_socket_type_for_connection_type(protocol);
+    hints.ai_protocol = win32_protocol_type_for_connection_type(protocol);
 
     char port_string[8];
     sprintf_s(port_string, sizeof(port_string), "%u", port);
@@ -268,7 +268,7 @@ Error_Code win32_create_client_socket(Socket *sock, Connection_Type type, string
         return error;
     }
 
-    if(type == CONNECTION_UDP) {
+    if(protocol == CONNECTION_UDP) {
         remote = *((sockaddr_in *) host_address->ai_addr);
     }
 
@@ -570,10 +570,10 @@ Error_Code linux_get_error_code() {
 }
 
 static
-s32 linux_socket_type_for_connection_type(Connection_Type type) {
+s32 linux_socket_type_for_connection_type(Connection_Protocol protocol) {
     s32 type_id;
 
-    switch(type) {
+    switch(protocol) {
     case CONNECTION_TCP: type_id = SOCK_STREAM; break;
     case CONNECTION_UDP: type_id = SOCK_DGRAM;  break;
     default: type_id = -1; break;
@@ -599,7 +599,7 @@ void linux_destroy_socket(Socket *socket) {
 }
 
 static
-Error_Code linux_create_server_socket(Socket *sock, Connection_Type type, u16 port) {
+Error_Code linux_create_server_socket(Socket *sock, Connection_Protocol protocol, u16 port) {
     int result;
     *sock = socket(AF_INET, linux_socket_type_for_connection_type(type), 0);
     if(*sock == -1) return linux_get_error_code();
@@ -638,7 +638,7 @@ Error_Code linux_create_server_socket(Socket *sock, Connection_Type type, u16 po
 }
 
 static
-Error_Code linux_create_client_socket(Socket *sock, Connection_Type type, string host, u16 port, Linux_Remote_Socket *out_remote) {
+Error_Code linux_create_client_socket(Socket *sock, Connection_Protocol protocol, string host, u16 port, Linux_Remote_Socket *out_remote) {
     int result;
     *sock = socket(AF_INET, linux_socket_type_for_connection_type(type), 0);
     if(*sock == -1) return linux_get_error_code();
@@ -917,18 +917,19 @@ void update_virtual_connection_information_for_packet(Virtual_Connection *connec
 
 /* ------------------------------------------- Connection Handling ------------------------------------------- */
 
-Error_Code create_client_connection(Virtual_Connection *connection, Connection_Type type, string host, u16 port) {
+Error_Code create_client_connection(Virtual_Connection *connection, Connection_Protocol protocol, string host, u16 port) {
 #if FOUNDATION_WIN32
-    Error_Code result = win32_create_client_socket(&connection->socket, type, host, port, (Win32_Remote_Socket *) &connection->remote);
+    Error_Code result = win32_create_client_socket(&connection->socket, protocol, host, port, (Win32_Remote_Socket *) &connection->remote);
 #elif FOUNDATION_LINUX
-    Error_Code result = linux_create_client_socket(&connection->socket, type, host, port, (Linux_Remote_Socket *) &connection->remote);
+    Error_Code result = linux_create_client_socket(&connection->socket, protocol, host, port, (Linux_Remote_Socket *) &connection->remote);
 #endif
     
     if(result != Success) return result;
-    
-    connection->type   = type;
-    connection->status = CONNECTION_Connecting;
-    connection->info   = Virtual_Connection_Info();
+
+    connection->type     = CONNECTION_Client;
+    connection->protocol = protocol;
+    connection->status   = CONNECTION_Connecting;
+    connection->info     = Virtual_Connection_Info();
     connection->incoming_buffer_size = 0;
     connection->outgoing_buffer_size = 0;
     connection->unacked_reliable_packets = Linked_List<Packet>();
@@ -937,18 +938,19 @@ Error_Code create_client_connection(Virtual_Connection *connection, Connection_T
     return Success;
 }
 
-Error_Code create_server_connection(Virtual_Connection *connection, Connection_Type type, u16 port) {
+Error_Code create_server_connection(Virtual_Connection *connection, Connection_Protocol protocol, u16 port) {
 #if FOUNDATION_WIN32
-    Error_Code result = win32_create_server_socket(&connection->socket, type, port);
+    Error_Code result = win32_create_server_socket(&connection->socket, protocol, port);
 #elif FOUNDATION_LINUX
-    Error_Code result = linux_create_server_socket(&connection->socket, type, port);
+    Error_Code result = linux_create_server_socket(&connection->socket, protocol, port);
 #endif
     
     if(result != Success) return result;
-        
-    connection->type    = type;
-    connection->status = CONNECTION_Good;
-    connection->info   = Virtual_Connection_Info();
+
+    connection->type     = CONNECTION_Server;
+    connection->protocol = protocol;
+    connection->status   = CONNECTION_Good;
+    connection->info     = Virtual_Connection_Info();
     connection->incoming_buffer_size = 0;
     connection->outgoing_buffer_size = 0;
     connection->unacked_reliable_packets = Linked_List<Packet>();
@@ -958,23 +960,27 @@ Error_Code create_server_connection(Virtual_Connection *connection, Connection_T
 }
 
 void destroy_connection(Virtual_Connection *connection) {
+    if(connection->type != CONNECTION_Udp_Remote_Client) {
 #if FOUNDATION_WIN32
-    win32_destroy_socket(&connection->socket);
+        win32_destroy_socket(&connection->socket);
 #elif FOUNDATION_LINUX
-    linux_destroy_socket(&connection->socket);
+        linux_destroy_socket(&connection->socket);
 #endif
+    }
     
     connection->unacked_reliable_packets.clear();
-    connection->status = CONNECTION_Closed;
-    connection->type   = CONNECTION_Unknown;
+    connection->status   = CONNECTION_Closed;
+    connection->protocol = CONNECTION_Unknown;
+    connection->type     = CONNECTION_Undefined;
 }
 
 Virtual_Connection create_remote_client_connection(Virtual_Connection *server) {
     Virtual_Connection client{};
-    client.status = CONNECTION_Good;
-    client.socket = server->socket;
-    client.type   = server->type;
-
+    client.type     = CONNECTION_Udp_Remote_Client;
+    client.status   = CONNECTION_Good;
+    client.socket   = server->socket;
+    client.protocol = server->protocol;
+    
 #if FOUNDATION_WIN32
     win32_copy_remote((Win32_Remote_Socket *) client.remote, (Win32_Remote_Socket *) server->remote);
 #elif FOUNDATION_LINUX
@@ -1008,9 +1014,10 @@ b8 accept_remote_client_connection(Virtual_Connection *server, Virtual_Connectio
     if(result == SOCKET_No_Data) return false;
 
     *client = Virtual_Connection{};
-    client->socket = client_socket;
-    client->status = CONNECTION_Good;
-    client->type   = server->type;
+    client->type       = CONNECTION_Tcp_Remote_Client;
+    client->status     = CONNECTION_Good;
+    client->socket     = client_socket;
+    client->protocol   = server->protocol;
     client->info.magic = server->info.magic;
     return true;
 }
@@ -1059,19 +1066,19 @@ void send_packet(Virtual_Connection *connection, Packet *packet, Packet_Type pac
     b8 success;
 
 #if FOUNDATION_WIN32
-    switch(connection->type) {
+    switch(connection->protocol) {
     case CONNECTION_UDP: success = win32_send_socket_data_udp(connection->socket, (Win32_Remote_Socket *) connection->remote, connection->outgoing_buffer, connection->outgoing_buffer_size); break;
     case CONNECTION_TCP: success = win32_send_socket_data_tcp(connection->socket, connection->outgoing_buffer, connection->outgoing_buffer_size); break;
     }
 #elif FOUNDATION_LINUX
-    switch(connection->type) {
+    switch(connection->protocol) {
     case CONNECTION_UDP: success = linux_send_socket_data_udp(connection->socket, (Linux_Remote_Socket *) connection->remote, connection->outgoing_buffer, connection->outgoing_buffer_size); break;
     case CONNECTION_TCP: success = linux_send_socket_data_tcp(connection->socket, connection->outgoing_buffer, connection->outgoing_buffer_size); break;
     default: break; // So that clang doesn't complain
     }
 #endif
-    
-    if(!success) destroy_connection(connection);
+
+    if(!success) destroy_connection(connection); // Errors when sending data usually hint at a local error, in which case we just assume our local endpoint is dead.
 }
 
 void send_reliable_packet(Virtual_Connection *connection, Packet *packet, Packet_Type packet_type) {
@@ -1109,7 +1116,7 @@ b8 read_packet(Virtual_Connection *connection) {
         s64 received;
 
 #if FOUNDATION_WIN32
-        switch(connection->type) {
+        switch(connection->protocol) {
         case CONNECTION_UDP:
             result = win32_receive_socket_data_udp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received, (Win32_Remote_Socket *) &remote);
             break;
@@ -1118,7 +1125,7 @@ b8 read_packet(Virtual_Connection *connection) {
             break;
         }
 #elif FOUNDATION_LINUX
-        switch(connection->type) {
+        switch(connection->protocol) {
         case CONNECTION_UDP:
             result = linux_receive_socket_data_udp(connection->socket, &connection->incoming_buffer[connection->incoming_buffer_size], sizeof(connection->incoming_buffer) - connection->incoming_buffer_size, &received, (Linux_Remote_Socket *) &remote);
             break;
@@ -1128,7 +1135,7 @@ b8 read_packet(Virtual_Connection *connection) {
         default: break; // So that clang doesn't complain
         }
 #endif
-        
+
         if(result == SOCKET_New_Data) {
             connection->incoming_buffer_size += received;
             connection->status = CONNECTION_Good; // Since we've received something, assume that the connection is fine.
@@ -1138,6 +1145,10 @@ b8 read_packet(Virtual_Connection *connection) {
 #elif FOUNDATION_LINUX
             linux_copy_remote((Linux_Remote_Socket *) &connection->remote, (Linux_Remote_Socket *) &remote);
 #endif
+        } else if(result == SOCKET_Error && connection->type != CONNECTION_Server) {
+            // Close the connection if this isn't a server. A server may lose connection to one client, but should still
+            // serve the other clients.
+            destroy_connection(connection);
         }
     }
 

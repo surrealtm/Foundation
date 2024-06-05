@@ -68,6 +68,24 @@ void os_get_desktop_dpi(s32 *x, s32 *y) {
     *y = (s32) uinty;
 }
 
+b8 os_load_and_run_dynamic_library(string file_path, string procedure, void *argument) {
+    char *file_path_cstring = to_cstring(Default_Allocator, file_path);
+    defer { free_cstring(Default_Allocator, file_path_cstring); };
+
+    HINSTANCE dll = LoadLibraryA(file_path_cstring);
+    if(!dll) return false;
+
+    char *procedure_cstring = to_cstring(Default_Allocator, procedure);
+    defer { free_cstring(Default_Allocator, procedure_cstring); };
+    
+    INT_PTR(*procedure_pointer)(void *) = (INT_PTR(*)(void *)) GetProcAddress(dll, procedure_cstring);
+    if(procedure_pointer) procedure_pointer(argument);
+    
+    FreeLibrary(dll);
+    
+    return procedure_pointer != null;
+}
+
 
 
 /* ---------------------------------------------- Console Output ---------------------------------------------- */

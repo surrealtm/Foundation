@@ -48,10 +48,26 @@ enum Connection_Status {
     CONNECTION_Good       = 2,
 };
 
-enum Connection_Type {
+enum Connection_Protocol {
     CONNECTION_Unknown = 0,
     CONNECTION_TCP     = 1,
     CONNECTION_UDP     = 2,
+};
+
+// This enum has some effect on error handling and socket shutdown.
+// Server connections shouldn't shut down when a single client connection
+// threw some errors, but clients should shut down when having errors with
+// the server.
+// Udp remote clients also shouldn't close the socket when being destroyed,
+// since that socket is actually the server socket. Tcp remote clients get
+// their own socket after the tcp handshake, therefore they should destroy
+// their socket.
+enum Connection_Type {
+    CONNECTION_Undefined,
+    CONNECTION_Server,
+    CONNECTION_Tcp_Remote_Client,
+    CONNECTION_Udp_Remote_Client,
+    CONNECTION_Client,
 };
 
 enum Packet_Type {
@@ -92,6 +108,7 @@ struct Virtual_Connection_Info {
 
 struct Virtual_Connection {
     Connection_Type type;
+    Connection_Protocol protocol;
     Connection_Status status;
     Virtual_Connection_Info info;
 
@@ -127,8 +144,8 @@ struct Virtual_Connection {
 
 /* ------------------------------------------- Connection Handling ------------------------------------------- */
 
-Error_Code create_client_connection(Virtual_Connection *connection, Connection_Type type, string host, u16 port);
-Error_Code create_server_connection(Virtual_Connection *connection, Connection_Type type, u16 port);
+Error_Code create_client_connection(Virtual_Connection *connection, Connection_Protocol protocol, string host, u16 port);
+Error_Code create_server_connection(Virtual_Connection *connection, Connection_Protocol protocol, u16 port);
 void destroy_connection(Virtual_Connection *connection);
 
 Virtual_Connection create_remote_client_connection(Virtual_Connection *server); // Creates a virtual connection object around the current remote socket of a UDP server, to "fake" an actual connection which doesn't exist in the UDP protocol.

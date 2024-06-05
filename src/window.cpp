@@ -645,7 +645,7 @@ void window_ensure_frame_time(s64 frame_start, s64 frame_end, f32 requested_fps)
     f64 expected_frame_time_nanoseconds = 1000000000 / requested_fps;
     
     if(frame_time_nanoseconds < expected_frame_time_nanoseconds) {
-        DWORD milliseconds = (DWORD) floor((expected_frame_time_nanoseconds - frame_time_nanoseconds) / 1000000);
+        s32 milliseconds = (s32) floor((expected_frame_time_nanoseconds - frame_time_nanoseconds) / 1000000);
         if(milliseconds > 1) {
 #if FOUNDATION_WIN32
             Sleep(milliseconds - 1);
