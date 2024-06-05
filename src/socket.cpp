@@ -601,7 +601,7 @@ void linux_destroy_socket(Socket *socket) {
 static
 Error_Code linux_create_server_socket(Socket *sock, Connection_Protocol protocol, u16 port) {
     int result;
-    *sock = socket(AF_INET, linux_socket_type_for_connection_type(type), 0);
+    *sock = socket(AF_INET, linux_socket_type_for_connection_type(protocol), 0);
     if(*sock == -1) return linux_get_error_code();
 
     struct sockaddr_in address;
@@ -616,7 +616,7 @@ Error_Code linux_create_server_socket(Socket *sock, Connection_Protocol protocol
         return error;
     }
 
-    if(type == CONNECTION_TCP) {
+    if(protocol == CONNECTION_TCP) {
         result = listen(*sock, SOMAXCONN);
         if(result == -1) {
             Error_Code error = linux_get_error_code();
@@ -640,7 +640,7 @@ Error_Code linux_create_server_socket(Socket *sock, Connection_Protocol protocol
 static
 Error_Code linux_create_client_socket(Socket *sock, Connection_Protocol protocol, string host, u16 port, Linux_Remote_Socket *out_remote) {
     int result;
-    *sock = socket(AF_INET, linux_socket_type_for_connection_type(type), 0);
+    *sock = socket(AF_INET, linux_socket_type_for_connection_type(protocol), 0);
     if(*sock == -1) return linux_get_error_code();
 
     char *host_string = to_cstring(Default_Allocator, host);
@@ -660,7 +660,7 @@ Error_Code linux_create_client_socket(Socket *sock, Connection_Protocol protocol
     host_address.sin_port   = htons(port);
     memcpy(&host_address.sin_addr, host_entry->h_addr_list[0], host_entry->h_length);
 
-    if(type == CONNECTION_UDP) {
+    if(protocol == CONNECTION_UDP) {
         remote = host_address;
     }
     

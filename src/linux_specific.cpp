@@ -11,6 +11,8 @@
 #include <spawn.h>
 #include <dlfcn.h>
 #include <pwd.h>
+#include <dirent.h>
+#include <time.h>
 
 
 
@@ -312,4 +314,178 @@ string os_get_executable_directory() {
     s64 folder_length = os_search_path_for_directory_slash_reverse(path_view);
     if(folder_length == -1) folder_length = path_view.count;
     return make_string(Default_Allocator, (u8 *) path, folder_length);
+}
+
+
+
+static
+void internal_get_files_in_folder(string file_path, Resizable_Array<string> *files, Files_In_Folder_Flags flags) {
+    string concatenation = concatenate_strings(Default_Allocator, file_path, "/."_s);
+    defer { deallocate_string(Default_Allocator, &concatenation); };
+
+    char *cstring = to_cstring(Default_Allocator, concatenation);
+    defer { free_cstring(Default_Allocator, cstring); };
+
+    DIR *directory = opendir(cstring);
+    if(directory) {
+        while(struct dirent *entry = readdir(directory)) {
+            string file_name_view = cstring_view(entry->d_name);
+
+            if(entry->d_type == DT_DIR) {
+                if(flags & FILES_IN_FOLDER_Files_And_Folders) {
+                    if(flags & FILES_IN_FOLDER_Put_Original_Path_Into_Output_Paths) {
+                        String_Builder builder;
+                        builder.create(files->allocator);
+                        builder.append_string(file_path);
+                        builder.append_string("/");
+                        builder.append_string(file_name_view);
+                        files->add(builder.finish());
+                    } else {
+                        files->add(copy_string(files->allocator, file_name_view));
+                    }
+                }
+
+                if(flags & FILES_IN_FOLDER_Recursive) {
+                    String_Builder builder;
+                    builder.create(Default_Allocator);
+                    builder.append_string(file_path);
+                    builder.append_string("/");
+                    builder.append_string(file_name_view);
+                    string folder_name = builder.finish();
+                    internal_get_files_in_folder(folder_name, files, flags);
+                    deallocate_string(Default_Allocator, &folder_name);
+                }
+            } else if(entry->d_type == DT_REG) {
+                if(flags & FILES_IN_FOLDER_Put_Original_Path_Into_Output_Paths) {
+                    String_Builder builder;
+                    builder.create(files->allocator);
+                    builder.append_string(file_path);
+                    builder.append_string("/");
+                    builder.append_string(file_name_view);
+                    files->add(builder.finish());
+                } else {
+                    files->add(copy_string(files->allocator, file_name_view));
+                }
+            }
+        }
+        
+        closedir(directory);
+    }
+}
+
+Files_In_Folder os_get_files_in_folder(string file_path, Allocator *allocator, Files_In_Folder_Flags flags) {
+    Resizable_Array<string> temp;
+    temp.allocator = allocator;    
+    internal_get_files_in_folder(file_path, &temp, flags);
+    
+    Files_In_Folder files;
+    files.count = temp.count;
+    files.file_paths = temp.data;
+    return files;
+}
+
+
+void os_free_files_in_folder(Files_In_Folder *folder, Allocator *allocator) {
+    allocator->deallocate(folder->file_paths);
+    folder->file_paths = null;
+    folder->count = 0;
+}
+
+
+
+                                           
+/* -------------------------------------------------- Timing -------------------------------------------------- */
+
+System_Time os_get_system_time() {
+    time_t T = time(NULL);
+    struct tm tm = *localtime(&T);
+
+    System_Time system_time;
+    system_time.year   = tm.tm_year + 1900;
+    system_time.month  = tm.tm_mon + 1;
+    system_time.day    = tm.tm_mday;
+    system_time.hour   = tm.tm_hour;
+    system_time.minute = tm.tm_min;
+    system_time.second = tm.tm_sec;
+    system_time.millisecond = 0;
+    return system_time;
+}
+
+Hardware_Time os_get_hardware_time() {
+    struct timespec time;
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    return (Hardware_Time) (time.tv_sec * 1e9 + time.tv_nsec);
+}
+
+f64 os_convert_hardware_time(Hardware_Time time, Time_Unit unit) {
+    f64 resolution_factor;
+
+    switch(unit) {
+    case Minutes:      resolution_factor = 60e9; break;
+    case Seconds:      resolution_factor = 1e9; break;
+    case Milliseconds: resolution_factor = 1e6; break;
+    case Microseconds: resolution_factor = 1e3; break;
+    case Nanoseconds:  resolution_factor = 1; break;
+	default:           resolution_factor = 1; break;
+    }
+
+    return (f64) time / resolution_factor;
+}
+
+f64 os_convert_hardware_time(f64 time, Time_Unit unit) {
+    f64 resolution_factor;
+
+    switch(unit) {
+    case Minutes:      resolution_factor = 60e9; break;
+    case Seconds:      resolution_factor = 1e9; break;
+    case Milliseconds: resolution_factor = 1e6; break;
+    case Microseconds: resolution_factor = 1e3; break;
+    case Nanoseconds:  resolution_factor = 1; break;
+	default:           resolution_factor = 1; break;
+    }
+
+    return time / resolution_factor;    
+}
+
+void os_sleep(f64 seconds) {
+    usleep((useconds_t) (seconds * 1000000.));
+}
+
+u64 os_get_cpu_cycle() {
+    return __rdtsc();
+}
+
+
+
+/* ----------------------------------------------- Stack Trace ----------------------------------------------- */
+
+Stack_Trace os_get_stack_trace() {
+#if FOUNDATION_DEVELOPER
+    // @Incomplete: https://man7.org/linux/man-pages/man3/backtrace.3.html
+#else
+    return Stack_Trace();
+#endif
+}
+
+void os_free_stack_trace(Stack_Trace *trace) {
+    for(s64 i = 0; i < trace->frame_count; ++i) {
+        free(trace->frames[i].name);
+        free(trace->frames[i].file);
+    }
+
+    free(trace->frames);
+    trace->frames = null;
+    trace->frame_count = 0;
+}
+
+
+
+/* --------------------------------------------- Bit Manipulation --------------------------------------------- */
+
+u64 os_highest_bit_set(u64 value) {
+    return __builtin_clzll(value);
+}
+
+u64 os_lowest_bit_set(u64 value) {
+    return __builtin_ctzll(value);
 }
