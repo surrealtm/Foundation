@@ -79,7 +79,7 @@ void Data_Array<T>::remove_by_id(Data_Array_Id id) {
 
 template<typename T>
 void Data_Array<T>::remove_by_index(s64 removed_index) {
-    assert(index >= 0 && index < this->count, "Tried to remove an invalid Data Array Index.");
+    assert(removed_index >= 0 && removed_index < this->count, "Tried to remove an invalid Data Array Index.");
 
     s64 last_index = this->count - 1;
     
@@ -130,12 +130,12 @@ template<typename T>
 void Data_Array<T>::push_free_list(Data_Array_Id id) {
     if(this->free_list_capacity == 0) {
         this->free_list_capacity = 8;
-        this->free_list = this->allocator->allocate(this->free_list_capacity * sizeof(Data_Array_Id));
+        this->free_list = (Data_Array_Id *) this->allocator->allocate(this->free_list_capacity * sizeof(Data_Array_Id));
     }
 
     if(this->free_list_count == this->free_list_capacity) {
         this->free_list_capacity *= 2;
-        this->free_list = this->allocator->reallocate(this->free_list, this->free_list_capacity * sizeof(Data_Array_Id));
+        this->free_list = (Data_Array_Id *) this->allocator->reallocate(this->free_list, this->free_list_capacity * sizeof(Data_Array_Id));
     }
     
     this->free_list[this->free_list_count] = id;

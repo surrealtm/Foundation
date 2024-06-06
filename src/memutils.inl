@@ -110,6 +110,16 @@ void Resizable_Array<T>::remove_value(T const &value) {
 }
 
 template<typename T>
+void Resizable_Array<T>::remove_value_pointer(T *value) {
+    for(s64 i = 0; i < this->count; ++i) {
+        if(&this->data[i] == value) {
+            this->remove(i);
+            break;
+        }
+    }
+}
+
+template<typename T>
 T *Resizable_Array<T>::push() {
     this->maybe_grow();
     T *pointer = &this->data[this->count];

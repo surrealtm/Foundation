@@ -320,8 +320,8 @@ u64 string_hash(char const *input) {
 /* -------------------------------------------- String Conversion -------------------------------------------- */
 
 s64 string_to_int(string input, b8 *success) {
-    if(input.count == 0) {
-        *success = false;
+    if(input.count <= 0) {
+        if(success) *success = false;
         return 0;
     }
 
@@ -413,11 +413,16 @@ s64 string_to_int(string input, b8 *success) {
         }
     }
 
-    *success = valid;
+    if(success) *success = valid;
     return result * sign;
 }
 
 f64 string_to_double(string input, b8 *success) {
+    if(input.count <= 0) {
+        if(success) *success = false;
+        return 0;
+    }
+
     const f64 radix = 10;
     f64 sign = 1;
     b8 valid = true;
@@ -484,7 +489,7 @@ f64 string_to_double(string input, b8 *success) {
         }
     }
 
-    *success = valid;
+    if(success) *success = valid;
     return result * sign;
 }
 

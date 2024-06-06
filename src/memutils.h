@@ -213,6 +213,7 @@ struct Resizable_Array {
 	void remove(s64 index);
 	void remove_range(s64 first, s64 last);
     void remove_value(T const &value);
+    void remove_value_pointer(T *pointer);
     T *push();
 	T pop();
     T pop_first();

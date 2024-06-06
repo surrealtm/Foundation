@@ -366,7 +366,7 @@ void *Memory_Pool::push(u64 size) {
 		//
 		u64 reused_size = align_to(size, 16, u64);
 		
-		if(unused_block->size_in_bytes - reused_size >= Memory_Pool::min_payload_size_to_split + sizeof(Memory_Pool::Block)) {
+		if(unused_block->size_in_bytes >= reused_size + Memory_Pool::min_payload_size_to_split + sizeof(Memory_Pool::Block)) {
 			//
 			// Split the existing block into two parts, and only use the first one.
 			//

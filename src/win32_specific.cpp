@@ -572,6 +572,7 @@ void os_sleep(f64 seconds) {
     Sleep((DWORD) round(seconds * 1000));
 }
 
+
 u64 os_get_cpu_cycle() {
 	return __rdtsc();
 }

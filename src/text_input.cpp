@@ -269,9 +269,10 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
     // Update the rendering data
     //
     if(font) {
+        f32 interpolation             = min(window->frame_time * 20.f, 1.f);
         string string_to_cursor       = string_view(input->buffer, input->cursor);
         input->target_cursor_x        = (f32) get_string_width_in_pixels(font, string_to_cursor);
-        input->interpolated_cursor_x += (input->target_cursor_x - input->interpolated_cursor_x) * window->frame_time * 20.f;
+        input->interpolated_cursor_x += (input->target_cursor_x - input->interpolated_cursor_x) * interpolation;
         input->cursor_x               = roundf(input->interpolated_cursor_x);
 
         if(input->selection_active) {
