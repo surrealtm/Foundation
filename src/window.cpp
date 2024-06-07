@@ -184,7 +184,7 @@ LRESULT CALLBACK win32_callback(HWND hwnd, UINT message, WPARAM wparam, LPARAM l
         // Some special text handling characters are not included in the WM_CHAR message, since these do
         // not actually procedure characters. They are still tied to text input (similar to backspace, which
         // is handled in WM_CHAR for some reason), therefore register these unicodes manually here.
-        if(key == KEY_Arrow_Left || key == KEY_Arrow_Right || key == KEY_Backspace || key == KEY_Delete || key == KEY_Enter || key == KEY_Home || key == KEY_End) {
+        if(key == KEY_Arrow_Left || key == KEY_Arrow_Right || key == KEY_Backspace || key == KEY_Delete || key == KEY_Enter || key == KEY_Home || key == KEY_End || key == KEY_Tab) {
             win32_add_control_text_input_event(window, key);
         } else if(window->keys[KEY_Control] & KEY_Down && (key == KEY_V || key == KEY_C || key == KEY_A || key == KEY_X)) {
             win32_add_control_text_input_event(window, key);
@@ -204,7 +204,7 @@ LRESULT CALLBACK win32_callback(HWND hwnd, UINT message, WPARAM wparam, LPARAM l
         // events should be handled as control keys (e.g. backspace, escape...)
         WORD character_type;
         GetStringTypeW(CT_CTYPE1, &utf16, 1, &character_type);
-        if(character_type & C1_ALPHA || character_type & C1_UPPER || character_type & C1_LOWER || character_type & C1_DIGIT || character_type & C1_PUNCT || character_type & C1_BLANK) {
+        if((character_type & C1_ALPHA || character_type & C1_UPPER || character_type & C1_LOWER || character_type & C1_DIGIT || character_type & C1_PUNCT || character_type & C1_BLANK) && utf16 != VK_TAB) {
             win32_add_character_text_input_event(window, utf16);
         }
     } break;
@@ -495,11 +495,12 @@ void show_window(Window *window) {
 #endif
 }
 
-b8 set_window_icon(Window *window, string file_path) {
+b8 set_window_icon_from_file(Window *window, string file_path) {
 #if FOUNDATION_WIN32
     Window_Win32_State *win32 = (Window_Win32_State *) window->platform_data;
     
     char *cstring = to_cstring(Default_Allocator, file_path);
+    defer { free_cstring(Default_Allocator, cstring); };
     
     HANDLE icon = LoadImageA(null, cstring, IMAGE_ICON, 0, 0, LR_LOADFROMFILE);
     if(icon == null) return false;
@@ -507,7 +508,22 @@ b8 set_window_icon(Window *window, string file_path) {
     SendMessageA(win32->hwnd, WM_SETICON, ICON_SMALL, (LPARAM) icon);
     SendMessageA(win32->hwnd, WM_SETICON, ICON_BIG,   (LPARAM) icon);
     
-    free_cstring(Default_Allocator, cstring);
+    return true;
+#endif
+}
+
+b8 set_window_icon_from_resource_name(Window *window, string resource_name) {
+#if FOUNDATION_WIN32
+    Window_Win32_State *win32 = (Window_Win32_State *) window->platform_data;
+    
+    char *cstring = to_cstring(Default_Allocator, resource_name);
+    defer { free_cstring(Default_Allocator, cstring); };
+    
+    HANDLE icon = LoadIconA(GetModuleHandleA(null), cstring);
+    if(icon == null) return false;
+    
+    SendMessageA(win32->hwnd, WM_SETICON, ICON_SMALL, (LPARAM) icon);
+    SendMessageA(win32->hwnd, WM_SETICON, ICON_BIG,   (LPARAM) icon);
     
     return true;
 #endif

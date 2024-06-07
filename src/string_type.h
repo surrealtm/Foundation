@@ -96,6 +96,7 @@ u64 string_hash(const char *input);
 s64 string_to_int(string input, b8 *success);
 f64 string_to_double(string input, b8 *success);
 f32 string_to_float(string input, b8 *success);
+b8 string_to_bool(string input, b8 *success);
 
 
 

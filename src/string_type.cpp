@@ -498,6 +498,21 @@ f32 string_to_float(string input, b8 *success) {
     return (f32) _f64;
 }
 
+b8 string_to_bool(string input, b8 *success) {
+    if(strings_equal(input, "false"_s) || strings_equal(input, "0"_s)) {
+        if(success) *success = true;
+        return false;
+    }
+
+    if(strings_equal(input, "true"_s) || strings_equal(input, "1"_s)) {
+        if(success) *success = true;
+        return true;
+    }
+
+    if(success) *success = false;
+    return true;
+}
+
 
 
 /* ---------------------------------------------- String Builder ---------------------------------------------- */

@@ -181,7 +181,8 @@ void update_window(Window *window);
 void destroy_window(Window *window);
 void show_window(Window *window);
 
-b8 set_window_icon(Window *window, string file_path);
+b8 set_window_icon_from_file(Window *window, string file_path);
+b8 set_window_icon_from_resource_name(Window *window, string resource_name);
 void set_window_name(Window *window, string name);
 void set_window_position_and_size(Window *window, s32 x, s32 y, s32 w, s32 h, b8 maximized);
 void set_window_style(Window *window, Window_Style_Flags style_flags);

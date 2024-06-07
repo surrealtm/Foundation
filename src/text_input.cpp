@@ -15,11 +15,16 @@ b8 is_empty_character(u8 character) {
 }
 
 static
+b8 is_digit_character(u8 character) {
+    return (character >= '0' && character <= '9');
+}
+
+static
 b8 is_alpha_numeric_character(u8 character) {
     return (character >= 'a' && character <= 'z') ||
         (character >= 'A' && character <= 'Z') ||
         (character >= '0' && character <= '9') ||
-        (character == '_' || character == '.');
+        (character == '_' || character == '.' || character == '-' || character == '+');
 }
 
 static
@@ -42,21 +47,46 @@ Word_Mode get_word_mode_for_character(u8 character) {
 
 static
 void insert_text(Text_Input *input, string text) {
+    //
+    // Check for remaining available space.
+    //
     text.count = min(text.count, TEXT_INPUT_BUFFER_SIZE - input->count);
     if(text.count == 0) return;
 
+    //
+    // Check the text against the input mode.
+    //
+    if(input->mode == TEXT_INPUT_Integer) {
+        b8 found_invalid = false;
+
+        for(s64 i = 0; i < text.count; ++i) {
+            char c = text[i];
+            b8 valid = is_digit_character(c) || (input->cursor == 0 && i == 0 && (c == '+' || c == '-'));
+            if(!valid) found_invalid = true;
+        }
+        
+        if(found_invalid) return;
+    } else if(input->mode == TEXT_INPUT_Floating_Point) {
+        b8 found_invalid = false;
+        b8 found_dot = search_string(text_input_string_view(input), '.') != -1;
+        
+        for(s64 i = 0; i < text.count; ++i) {
+            char c = text[i];
+            b8 valid = is_digit_character(c) || (input->cursor == 0 && i == 0 && (c == '+' || c == '-')) || (!found_dot && c == '.');
+            if(c == '.') found_dot = true;
+            if(!valid) found_invalid = true;
+        }
+        
+        if(found_invalid) return;
+    }
+    
+    //
+    // Actually insert the text.
+    //
     memmove(&input->buffer[input->cursor + text.count], &input->buffer[input->cursor], input->count - input->cursor);
     memcpy(&input->buffer[input->cursor], text.data, text.count);
     input->count  += text.count;
     input->cursor += text.count;
-}
-
-static
-void insert_character(Text_Input *input, u8 _char) {
-    string _string;
-    _string.count = 1;
-    _string.data = &_char;
-    insert_text(input, _string);
 }
 
 static
@@ -152,13 +182,15 @@ void maybe_start_or_end_selection(Text_Input *input, Text_Input_Event *event) {
 }
 
 
-void create_text_input(Text_Input *input) {
+void create_text_input(Text_Input *input, Text_Input_Mode mode) {
+    input->mode   = mode;
     input->active = false;
     clear_text_input(input);
 }
 
 void update_text_input(Text_Input *input, Window *window, Font *font) {
     input->entered_this_frame = false;
+    input->tabbed_this_frame  = false;
     
     //
     // Handle the text input events from the window.
@@ -170,7 +202,8 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
             if(event->type == TEXT_INPUT_EVENT_Control) {               
                 switch(event->control) {
                 case KEY_Enter: input->entered_this_frame = true; break;
-
+                case KEY_Tab:   input->tabbed_this_frame = true; break;
+                    
                 case KEY_Backspace:
                     if(input->selection_active) {
                         erase_selection(input);
@@ -249,6 +282,8 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                 case KEY_V: {
                     if(input->selection_active) erase_selection(input);
                     string string = get_clipboard_data(window, Default_Allocator);
+                    if(input->selection_active) erase_selection(input);
+                    clear_selection(input);
                     insert_text(input, string);
                     deallocate_clipboard_data(Default_Allocator, &string);
                 } break;
@@ -257,8 +292,12 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                 }
             } else if(event->type == TEXT_INPUT_EVENT_Character) {
                 if(input->selection_active) erase_selection(input);
-                insert_character(input, (u8) event->utf32);
                 clear_selection(input);
+
+                string _string;
+                _string.count = 1;
+                _string.data = (u8 *) &event->utf32;
+                insert_text(input, _string);
             }
             
             input->time_of_last_input = os_get_hardware_time();

@@ -8,10 +8,18 @@
 struct Window;
 struct Font;
 
+// @Incomplete.
+enum Text_Input_Mode {
+    TEXT_INPUT_Everything,
+    TEXT_INPUT_Integer,
+    TEXT_INPUT_Floating_Point,
+};
+
 struct Text_Input {
     //
     // Internal state.
     //
+    Text_Input_Mode mode;
     b8 active;
     u8 buffer[TEXT_INPUT_BUFFER_SIZE];
     s64 count;
@@ -22,6 +30,7 @@ struct Text_Input {
     // Immediate mode exposed data.
     //
     b8 entered_this_frame;
+    b8 tabbed_this_frame;
     b8 selection_active;    
 
     //
@@ -36,7 +45,7 @@ struct Text_Input {
     s64 time_of_last_input; // Hardware_Time
 };
 
-void create_text_input(Text_Input *input);
+void create_text_input(Text_Input *input, Text_Input_Mode mode);
 void update_text_input(Text_Input *input, Window *window, Font *font); // The font is used for rendering data (e.g. the cursor position requires knowledge of the string width in pixels...)
 void clear_text_input(Text_Input *input);
 void toggle_text_input_activeness(Text_Input *input, b8 active);
