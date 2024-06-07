@@ -86,6 +86,13 @@ b8 os_load_and_run_dynamic_library(string file_path, string procedure, void *arg
     return procedure_pointer != null;
 }
 
+string os_get_user_name() {
+    char buffer[256];
+    DWORD buffer_size = sizeof(buffer);
+    GetUserNameA(buffer, &buffer_size);
+    return make_string(Default_Allocator, (u8 *) buffer, buffer_size - 1); // buffer_size includes the null terminator.
+}
+
 
 
 /* ---------------------------------------------- Console Output ---------------------------------------------- */

@@ -459,6 +459,13 @@ void free_text_mesh(Text_Mesh *text_mesh, Allocator *allocator) {
 }
 
 
+s32 get_character_height_in_pixels(Font *font, u8 character) {
+    Font_Glyph *glyph = find_glyph(font, character);
+    if(!glyph) return 0;
+
+    return glyph->bitmap_height;
+}
+
 s32 get_character_width_in_pixels(Font *font, u8 character) {
     Font_Glyph *glyph = find_glyph(font, character);
     if(!glyph) return 0;

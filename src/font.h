@@ -100,5 +100,6 @@ void destroy_font(Font *font);
 Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment alignment, Allocator *allocator);
 void free_text_mesh(Text_Mesh *text_mesh, Allocator *allocator);
 
+s32 get_character_height_in_pixels(Font *font, u8 character);
 s32 get_character_width_in_pixels(Font *font, u8 character);
 s32 get_string_width_in_pixels(Font *font, string text);

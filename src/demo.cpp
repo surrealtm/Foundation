@@ -9,6 +9,11 @@
 #include "d3d11_layer.h"
 #include "font.h"
 
+#define D3D11_DEMO false
+#define LINUX_DEMO true
+
+#if D3D11_DEMO
+
 struct Constants {
     m4f projection;
     v3f color;
@@ -21,7 +26,7 @@ int main() {
     
 	Window window;
 	create_window(&window, "Foundation"_s);
-    set_window_icon(&window, "diffraction.ico"_s);
+    set_window_icon_from_file(&window, "diffraction.ico"_s);
     show_window(&window);
 
     create_d3d11_context(&window);
@@ -132,3 +137,13 @@ int main() {
 
 	return 0;
 }
+
+#elif LINUX_DEMO
+
+int main() {
+    return 0;
+}
+
+#endif
+
+
