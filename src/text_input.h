@@ -46,9 +46,11 @@ struct Text_Input {
 };
 
 void create_text_input(Text_Input *input, Text_Input_Mode mode);
-void update_text_input(Text_Input *input, Window *window, Font *font); // The font is used for rendering data (e.g. the cursor position requires knowledge of the string width in pixels...)
+b8 update_text_input(Text_Input *input, Window *window, Font *font); // The font is used for rendering data (e.g. the cursor position requires knowledge of the string width in pixels...). This procedure returns true if the text input has been modified in any way.
 void clear_text_input(Text_Input *input);
 void toggle_text_input_activeness(Text_Input *input, b8 active);
 void set_text_input_string(Text_Input *input, string string);
+void insert_text_input_string(Text_Input *input, string string); // Inserts at the cursor position
+void remove_text_input_range(Text_Input *input, s64 first_to_remove, s64 last_to_remove);
 string text_input_string_view(Text_Input *input);
 string text_input_selected_string_view(Text_Input *input);

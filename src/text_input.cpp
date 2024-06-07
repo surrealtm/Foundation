@@ -90,13 +90,13 @@ void insert_text(Text_Input *input, string text) {
 }
 
 static
-void erase_text(Text_Input *input, s64 first_index, s64 last_index) {
-    assert(last_index >= first_index);
-    s64 count = (last_index - first_index) + 1;
+void erase_text(Text_Input *input, s64 first_to_remove, s64 last_to_remove) {
+    assert(last_to_remove >= first_to_remove);
+    s64 count = (last_to_remove - first_to_remove) + 1;
     assert(count <= input->count);
-    memmove(&input->buffer[first_index], &input->buffer[last_index + 1], input->count - (last_index + 1));
-    input->count  -= count;
-    input->cursor = first_index;
+    memmove(&input->buffer[first_to_remove], &input->buffer[last_to_remove + 1], input->count - (last_to_remove + 1));
+    input->count -= count;
+    input->cursor = first_to_remove;
 }
 
 static
@@ -188,7 +188,9 @@ void create_text_input(Text_Input *input, Text_Input_Mode mode) {
     clear_text_input(input);
 }
 
-void update_text_input(Text_Input *input, Window *window, Font *font) {
+b8 update_text_input(Text_Input *input, Window *window, Font *font) {
+    b8 anything_changed = false;
+
     input->entered_this_frame = false;
     input->tabbed_this_frame  = false;
     
@@ -207,20 +209,26 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                 case KEY_Backspace:
                     if(input->selection_active) {
                         erase_selection(input);
+                        anything_changed = true;
                     } else if(event->control_held && input->cursor > 0) {
                         erase_text(input, get_start_of_current_word_towards_the_left(input), input->cursor - 1);
+                        anything_changed = true;
                     } else if(input->cursor > 0) {
                         erase_text(input, input->cursor - 1, input->cursor - 1); 
+                        anything_changed = true;
                     }
                     break;
                 
                 case KEY_Delete:
                     if(input->selection_active) {
                         erase_selection(input);
+                        anything_changed = true;
                     } else if(event->control_held && input->cursor < input->count) {
                         erase_text(input, input->cursor, get_start_of_next_word_towards_the_right(input) - 1);
+                        anything_changed = true;
                     } else if(input->cursor < input->count) {
                         erase_text(input, input->cursor, input->cursor);
+                        anything_changed = true;
                     }
                     break;
 
@@ -229,8 +237,10 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
 
                     if(event->control_held) {
                         input->cursor = get_start_of_current_word_towards_the_left(input);
+                        anything_changed = true;
                     } else if(input->cursor > 0) {
                         --input->cursor;
+                        anything_changed = true;
                     }
                     break;
 
@@ -239,8 +249,10 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                     
                     if(event->control_held) {
                         input->cursor = get_start_of_next_word_towards_the_right(input);
+                        anything_changed = true;
                     } else if(input->cursor < input->count) {
                         ++input->cursor;
+                        anything_changed = true;
                     }
                     break;
 
@@ -252,6 +264,7 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                 case KEY_End:
                     maybe_start_or_end_selection(input, event);    
                     input->cursor = input->count;
+                    anything_changed = true;
                     break;
                     
                 case KEY_A:
@@ -259,6 +272,7 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                     input->selection_active = true;
                     input->selection_pivot = 0;
                     input->cursor = input->count;
+                    anything_changed = true;
                     break;
 
                 case KEY_C:
@@ -267,6 +281,7 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                     } else {
                         set_clipboard_data(window, text_input_string_view(input));
                     }
+                    anything_changed = true;
                     break;
 
                 case KEY_X:
@@ -277,6 +292,7 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                         set_clipboard_data(window, text_input_string_view(input));
                         clear_text_input(input);
                     }
+                    anything_changed = true;
                     break;
 
                 case KEY_V: {
@@ -286,6 +302,7 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                     clear_selection(input);
                     insert_text(input, string);
                     deallocate_clipboard_data(Default_Allocator, &string);
+                    anything_changed = true;
                 } break;
 
                 default: break; // So that clang doesn't complain
@@ -298,6 +315,7 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
                 _string.count = 1;
                 _string.data = (u8 *) &event->utf32;
                 insert_text(input, _string);
+                anything_changed = true;
             }
             
             input->time_of_last_input = os_get_hardware_time();
@@ -334,6 +352,8 @@ void update_text_input(Text_Input *input, Window *window, Font *font) {
             input->cursor_alpha_zero_to_one = 1.f;
         }
     }
+
+    return anything_changed;
 }
 
 void clear_text_input(Text_Input *input) {
@@ -363,6 +383,14 @@ void set_text_input_string(Text_Input *input, string string) {
     input->time_of_last_input = os_get_hardware_time();
     clear_selection(input);
     insert_text(input, string);
+}
+
+void insert_text_input_string(Text_Input *input, string string) {
+    insert_text(input, string);
+}
+
+void remove_text_input_range(Text_Input *input, s64 first_to_remove, s64 last_to_remove) {
+    erase_text(input, first_to_remove, last_to_remove);
 }
 
 string text_input_string_view(Text_Input *input) {
