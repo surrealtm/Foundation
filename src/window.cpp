@@ -439,6 +439,8 @@ b8 create_window(Window *window, string title, s32 x, s32 y, s32 w, s32 h, Windo
     
 #if FOUNDATION_WIN32
     return win32_create_window(window, title, x, y, w, h, flags);
+#elif FOUNDATION_LINUX
+    return false;
 #endif
 }
 
@@ -509,6 +511,8 @@ b8 set_window_icon_from_file(Window *window, string file_path) {
     SendMessageA(win32->hwnd, WM_SETICON, ICON_BIG,   (LPARAM) icon);
     
     return true;
+#elif FOUNDATION_LINUX
+    return false;
 #endif
 }
 
@@ -526,6 +530,8 @@ b8 set_window_icon_from_resource_name(Window *window, string resource_name) {
     SendMessageA(win32->hwnd, WM_SETICON, ICON_BIG,   (LPARAM) icon);
     
     return true;
+#elif FOUNDATION_LINUX
+    return false;
 #endif
 }
 
@@ -716,6 +722,8 @@ string get_clipboard_data(Window *window, Allocator *allocator) {
     CloseClipboard();
 
     return result;
+#elif FOUNDATION_LINUX
+    return ""_s;
 #endif
 }
 

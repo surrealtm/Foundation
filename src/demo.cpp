@@ -140,7 +140,18 @@ int main() {
 
 #elif LINUX_DEMO
 
+void do_something_else() {
+    Resizable_Array<int> array;
+    array.add(5);
+    array.add(10);
+    array.add(15);
+    array.add(30);
+    array[10] = 2;
+}
+
 int main() {
+    do_something_else();
+    printf("Success!\n");
     return 0;
 }
 

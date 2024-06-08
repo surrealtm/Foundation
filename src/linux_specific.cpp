@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
+#include <sys/resource.h>
 #include <unistd.h>
 #include <errno.h>
 #include <spawn.h>
@@ -13,7 +14,10 @@
 #include <pwd.h>
 #include <dirent.h>
 #include <time.h>
-
+#include <execinfo.h>
+#include <X11/Xlib.h>
+#include <X11/Xatom.h>
+#include <X11/Xresource.h>
 
 
 /* ---------------------------------------------- Linux Helpers ---------------------------------------------- */
@@ -34,9 +38,82 @@ char *linux_maybe_expand_path_with_home_directory(Allocator *allocator, string f
     return (char *) builder.finish().data;
 }
 
+string linux_read_proc_file(const char *subfile, b8 process_specific) {
+    //
+    // Because linux is an absolute dumpster fire, proc files don't actually have a valid size (ftell will
+    // always return 0), so it is actually expected to read from the file until we encounter EOF. No idea how
+    // this is supposed to be good in any way...
+    //
+    string result;
+
+    char file_path[256];
+
+    if(process_specific) {
+        pid_t pid = getpid();
+        sprintf(file_path, "/proc/%d/%s", pid, subfile);
+    } else {
+        sprintf(file_path, "/proc/%s", subfile);
+    }
+
+    char internal_buffer[8129];
+    
+    FILE *file = fopen(file_path, "r");
+    if(file) {       
+        size_t length = fread(internal_buffer, 1, ARRAY_COUNT(internal_buffer), file);
+        result = make_string(Default_Allocator, (u8 *) internal_buffer, length);
+        fclose(file);
+    } else {
+        result = ""_s;
+    }
+
+    return result;
+}
+
+string linux_get_line(string *file_content) {
+    s64 end = 0;
+
+    while(end < file_content->count && file_content->data[end] != '\n') ++end;
+    
+    string result = substring_view(*file_content, 0, end);
+    *file_content = substring_view(*file_content, end + 1, file_content->count);
+    return result;
+}
+
+b8 linux_int_character(u8 c) {
+    if(c >= '0' && c <= '9') return true;
+    if(c >= 'a' && c <= 'f') return true;
+    if(c >= 'A' && c <= 'F') return true;
+    if(c == 'x') return true; // For hex prefix
+    return false;
+}
+
+void linux_eat_character(string *line) {
+    ++line->data;
+    --line->count;
+}
+
+s64 linux_parse_int(string *line, b8 hex_as_default) {
+    s64 end = 0;
+
+    while(end < line->count && linux_int_character(line->data[end])) ++end;
+
+    char internal_buffer[256];
+    sprintf(internal_buffer, "%.*s", (u32) end, line->data);
+
+    *line = substring_view(*line, end, line->count);
+    
+    return strtol(internal_buffer, 0, hex_as_default ? 16 : 0);
+}
+
 
 
 /* --------------------------------------------------- Misc --------------------------------------------------- */
+
+void os_message_box(string message) {
+    // Because Linux is a fucking shithole of an OS, there doesn't seem to be an easy way of creating a simple
+    // message box like in windows. Instead, we'd need to construct and manually handle an entire fucking X11
+    // window, which seems like wayyy too much effort...
+}
 
 void os_debug_break() {
     __builtin_trap();
@@ -51,7 +128,29 @@ void os_enable_high_resolution_clock() {
 }
 
 void os_get_desktop_dpi(s32 *x, s32 *y) {
-    // @Incomplete
+    // Linux is such a shithole man.
+    double dpi = 0.0;
+
+    Display *display = XOpenDisplay(null);
+    char *resourceString = XResourceManagerString(display);
+    XrmInitialize();
+
+    if(resourceString) {
+        XrmDatabase db = XrmGetStringDatabase(resourceString);
+
+        XrmValue value;
+        char *type = NULL;
+        if(XrmGetResource(db, "Xft.dpi", "String", &type, &value) == True) {
+            if (value.addr) {
+                dpi = atof(value.addr);
+            }
+        }
+    }
+
+    XCloseDisplay(display);
+    
+    *x = (s32) dpi;
+    *y = (s32) dpi;
 }
 
 
@@ -108,8 +207,26 @@ u64 os_get_page_size() {
 }
 
 u64 os_get_committed_region_size(void *base) {
-    // @Incomplete
-    return 0;
+    string file_content = linux_read_proc_file("maps", true);
+
+    string original_file_content = file_content;
+    defer { deallocate_string(Default_Allocator, &original_file_content); };
+
+    u64 size = 0;
+    
+    string line;
+    while((line = linux_get_line(&file_content)).count) {
+        u64 low  = linux_parse_int(&line, true);
+        linux_eat_character(&line);
+        u64 high = linux_parse_int(&line, true);
+        
+        if((s64) base == low) {
+            size = high - low;
+            break;
+        }
+    }
+    
+    return size;
 }
 
 void *os_reserve_memory(u64 reserved_size) {
@@ -156,8 +273,15 @@ void os_decommit_memory(void *base, u64 decommit_size) {
 
 
 u64 os_get_working_set_size() {
-    // @Incomplete
-    return 0;
+    //
+    // Linux doesn't actually calculate the "working-set-size", but instead the "resident-set-size". The latter
+    // one is the number of kilobytes of pages that actually reside in main memory, which seems close enough for
+    // a rough performance overview...
+    // Note: This only gives us the MAX Rss, not the current one...
+    //
+    struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    return usage.ru_maxrss * ONE_KILOBYTE;
 }
 
 
@@ -465,26 +589,28 @@ u64 os_get_cpu_cycle() {
 
 Stack_Trace os_get_stack_trace() {
 #if FOUNDATION_DEVELOPER
-    // @Cleanup: Is this actually working correctly?
-
     const s64 max_frames_to_capture = 256; // We don't know in advance how many frames there are going to be (and we don't want to iterate twice), so just preallocate a max number.
 
 
     void *return_addresses[max_frames_to_capture];
     int frame_count = backtrace(return_addresses, max_frames_to_capture);
 
-    char **symbol_names = backtrace_symbols(return_addressses, frame_count);
+    char **symbol_names = backtrace_symbols(return_addresses, frame_count);
 
     Stack_Trace trace;
     trace.frames = (Stack_Trace::Stack_Frame *) malloc(frame_count * sizeof(Stack_Trace::Stack_Frame));
-    trace.frame_count = frame_count;
+    trace.frame_count = frame_count - 1; // The first frame of backtrace() is os_get_stack_trace, which we obviously don't want.
 
-    for(s64 i = 0; i < frame_count; ++i) {
+    s64 frame_index = 0;
+    for(s64 i = 1; i < frame_count; ++i) { // The first frame of backtrace() is os_get_stack_trace, which we obviously don't want.
         // backtrace() only gives us one symbol name, so I guess that'll have to do here...
-        trace.frames[i].name = malloc(strlen(symbol_names[i]) + 1);
-        strcpy(trace.frames[i].name, symbol_names[i]);
-        trace.frames[i].file = null;
+        trace.frames[frame_index].name = (char *) malloc(strlen(symbol_names[i]) + 1);
+        strcpy(trace.frames[frame_index].name, symbol_names[i]);
+        trace.frames[frame_index].file = null;
+        ++frame_index;
     }
+
+    return trace;
 #else
     return Stack_Trace();
 #endif

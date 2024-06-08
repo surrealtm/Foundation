@@ -44,7 +44,11 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
     printf("Stack Trace:\n");
 
     for(s64 i = 1; i < trace.frame_count; ++i) { // The first frame would be this procedure, which we want to ignore.
-        printf("  %s, %s:%u\n", trace.frames[i].name, trace.frames[i].file, (u32) trace.frames[i].line);
+        if(trace.frames[i].file) { // Linux doesn't give us filenames...
+            printf("  %s, %s:%u\n", trace.frames[i].name, trace.frames[i].file, (u32) trace.frames[i].line);
+        } else {
+            printf("  %s\n", trace.frames[i].name);
+        }
     }
 
     printf("\n\n");
