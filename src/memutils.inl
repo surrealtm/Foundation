@@ -58,6 +58,13 @@ void Resizable_Array<T>::clear() {
 }
 
 template<typename T>
+void Resizable_Array<T>::clear_without_deallocation() {
+    this->count     = 0;
+    this->allocated = 0;
+    this->data      = null;
+}
+
+template<typename T>
 void Resizable_Array<T>::reserve(s64 count) {
     assert(count >= 0);
     if(this->allocated == 0) this->allocated = Resizable_Array::INITIAL_SIZE;

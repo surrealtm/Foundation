@@ -8,7 +8,6 @@
 struct Window;
 struct Font;
 
-// @Incomplete.
 enum Text_Input_Mode {
     TEXT_INPUT_Everything,
     TEXT_INPUT_Integer,

@@ -207,6 +207,7 @@ struct Resizable_Array {
 	void maybe_grow(b8 force = false);
 	void maybe_shrink();
 	void clear();
+	void clear_without_deallocation(); // If using this on a temp arena, etc.
     void reserve(s64 count);
     void add(T const &data);
     void insert(s64 index, T const &data);
