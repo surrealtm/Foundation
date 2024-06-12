@@ -152,6 +152,8 @@ D3D11_FILTER d3d11_filter(Texture_Hints hints) {
     switch(input) {
     case TEXTURE_FILTER_Nearest: output = D3D11_FILTER_MIN_MAG_MIP_POINT;  break;
     case TEXTURE_FILTER_Linear:  output = D3D11_FILTER_MIN_MAG_MIP_LINEAR; break;
+    case TEXTURE_FILTER_Comparison_Nearest: output = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_POINT;  break;
+    case TEXTURE_FILTER_Comparison_Linear:  output = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR; break;
     default: output = D3D11_FILTER_MIN_MAG_MIP_POINT; break;
     }
     
@@ -870,7 +872,7 @@ void create_frame_buffer_depth_stencil_attachment_internal(Frame_Buffer *frame_b
         sampler_description.AddressW       = texture_address_mode;
         sampler_description.MipLODBias     = 0.f;
         sampler_description.MaxAnisotropy  = 1;
-        sampler_description.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+        sampler_description.ComparisonFunc = D3D11_COMPARISON_LESS;
         sampler_description.BorderColor[0] = attachment->border_color.r;
         sampler_description.BorderColor[1] = attachment->border_color.g;
         sampler_description.BorderColor[2] = attachment->border_color.b;

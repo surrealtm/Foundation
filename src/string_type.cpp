@@ -157,11 +157,7 @@ void copy_cstring(char *dst, const char *src, s64 src_count) {
 }
 
 void copy_cstring(char *dst, s64 dst_count, const char *src, s64 src_count) {
-#if FOUNDATION_WIN32
-    strncpy_s(dst, dst_count, src, src_count);
-#else
     strncpy(dst, src, min(dst_count, src_count));
-#endif
 }
 
 

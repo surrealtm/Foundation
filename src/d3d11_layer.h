@@ -89,16 +89,18 @@ struct Vertex_Buffer_Array {
 enum Texture_Hints {
     TEXTURE_HINT_None = 0x0,
 
-    TEXTURE_FILTER_Nearest = 0x1,
-    TEXTURE_FILTER_Linear  = 0x2,
-    TEXTURE_FILTER         = TEXTURE_FILTER_Nearest | TEXTURE_FILTER_Linear,
+    TEXTURE_FILTER_Nearest            = 0x1,
+    TEXTURE_FILTER_Linear             = 0x2,
+    TEXTURE_FILTER_Comparison_Nearest = 0x4,
+    TEXTURE_FILTER_Comparison_Linear  = 0x8,
+    TEXTURE_FILTER                    = TEXTURE_FILTER_Nearest | TEXTURE_FILTER_Linear | TEXTURE_FILTER_Comparison_Nearest | TEXTURE_FILTER_Comparison_Linear,
 
-    TEXTURE_WRAP_Repeat = 0x4,
-    TEXTURE_WRAP_Edge   = 0x8,
-    TEXTURE_WRAP_Border = 0x10,
+    TEXTURE_WRAP_Repeat = 0x10,
+    TEXTURE_WRAP_Edge   = 0x20,
+    TEXTURE_WRAP_Border = 0x40,
     TEXTURE_WRAP        = TEXTURE_WRAP_Repeat | TEXTURE_WRAP_Edge | TEXTURE_WRAP_Border,
 
-    TEXTURE_COMPRESS_BC7 = 0x20,
+    TEXTURE_COMPRESS_BC7 = 0x80,
     TEXTURE_COMPRESS     = TEXTURE_COMPRESS_BC7,
 };
 
