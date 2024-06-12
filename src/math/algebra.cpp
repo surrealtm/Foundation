@@ -1,16 +1,47 @@
 #include "algebra.h"
 #include "v4.h"
 
-m4f make_orthographic_projection_matrix(float width, float height, float near, float far) {
+#define ALGEBRA_OPENGL false
+#define ALGEBRA_D3D11  true
+
+m4f make_orthographic_projection_matrix(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
+    //
+    // https://learn.microsoft.com/en-us/windows/win32/direct3d9/d3dxmatrixorthooffcenterlh
+    //
+#if ALGEBRA_OPENGL
     m4f result = m4f(1);
-    result[0][0] =  1 / width;
-    result[1][1] =  1 / height;
-    result[2][2] = -1 / (far - near);
-    result[3][2] = -(far + near) / (far - near);
-    result[3][3] = 1;
+    result[0][0] =  2.f / (right - left);
+    result[1][1] =  2.f / (top   - bottom);
+    result[2][2] = -2.f / (far   - near);
+    result[3][0] = -(right + left)   / (right - left);
+    result[3][1] = -(top   + bottom) / (top   - bottom);
+    result[3][2] = -(far   + near)   / (far   - near);
     return result;
+#elif ALGEBRA_D3D11
+    m4f result = m4f(1);
+    result[0][0] = 2.f / (right - left);
+    result[1][1] = 2.f / (top - bottom);
+    result[2][2] = 1.f / (near - far);
+    result[3][0] = (left + right) / (left - right);
+    result[3][1] = (top + bottom) / (bottom - top);
+    result[3][2] = (near)         / (near - far);
+    return result;
+#endif
 }
 
+m4f make_orthographic_projection_matrix(f32 width, f32 height, f32 near, f32 far) {
+    return make_orthographic_projection_matrix(-width / 2.f, width / 2.f, -height / 2.f, height / 2.f, near, far);
+}
+
+m4f make_orthographic_projection_matrix(f32 width, f32 height, f32 length) {
+    m4f result = m4f(1);
+    result[0][0] =  2.f / width;
+    result[1][1] =  2.f / height;
+    result[2][2] = -2.f / length;
+    result[3][3] =  1.f;
+    return result;
+}
+    
 m4f make_perspective_projection_matrix(f32 fov, f32 ratio, f32 near, f32 far) {
     f32 frustum_length = far - near;
     f32 tan_half_angle = tanf(fov / 180.f * 3.14159f);
@@ -28,6 +59,39 @@ m4f make_view_matrix(const v3f &position, const v3f &rotation) {
     m4f result = m4f(1);
     result = m4_rotate_XYZ(result, rotation.x, rotation.y, rotation.z);
     result = m4_translate(result, -position.x, -position.y, -position.z);
+    return result;
+}
+
+m4f make_lookat_matrix(const v3f &eye, const v3f &center, v3f up) {
+    v3f forwards = v3_normalize(eye - center);
+    if(v3_dot_v3(forwards, up) >= 1 - F32_EPSILON || v3_dot_v3(forwards, up) <= -1 + F32_EPSILON) {
+        up = v3f(forwards.z, forwards.x, forwards.y);
+    }
+    
+    v3f sideways = v3_normalize(v3_cross_v3(up, forwards));
+    v3f upwards  = v3_cross_v3(forwards, sideways);
+
+    m4f result;
+    result[0][0] =  sideways.x;
+    result[1][0] =  sideways.y;
+    result[2][0] =  sideways.z;
+    result[3][0] = -v3_dot_v3(sideways, eye);
+
+    result[0][1] =  upwards.x;
+    result[1][1] =  upwards.y;
+    result[2][1] =  upwards.z;
+    result[3][1] = -v3_dot_v3(upwards, eye);
+
+    result[0][2] =  forwards.x;
+    result[1][2] =  forwards.y;
+    result[2][2] =  forwards.z;
+    result[3][2] = -v3_dot_v3(forwards, eye);
+
+    result[0][3] = 0;
+    result[1][3] = 0;
+    result[2][3] = 0;
+    result[3][3] = 1;
+
     return result;
 }
 

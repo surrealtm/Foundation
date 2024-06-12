@@ -7,8 +7,10 @@
 #elif FOUNDATION_LINUX
 # include <x86intrin.h> // For _addcarry_u64...
 #endif
+
 #include <fenv.h> // For feclearexcept...
 #include <string.h> // For strcmp
+#include <stdarg.h>
 
 
 
@@ -861,4 +863,21 @@ string String_Builder::finish() {
         // the supplied allocator.
         return copy_string(this->allocator, string_view(this->first.data, this->first.count));
     }
+}
+
+
+
+string mprint(Allocator *allocator, const char *format, ...) {
+    va_list list0;
+    va_start(list0, format);
+    s64 count = vsnprintf(null, 0, format, list0);
+    va_end(list0);
+
+    string result = allocate_string(allocator, count);
+    va_list list1;
+    va_start(list1, format);
+    _vsnprintf((char *) result.data, result.count, format, list1); // Don't do the terminating null character!
+    va_end(list1);
+
+    return result;
 }

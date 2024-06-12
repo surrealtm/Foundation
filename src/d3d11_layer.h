@@ -104,6 +104,10 @@ enum Texture_Hints {
 
 BITWISE(Texture_Hints);
 
+struct Border_Color {
+    u8 r, g, b, a;
+};
+
 struct Texture {
     s32 w, h;
     u8 channels;
@@ -144,10 +148,18 @@ struct Shader {
     ID3D11InputLayout *input_layout;
 };
 
+enum Frame_Buffer_Color_Format {
+    FRAME_BUFFER_COLOR_rgba8,
+    FRAME_BUFFER_COLOR_rgba16,
+    FRAME_BUFFER_COLOR_rgba32,
+};
+
 struct Frame_Buffer_Color_Attachment {
     b8 create_shader_view;
     s32 w, h;
     u32 format; // DXGI_FORMAT
+    Texture_Hints shader_view_hints;
+    Border_Color border_color;
     ID3D11RenderTargetView *render_view;
     ID3D11Texture2D *texture;
     ID3D11ShaderResourceView *shader_view;
@@ -158,6 +170,8 @@ struct Frame_Buffer_Depth_Attachment {
     b8 create_shader_view;
     s32 w, h;
     u32 format; // DXGI_FORMAT
+    Texture_Hints shader_view_hints;
+    Border_Color border_color;
     ID3D11Texture2D *texture;
     ID3D11DepthStencilView *render_view;
     ID3D11DepthStencilState *state;
@@ -181,9 +195,15 @@ enum Blend_Mode {
     BLEND_Additive,
 };
 
+enum Cull_Mode {
+    CULL_Disabled,
+    CULL_Back_Faces,
+    CULL_Front_Faces,
+};
+
 struct Pipeline_State {
     // --- User Level Input
-    b8 enable_culling     = true;
+    Cull_Mode cull_mode   = CULL_Back_Faces;
     b8 enable_depth_test  = true;
     b8 enable_scissors    = false;
     b8 enable_multisample = false;
@@ -232,10 +252,10 @@ void draw_vertex_buffer_array(Vertex_Buffer_Array *array);
 
 /* ------------------------------------------------- Texture ------------------------------------------------- */
 
-Error_Code create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints);
-Error_Code create_texture_from_compressed_file(Texture *texture, string file_path, Texture_Hints hints); // :TextureCompression
-Error_Code create_texture_from_compressed_memory(Texture *texture, string file_content, Texture_Hints hints); // :TextureCompression
-Error_Code create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints);
+Error_Code create_texture_from_file(Texture *texture, string file_path, Texture_Hints hints, Border_Color border_color = {});
+Error_Code create_texture_from_compressed_file(Texture *texture, string file_path, Texture_Hints hints, Border_Color border_color = {}); // :TextureCompression
+Error_Code create_texture_from_compressed_memory(Texture *texture, string file_content, Texture_Hints hints, Border_Color border_color = {}); // :TextureCompression
+Error_Code create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints, Border_Color border_color = {});
 void destroy_texture(Texture *texture);
 void bind_texture(Texture *texture, s64 index_in_shader);
 
@@ -268,8 +288,8 @@ void destroy_compiled_shader_output(Compiled_Shader_Output *output);
 
 void create_frame_buffer(Frame_Buffer *frame_buffer, u8 samples = 1);
 void destroy_frame_buffer(Frame_Buffer *frame_buffer);
-void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, b8 create_shader_view = false, b8 hdr = false);
-void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, b8 create_shader_view = false);
+void create_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, Frame_Buffer_Color_Format format = FRAME_BUFFER_COLOR_rgba8, b8 create_shader_view = false, Texture_Hints shader_view_hints = TEXTURE_HINT_None, Border_Color border_color = {});
+void create_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h, b8 create_shader_view = false, Texture_Hints shader_view_hints = TEXTURE_HINT_None, Border_Color border_color = {});
 void resize_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s64 index, s32 w, s32 h);
 void resize_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s32 w, s32 h);
 void resize_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h);

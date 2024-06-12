@@ -165,3 +165,5 @@ struct String_Builder {
 	
 	string finish();
 };
+
+string mprint(Allocator *allocator, const char *format, ...);
