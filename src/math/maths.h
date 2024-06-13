@@ -12,6 +12,12 @@ T turns_to_radians(T turns) { return turns * static_cast<T>(TAU); }
 template<typename T>
 T radians_to_turns(T radians) { return radians / static_cast<T>(TAU); }
 
+template<typename T>
+T degrees_to_radians(T degrees) { return degrees / static_cast<T>(180) * static_cast<T>(PI); }
+
+template<typename T>
+T radians_to_degrees(T radians) { return radians / static_cast<T>(PI) * static_cast<T>(180); }
+
 static inline
 b8 fuzzy_equals(f32 lhs, f32 rhs) { return (lhs - rhs) <= 1e-5f && (lhs - rhs) >= -1e-5f; }
 

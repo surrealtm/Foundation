@@ -1,13 +1,15 @@
 #include "algebra.h"
 #include "v4.h"
 
+//
+// OpenGL uses NDC Depth Range [-1;1], whereas D3D11 uses Depth Range [0;1].
+// This means that the projection matrices need to differ to manage depth values properly.
+// Both use a Right Handed Coordinate System.
+//
 #define ALGEBRA_OPENGL false
 #define ALGEBRA_D3D11  true
 
 m4f make_orthographic_projection_matrix(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
-    //
-    // https://learn.microsoft.com/en-us/windows/win32/direct3d9/d3dxmatrixorthooffcenterlh
-    //
 #if ALGEBRA_OPENGL
     m4f result = m4f(1);
     result[0][0] =  2.f / (right - left);
@@ -19,12 +21,12 @@ m4f make_orthographic_projection_matrix(f32 left, f32 right, f32 bottom, f32 top
     return result;
 #elif ALGEBRA_D3D11
     m4f result = m4f(1);
-    result[0][0] = 2.f / (right - left);
-    result[1][1] = 2.f / (top - bottom);
-    result[2][2] = 1.f / (near - far);
-    result[3][0] = (left + right) / (left - right);
-    result[3][1] = (top + bottom) / (bottom - top);
-    result[3][2] = (near)         / (near - far);
+    result[0][0] =  2.f / (right - left);
+    result[1][1] =  2.f / (top - bottom);
+    result[2][2] = -1.f / (far - near);
+    result[3][0] = -(right + left)   / (right - left);
+    result[3][1] = -(top   + bottom) / (top - bottom);
+    result[3][2] = -(near)           / (far - near);
     return result;
 #endif
 }
@@ -34,25 +36,48 @@ m4f make_orthographic_projection_matrix(f32 width, f32 height, f32 near, f32 far
 }
 
 m4f make_orthographic_projection_matrix(f32 width, f32 height, f32 length) {
+#if ALGEBRA_OPENGL
     m4f result = m4f(1);
-    result[0][0] =  2.f / width;
-    result[1][1] =  2.f / height;
-    result[2][2] = -2.f / length;
-    result[3][3] =  1.f;
+    result[0][0] =  2.f / (right - left);
+    result[1][1] =  2.f / (top   - bottom);
+    result[2][2] = -2.f / (far   - near);
     return result;
+#elif ALGEBRA_D3D11
+    m4f result = m4f(1);
+    result[0][0] =  2.f / (width);
+    result[1][1] =  2.f / (height);
+    result[2][2] = -1.f / (length);
+    return result;
+#endif
 }
     
-m4f make_perspective_projection_matrix(f32 fov, f32 ratio, f32 near, f32 far) {
-    f32 frustum_length = far - near;
-    f32 tan_half_angle = tanf(fov / 180.f * 3.14159f);
-
-    m4f result = m4f(1);
-    result[0][0] = 1 / (ratio * tan_half_angle);
-    result[1][1] = 1 / tan_half_angle;
-    result[2][2] = -(far + near) / frustum_length;
-    result[2][3] = -1;
-    result[3][2] = -(2 * near * far) / frustum_length;
+m4f make_perspective_projection_matrix_vertical_fov(f32 fov, f32 ratio, f32 near, f32 far) {
+#if ALGEBRA_OPENGL
+    f32 tangent = tanf(fov / 2.f * 3.14159f / 180.f);
+    
+    m4f result = m4f(0);
+    result[0][0] = 1.f / (ratio * tangent);
+    result[1][1] = 1.f / tangent;
+    result[2][2] = -(far + near) / (far - near);
+    result[2][3] = -1.f;
+    result[3][2] = -(2.f * near * far) / (far - near);
     return result;
+#elif ALGEBRA_D3D11
+    f32 tangent = tanf(fov / 2.f * 3.14159f / 180.f);
+    
+    m4f result = m4f(0);
+    result[0][0] = 1.f / (ratio * tangent);
+    result[1][1] = 1.f / tangent;
+    result[2][2] = -far / (far - near);
+    result[2][3] = -1.f;
+    result[3][2] = -(near * far) / (far - near);
+    return result;    
+#endif
+}
+
+m4f make_perspective_projection_matrix_horizontal_fov(f32 fov, f32 ratio, f32 near, f32 far) {
+    f32 vertical_fov = 2.f * atanf(tanf(fov / 2.f * 3.14159f / 180.f) / ratio) / 3.14159f * 180.f;
+    return make_perspective_projection_matrix_vertical_fov(vertical_fov, ratio, near, far);
 }
 
 m4f make_view_matrix(const v3f &position, const v3f &rotation) {
@@ -62,30 +87,25 @@ m4f make_view_matrix(const v3f &position, const v3f &rotation) {
     return result;
 }
 
-m4f make_lookat_matrix(const v3f &eye, const v3f &center, v3f up) {
-    v3f forwards = v3_normalize(eye - center);
-    if(v3_dot_v3(forwards, up) >= 1 - F32_EPSILON || v3_dot_v3(forwards, up) <= -1 + F32_EPSILON) {
-        up = v3f(forwards.z, forwards.x, forwards.y);
-    }
+m4f make_lookat_matrix(const v3f &eye, const v3f &center) {
+    v3f forward = v3_normalize(eye - center), up, right;
+    make_orthonormal_basis(forward, &up, &right);
     
-    v3f sideways = v3_normalize(v3_cross_v3(up, forwards));
-    v3f upwards  = v3_cross_v3(forwards, sideways);
-
     m4f result;
-    result[0][0] =  sideways.x;
-    result[1][0] =  sideways.y;
-    result[2][0] =  sideways.z;
-    result[3][0] = -v3_dot_v3(sideways, eye);
+    result[0][0] = right.x;
+    result[1][0] = right.y;
+    result[2][0] = right.z;
+    result[3][0] = -v3_dot_v3(right, eye);
 
-    result[0][1] =  upwards.x;
-    result[1][1] =  upwards.y;
-    result[2][1] =  upwards.z;
-    result[3][1] = -v3_dot_v3(upwards, eye);
+    result[0][1] = up.x;
+    result[1][1] = up.y;
+    result[2][1] = up.z;
+    result[3][1] = -v3_dot_v3(up, eye);
 
-    result[0][2] =  forwards.x;
-    result[1][2] =  forwards.y;
-    result[2][2] =  forwards.z;
-    result[3][2] = -v3_dot_v3(forwards, eye);
+    result[0][2] = forward.x;
+    result[1][2] = forward.y;
+    result[2][2] = forward.z;
+    result[3][2] = -v3_dot_v3(forward, eye);
 
     result[0][3] = 0;
     result[1][3] = 0;
@@ -144,4 +164,14 @@ v3f world_space_to_screen_space(const m4f &projection, const m4f &view, const v3
     clip.z /= clip.w;
 
     return v3f((clip.x * 0.5f + 0.5f) * screen_size.x, (0.5f - clip.y * 0.5f) * screen_size.y, clip.z);
+}
+
+void make_orthonormal_basis(const v3f &forward, v3f *up, v3f *right) {
+    v3f default_up = v3f(0, 1, 0);
+    if(v3_dot_v3(forward, default_up) >= 1 - F32_EPSILON || v3_dot_v3(forward, default_up) <= -1 + F32_EPSILON) {
+        default_up = v3f(forward.z, forward.x, forward.y);
+    }
+    
+    *right = v3_normalize(v3_cross_v3(default_up, forward));
+    *up    = v3_cross_v3(forward, *right);
 }

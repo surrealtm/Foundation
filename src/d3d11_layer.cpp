@@ -770,6 +770,9 @@ void destroy_compiled_shader_output(Compiled_Shader_Output *output) {
 
 static
 void create_frame_buffer_color_attachment_internal(Frame_Buffer *frame_buffer, Frame_Buffer_Color_Attachment *attachment) {
+    UINT bind_flags = D3D11_BIND_RENDER_TARGET;
+    if(attachment->create_shader_view) bind_flags |= D3D11_BIND_SHADER_RESOURCE;
+
     D3D11_TEXTURE2D_DESC texture_description{};
     texture_description.Width              = attachment->w;
     texture_description.Height             = attachment->h;
@@ -779,7 +782,7 @@ void create_frame_buffer_color_attachment_internal(Frame_Buffer *frame_buffer, F
     texture_description.SampleDesc.Count   = frame_buffer->samples;
     texture_description.SampleDesc.Quality = 0;
     texture_description.Usage              = D3D11_USAGE_DEFAULT;
-    texture_description.BindFlags          = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    texture_description.BindFlags          = bind_flags;
     texture_description.CPUAccessFlags     = 0;
     texture_description.MiscFlags          = 0;
 
@@ -816,6 +819,9 @@ void create_frame_buffer_color_attachment_internal(Frame_Buffer *frame_buffer, F
 
 static
 void create_frame_buffer_depth_stencil_attachment_internal(Frame_Buffer *frame_buffer, Frame_Buffer_Depth_Attachment *attachment) {
+    UINT bind_flags = D3D11_BIND_DEPTH_STENCIL;
+    if(attachment->create_shader_view) bind_flags |= D3D11_BIND_SHADER_RESOURCE;
+    
     D3D11_DEPTH_STENCILOP_DESC operations{};
     operations.StencilFailOp      = D3D11_STENCIL_OP_KEEP;
     operations.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;
@@ -825,7 +831,7 @@ void create_frame_buffer_depth_stencil_attachment_internal(Frame_Buffer *frame_b
     D3D11_DEPTH_STENCIL_DESC state_description{};
     state_description.DepthEnable      = TRUE;
     state_description.DepthWriteMask   = D3D11_DEPTH_WRITE_MASK_ALL;
-    state_description.DepthFunc        = D3D11_COMPARISON_LESS;
+    state_description.DepthFunc        = D3D11_COMPARISON_LESS_EQUAL;
     state_description.StencilEnable    = FALSE;
     state_description.StencilReadMask  = 0xff;
     state_description.StencilWriteMask = 0xff;
@@ -841,7 +847,7 @@ void create_frame_buffer_depth_stencil_attachment_internal(Frame_Buffer *frame_b
     texture_description.SampleDesc.Count   = frame_buffer->samples;
     texture_description.SampleDesc.Quality = 0;
     texture_description.Usage              = D3D11_USAGE_DEFAULT;
-    texture_description.BindFlags          = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE; // @Incomplete: Only bind_shader_resource if create_shader_view, same for color attachments!!!
+    texture_description.BindFlags          = bind_flags;
     texture_description.CPUAccessFlags     = 0;
     texture_description.MiscFlags          = 0;
 
@@ -872,7 +878,7 @@ void create_frame_buffer_depth_stencil_attachment_internal(Frame_Buffer *frame_b
         sampler_description.AddressW       = texture_address_mode;
         sampler_description.MipLODBias     = 0.f;
         sampler_description.MaxAnisotropy  = 1;
-        sampler_description.ComparisonFunc = D3D11_COMPARISON_LESS;
+        sampler_description.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
         sampler_description.BorderColor[0] = attachment->border_color.r;
         sampler_description.BorderColor[1] = attachment->border_color.g;
         sampler_description.BorderColor[2] = attachment->border_color.b;
@@ -1012,7 +1018,7 @@ void bind_frame_buffer(Frame_Buffer *frame_buffer) {
     d3d_context->OMSetRenderTargets((UINT) frame_buffer->color_count, views, (frame_buffer->has_depth) ? frame_buffer->depth.render_view : null);
 }
 
-void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b) {
+void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b, f32 a, f32 depth) {
     f32 color_array[4];
     color_array[0] = r;
     color_array[1] = g;
@@ -1023,7 +1029,9 @@ void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b) {
         d3d_context->ClearRenderTargetView(frame_buffer->colors[i].render_view, color_array);
     }
 
-    if(frame_buffer->has_depth) d3d_context->ClearDepthStencilView(frame_buffer->depth.render_view, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
+    u8 stencil = 0;
+    
+    if(frame_buffer->has_depth) d3d_context->ClearDepthStencilView(frame_buffer->depth.render_view, D3D11_CLEAR_DEPTH, depth, stencil);
 }
 
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
