@@ -61,9 +61,11 @@ void d3d11_call_wrapper(HRESULT result, const char *assertion_text) {
 
 static
 DXGI_FORMAT d3d11_format(u8 channels, D3D11_Data_Type data_type, Texture_Hints hints = TEXTURE_HINT_None) {
+    b8 srgb = (hints & TEXTURE_Is_In_Srgb) != 0;
+
     if(hints & TEXTURE_COMPRESS_BC7) {
         if(data_type != D3D11_UByte) return (DXGI_FORMAT) -2; // Invalid data type
-        return DXGI_FORMAT_BC7_UNORM;
+        return srgb ? DXGI_FORMAT_BC7_UNORM_SRGB : DXGI_FORMAT_BC7_UNORM;
     }
 
     DXGI_FORMAT format;
@@ -71,9 +73,9 @@ DXGI_FORMAT d3d11_format(u8 channels, D3D11_Data_Type data_type, Texture_Hints h
     switch(data_type) {
     case D3D11_UByte: {
         switch(channels) {
-        case 1: format = DXGI_FORMAT_R8_UNORM; break;
-        case 2: format = DXGI_FORMAT_R8G8_UNORM; break;
-        case 4: format = DXGI_FORMAT_R8G8B8A8_UNORM; break;
+        case 1:  format = DXGI_FORMAT_R8_UNORM; break;
+        case 2:  format = DXGI_FORMAT_R8G8_UNORM; break;
+        case 4:  format = srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM; break;
         default: format = (DXGI_FORMAT) -1; break; // Invalid channel count
         }
     } break;
@@ -475,7 +477,7 @@ Error_Code create_texture_from_compressed_memory(Texture *texture, string file_c
 Error_Code create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels, Texture_Hints hints, Border_Color border_color) {
     if(w <= 0 || h <= 0 || w >= 65535 || h >= 65535) return ERROR_D3D11_Invalid_Dimensions;
     
-    DXGI_FORMAT format = d3d11_format(channels, D3D11_UByte, hints);
+    DXGI_FORMAT format  = d3d11_format(channels, D3D11_UByte, hints);
     D3D11_FILTER filter = d3d11_filter(hints);
     D3D11_TEXTURE_ADDRESS_MODE texture_address_mode = d3d11_texture_address_mode(hints);
     
@@ -1016,6 +1018,8 @@ void bind_frame_buffer(Frame_Buffer *frame_buffer) {
         views[i] = frame_buffer->colors[i].render_view;
     }
     d3d_context->OMSetRenderTargets((UINT) frame_buffer->color_count, views, (frame_buffer->has_depth) ? frame_buffer->depth.render_view : null);
+    
+    if(frame_buffer->has_depth) d3d_context->OMSetDepthStencilState(frame_buffer->depth.state, 1);
 }
 
 void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b, f32 a, f32 depth) {
@@ -1150,6 +1154,7 @@ void create_pipeline_state(Pipeline_State *state) {
 
     default:
         blend_description.RenderTarget[0].BlendEnable = FALSE;
+        blend_description.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
         break;
     }
 

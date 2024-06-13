@@ -100,8 +100,10 @@ enum Texture_Hints {
     TEXTURE_WRAP_Border = 0x40,
     TEXTURE_WRAP        = TEXTURE_WRAP_Repeat | TEXTURE_WRAP_Edge | TEXTURE_WRAP_Border,
 
-    TEXTURE_COMPRESS_BC7 = 0x80,
-    TEXTURE_COMPRESS     = TEXTURE_COMPRESS_BC7,
+    TEXTURE_COMPRESS_BC7      = 0x80,
+    TEXTURE_COMPRESS          = TEXTURE_COMPRESS_BC7,
+
+    TEXTURE_Is_In_Srgb = 0x100,
 };
 
 BITWISE(Texture_Hints);
