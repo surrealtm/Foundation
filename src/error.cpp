@@ -1,5 +1,5 @@
 #include "error.h"
-#include <cstring>
+#include <stdlib.h>
 
 string error_string_table[] = {
     "Success"_s,

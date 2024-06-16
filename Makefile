@@ -1,5 +1,5 @@
 CC     = clang++
-CFLAGS = -Isrc/ -Isrc/Dependencies -DFOUNDATION_LINUX -DFOUNDATION_DEVELOPER -D_DEBUG -O0 -g -rdynamic -march=native -LDependencies -lm -lX11 -lfreetype # -rdynamic gives us symbol names for stack traces.
+CFLAGS = -Isrc/ -Isrc/Dependencies -DFOUNDATION_LINUX -DFOUNDATION_DEVELOPER -D_DEBUG -O0 -g -rdynamic -march=native -std=c++11 -lstdc++ -LDependencies -lm -lX11 -lfreetype # -rdynamic gives us symbol names for stack traces.
 BIN    = x64/linux/
 
 HEADER_FILES = src/concatenator.h src/data_array.h src/error.h src/fileio.h src/font.h src/foundation.h src/hash_table.h src/jobs.h src/memutils.h src/os_specific.h src/random.h src/socket.h src/sort.h src/string_type.h src/text_input.h src/threads.h src/timing.h src/window.h

@@ -1,6 +1,7 @@
 #include "os_specific.h"
 #include "memutils.h"
 
+#include <stdlib.h>
 #include <linux/limits.h>
 #include <sys/mman.h>
 #include <sys/wait.h>

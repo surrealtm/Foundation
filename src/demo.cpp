@@ -140,18 +140,17 @@ int main() {
 
 #elif LINUX_DEMO
 
-void do_something_else() {
-    Resizable_Array<int> array;
-    array.add(5);
-    array.add(10);
-    array.add(15);
-    array.add(30);
-    array[10] = 2;
-}
-
 int main() {
-    do_something_else();
-    printf("Success!\n");
+    Window window;
+    create_window(&window, "Hello Linux"_s);
+    show_window(&window);
+    
+    while(!window.should_close) {
+        update_window(&window);
+        window_sleep(0.016f);
+    }
+    
+    destroy_window(&window);
     return 0;
 }
 

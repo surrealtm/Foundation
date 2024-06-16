@@ -52,7 +52,10 @@ struct _tm_Summary_Entry {
 };
 
 struct _tm_Color {
-    u8 r = 100, g = 100, b = 200;
+    u8 r, g, b;
+
+    _tm_Color() : r(100), g(100), b(200) {};
+    _tm_Color(u8 r, u8 g, u8 b) : r(r), g(g), b(b) {};
 };
 
 struct _tm_Thread_State {

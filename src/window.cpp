@@ -419,6 +419,468 @@ void win32_destroy_window(Window *window) {
     win32->dc   = null;
 }
 
+#elif FOUNDATION_LINUX
+namespace X11 {
+# include <X11/Xlib.h>
+# include <X11/Xutil.h>
+# include <X11/Xos.h>
+};
+
+struct Window_X11_State {
+    X11::Display *display;
+    s32 screen_number;
+    X11::Window window_handle;
+    X11::Atom window_delete_atom;
+    X11::GC gc;
+};
+
+static_assert(sizeof(Window_X11_State) <= sizeof(Window::platform_data), "Window_X11_State is bigger than expected.");
+
+Key_Code x11_key_map(X11::XEvent *keyevent) {
+    s32 keysymbol = X11::XLookupKeysym(&keyevent->xkey, 0);
+        
+    if(keysymbol >= 'A' && keysymbol <= 'Z')       return (Key_Code) (keysymbol - 'A' + KEY_A);
+    if(keysymbol >= '0' && keysymbol <= '9')       return (Key_Code) (keysymbol - '0' + KEY_0);
+    if(keysymbol >= XK_F1 && keysymbol <= XK_F12)  return (Key_Code) (keysymbol - XK_F1 + KEY_F1);
+
+    Key_Code keycode;
+
+    switch(keysymbol) {
+    case XK_comma:  keycode = KEY_Comma; break;
+    case XK_period: keycode = KEY_Period; break;
+    case XK_minus:  keycode = KEY_Minus; break;
+    case XK_plus:   keycode = KEY_Plus; break;
+        
+    case XK_Down:    keycode = KEY_Arrow_Down; break;
+    case XK_Up:      keycode = KEY_Arrow_Up; break;
+    case XK_Left:    keycode = KEY_Arrow_Left; break;
+    case XK_Right:   keycode = KEY_Arrow_Right; break;
+
+    case XK_Return:   keycode = KEY_Enter; break;
+    case XK_space:    keycode = KEY_Space; break;
+    case XK_Escape:   keycode = KEY_Escape; break;
+    case XK_Menu:     keycode = KEY_Menu; break;
+    case XK_Control_L: case XK_Control_R: keycode = KEY_Control; break;
+    case XK_Shift_L:   case  XK_Shift_R:  keycode = KEY_Shift; break;
+
+    case XK_BackSpace: keycode = KEY_Backspace; break;
+    case XK_Delete:    keycode = KEY_Delete; break;
+    case XK_Tab:       keycode = KEY_Tab; break;
+
+    case XK_Prior:   keycode = KEY_Page_Up; break;
+    case XK_Next:    keycode = KEY_Page_Down; break;
+    case XK_End:     keycode = KEY_End; break;
+    case XK_Home:    keycode = KEY_Home; break;
+        
+    default: keycode = KEY_None; break;
+    }
+    
+    return keycode;    
+}
+
+string x11_request_code_to_string(s32 code) {
+    string string = "(UnknownRequest)"_s;
+
+    switch(code) {
+    case 1:   string = "XCreateWindow"_s; break;
+    case 2:   string = "XChangeWindowAttributes"_s; break;
+    case 3:   string = "XGetWindowAttributes"_s; break;
+    case 4:   string = "XDestroyWindow"_s; break;
+    case 5:   string = "XDestroySubwindows"_s; break;
+    case 6:   string = "XChangeSaveSet"_s; break;
+    case 7:   string = "XReparentWindow"_s; break;
+    case 8:   string = "XMapWindow"_s; break;
+    case 9:   string = "XMapSubwindows"_s; break;
+    case 10:  string = "XUnmapWindow"_s; break;
+    case 11:  string = "XUnmapSubwindows"_s; break;
+    case 12:  string = "XConfigureWindow"_s; break;
+    case 13:  string = "XCirculateWindow"_s; break;
+    case 14:  string = "XGetGeometry"_s; break;
+    case 15:  string = "XQueryTree"_s; break;
+    case 16:  string = "XInternAtom"_s; break;
+    case 17:  string = "XGetAtomName"_s; break;
+    case 18:  string = "XChangeProperty"_s; break;
+    case 19:  string = "XDeleteProperty"_s; break;
+    case 20:  string = "XGetProperty"_s; break;
+    case 21:  string = "XListProperties"_s; break;
+    case 22:  string = "XSetSelectionOwner"_s; break;
+    case 23:  string = "XGetSelectionOwner"_s; break;
+    case 24:  string = "XConvertSelection"_s; break;
+    case 25:  string = "XSendEvent"_s; break;
+    case 26:  string = "XGrabPointer"_s; break;
+    case 27:  string = "X_UngrabPointer"_s; break;
+    case 28:  string = "X_GrabButton"_s; break;
+    case 29:  string = "X_UngrabButton"_s; break;
+    case 30:  string = "X_ChangeActivePointerGrab"_s; break;
+    case 31:  string = "X_GrabKeyboard"_s; break;
+    case 32:  string = "X_UngrabKeyboard"_s; break;
+    case 33:  string = "X_GrabKey"_s; break;
+    case 34:  string = "X_UngrabKey"_s; break;
+    case 35:  string = "X_AllowEvents"_s; break;
+    case 36:  string = "X_GrabServer"_s; break;
+    case 37:  string = "X_UngrabServer"_s; break;
+    case 38:  string = "X_QueryPointer"_s; break;
+    case 39:  string = "X_GetMotionEvents"_s; break;
+    case 40:  string = "X_TranslateCoords"_s; break;
+    case 41:  string = "X_WarpPointer"_s; break;
+    case 42:  string = "X_SetInputFocus"_s; break;
+    case 43:  string = "X_GetInputFocus"_s; break;
+    case 44:  string = "X_QueryKeymap"_s; break;
+    case 45:  string = "X_OpenFont"_s; break;
+    case 46:  string = "X_CloseFont"_s; break;
+    case 47:  string = "X_QueryFont"_s; break;
+    case 48:  string = "X_QueryTextExtents"_s; break;
+    case 49:  string = "X_ListFonts"_s; break;
+    case 50:  string = "X_ListFontsWithInfo"_s; break;
+    case 51:  string = "X_SetFontPath"_s; break;
+    case 52:  string = "X_GetFontPath"_s; break;
+    case 53:  string = "X_CreatePixmap"_s; break;
+    case 54:  string = "X_FreePixmap"_s; break;
+    case 55:  string = "X_CreateGC"_s; break;
+    case 56:  string = "X_ChangeGC"_s; break;
+    case 57:  string = "X_CopyGC"_s; break;
+    case 58:  string = "X_SetDashes"_s; break;
+    case 59:  string = "X_SetClipRectangles"_s; break;
+    case 60:  string = "X_FreeGC"_s; break;
+    case 61:  string = "X_ClearArea"_s; break;
+    case 62:  string = "X_CopyArea"_s; break;
+    case 63:  string = "X_CopyPlane"_s; break;
+    case 64:  string = "X_PolyPoint"_s; break;
+    case 65:  string = "X_PolyLine"_s; break;
+    case 66:  string = "X_PolySegment"_s; break;
+    case 67:  string = "X_PolyRectangle"_s; break;
+    case 68:  string = "X_PolyArc"_s; break;
+    case 69:  string = "X_FillPoly"_s; break;
+    case 70:  string = "X_PolyFillRectangle"_s; break;
+    case 71:  string = "X_PolyFillArc"_s; break;
+    case 72:  string = "X_PutImage"_s; break;
+    case 73:  string = "X_GetImage"_s; break;
+    case 74:  string = "X_PolyText8"_s; break;
+    case 75:  string = "X_PolyText16"_s; break;
+    case 76:  string = "X_ImageText8"_s; break;
+    case 77:  string = "X_ImageText16"_s; break;
+    case 78:  string = "X_CreateColormap"_s; break;
+    case 79:  string = "X_FreeColormap"_s; break;
+    case 80:  string = "X_CopyColormapAndFree"_s; break;
+    case 81:  string = "X_InstallColormap"_s; break;
+    case 82:  string = "X_UninstallColormap"_s; break;
+    case 83:  string = "X_ListInstalledColormaps"_s; break;
+    case 84:  string = "X_AllocColor"_s; break;
+    case 85:  string = "X_AllocNamedColor"_s; break;
+    case 86:  string = "X_AllocColorCells"_s; break;
+    case 87:  string = "X_AllocColorPlanes"_s; break;
+    case 88:  string = "X_FreeColors"_s; break;
+    case 89:  string = "X_StoreColors"_s; break;
+    case 90:  string = "X_StoreNamedColor"_s; break;
+    case 91:  string = "X_QueryColors"_s; break;
+    case 92:  string = "X_LookupColor"_s; break;
+    case 93:  string = "X_CreateCursor"_s; break;
+    case 94:  string = "X_CreateGlyphCursor"_s; break;
+    case 95:  string = "X_FreeCursor"_s; break;
+    case 96:  string = "X_RecolorCursor"_s; break;
+    case 97:  string = "X_QueryBestSize"_s; break;
+    case 98:  string = "X_QueryExtension"_s; break;
+    case 99:  string = "X_ListExtensions"_s; break;
+    case 100: string = "X_ChangeKeyboardMapping"_s; break;
+    case 101: string = "X_GetKeyboardMapping"_s; break;
+    case 102: string = "X_ChangeKeyboardControl"_s; break;
+    case 103: string = "X_GetKeyboardControl"_s; break;
+    case 104: string = "X_Bell"_s; break;
+    case 105: string = "X_ChangePointerControl"_s; break;
+    case 106: string = "X_GetPointerControl"_s; break;
+    case 107: string = "X_SetScreenSaver"_s; break;
+    case 108: string = "X_GetScreenSaver"_s; break;
+    case 109: string = "X_ChangeHosts"_s; break;
+    case 110: string = "X_ListHosts"_s; break;
+    case 111: string = "X_SetAccessControl"_s; break;
+    case 112: string = "X_SetCloseDownMode"_s; break;
+    case 113: string = "X_KillClient"_s; break;
+    case 114: string = "X_RotateProperties"_s; break;
+    case 115: string = "X_ForceScreenSaver"_s; break;
+    case 116: string = "X_SetPointerMapping"_s; break;
+    case 117: string = "X_GetPointerMapping"_s; break;
+    case 118: string = "X_SetModifierMapping"_s; break;
+    case 119: string = "X_GetModifierMapping"_s; break;
+    case 127: string = "X_NoOperation"_s; break;
+    }
+
+    return string;
+}
+
+s32 x11_error_handler(X11::Display *display, X11::XErrorEvent *event) {
+    char buffer[256];
+    X11::XGetErrorText(display, event->error_code, buffer, ARRAY_COUNT(buffer)); // This puts a null-terminated string into the buffer
+    s64 length = cstring_length(buffer);
+    string request_code = x11_request_code_to_string(event->request_code);
+    
+    foundation_error("[X11]: %.*s : '%.*s'.\n", (u32) request_code.count, request_code.data, (u32) length, buffer);
+    return 0;
+}
+
+void x11_event_handler(Window *window, X11::XEvent *event) {
+    switch(event->type) {
+    case FocusIn: window->focused = true; break;
+    case FocusOut: window->focused = false; break;
+
+    case CreateNotify:
+        window->w = event->xcreatewindow.width;
+        window->h = event->xcreatewindow.height;
+        break;
+
+    case ConfigureNotify:
+        window->x = event->xconfigurerequest.x;
+        window->y = event->xconfigurerequest.y;
+        window->w = event->xconfigurerequest.width;
+        window->h = event->xconfigurerequest.height;
+        window->resized_this_frame = true;
+        window->moved_this_frame   = true;
+        break;
+
+    case MotionNotify:
+        window->mouse_delta_x    += event->xmotion.x - window->mouse_x;
+        window->mouse_delta_y    += event->xmotion.y - window->mouse_y;
+        window->mouse_x           = event->xmotion.x;
+        window->mouse_y           = event->xmotion.y;
+        window->raw_mouse_delta_x = window->mouse_delta_x;
+        window->raw_mouse_delta_y = window->mouse_delta_y;
+        window->mouse_active_this_frame = true;
+        break;
+
+    case LeaveNotify:
+        window->mouse_active_this_frame = false;
+        break;
+
+    case ButtonPress:
+        switch(event->xbutton.button) {
+        case Button1:
+            window->buttons[BUTTON_Left] = BUTTON_Down | BUTTON_Pressed;
+            break;
+
+        case Button3:
+            window->buttons[BUTTON_Right] = BUTTON_Down | BUTTON_Pressed;
+            break;
+
+        case Button4: // Mouse wheel up
+            window->mouse_wheel_turns += 1;
+            break;
+
+        case Button5: // Mouse wheel down
+            window->mouse_wheel_turns -= 1;
+            break;
+        }
+        
+        break;
+
+    case ButtonRelease:
+        switch(event->xbutton.button) {
+        case Button1:
+            window->buttons[BUTTON_Left] = BUTTON_Released;
+            break;
+
+        case Button3:
+            window->buttons[BUTTON_Right] = BUTTON_Released;
+            break;
+        }
+        
+        break;
+
+    case KeyPress: {
+        Key_Code key = x11_key_map(event);
+        Key_Status status = KEY_Down | KEY_Repeated;
+        if(!(window->keys[key] & KEY_Down)) status |= KEY_Pressed;
+        window->keys[key] = status;
+    } break;
+
+    case KeyRelease: {
+        Key_Code key = x11_key_map(event);
+        window->keys[key] = KEY_Released;
+    } break;
+
+    case ClientMessage: {
+        Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+        if(event->xclient.data.l[0] == x11->window_delete_atom) {
+            window->should_close = true;
+        }
+    } break;
+    }
+}
+
+void x11_adjust_position_and_size(s32 *x, s32 *y, s32 *w, s32 *h) {
+    if(*x == WINDOW_DONT_CARE) {
+        *x = 0;
+    }
+
+    if(*y == WINDOW_DONT_CARE) {
+        *y = 0;
+    }
+
+    if(*w == WINDOW_DONT_CARE) {
+        *w = 0;
+    }
+
+    if(*h == WINDOW_DONT_CARE) {
+        *h = 0;
+    }
+}
+
+void x11_query_position_and_size(Window *window) {
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+
+    X11::XWindowAttributes attributes;
+    if(!X11::XGetWindowAttributes(x11->display, x11->window_handle, &attributes)) return;
+
+    window->x = attributes.x;
+    window->y = attributes.y;
+    window->w = attributes.width;
+    window->h = attributes.height;
+}
+
+X11::Visual *x11_get_visual_for_rgb8(Window *window) {
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+
+    X11::XVisualInfo template_info;
+    template_info.red_mask     = 0xff0000;
+    template_info.green_mask   = 0x00ff00;
+    template_info.blue_mask    = 0x0000ff;
+    template_info.bits_per_rgb = 8;
+
+    s32 info_count = 0;
+    X11::XVisualInfo *infos = X11::XGetVisualInfo(x11->display, VisualRedMaskMask | VisualGreenMaskMask | VisualBlueMaskMask | VisualBitsPerRGBMask, &template_info, &info_count);
+
+    if(info_count <= 0) return null;
+    
+    X11::Visual *visual = infos[0].visual;
+    
+    XFree(infos);
+    
+    return visual;
+}
+
+void x11_set_window_style(Window *window, Window_Style_Flags style_flags) {
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+
+    //
+    // Set the more common, better supported flags through this state atom.
+    //
+    {
+        X11::Atom _NET_WM_STATE = X11::XInternAtom(x11->display, "_NET_WM_STATE", false);
+
+        X11::Atom atoms_to_set[2]; // 2 is currently the maximum number of atoms that would be needed to encode all style flags.
+        s64 atoms_to_set_count = 0;
+
+        if(style_flags & WINDOW_STYLE_Maximized) {
+            atoms_to_set[atoms_to_set_count] = X11::XInternAtom(x11->display, "_NET_WM_STATE_MAXIMIZED_VERT", false);
+            ++atoms_to_set_count;
+            
+            atoms_to_set[atoms_to_set_count] = X11::XInternAtom(x11->display, "_NET_WM_STATE_MAXIMIZED_HORZ", false);
+            ++atoms_to_set_count;
+        }
+        
+        if(atoms_to_set_count) {
+            X11::XChangeProperty(x11->display, x11->window_handle, _NET_WM_STATE, 4, 32, PropModeReplace, (const unsigned char *) atoms_to_set, atoms_to_set_count); // 4 : XA_ATOM
+        } else {
+            X11::XDeleteProperty(x11->display, x11->window_handle, _NET_WM_STATE);
+        }
+    }
+
+    //
+    // Try to get the window manager to not display a title bar. This depends on the WM (since it isn't standard
+    // X11 or something), so just cross our fingers... Linux is an absolute shithole.
+    //
+    if(style_flags & WINDOW_STYLE_Hide_Title_Bar) {
+        X11::Atom _MOTIF_WM_HINTS = X11::XInternAtom(x11->display, "_MOTIF_WM_HINTS", false);
+        if(_MOTIF_WM_HINTS) {
+            s64 options[5] = { 0 };
+            options[0] = 1; // Flags
+            options[1] = 0; // Functions
+            options[2] = 0; // 1: Border, 0: No Border
+            options[3] = 0; // Input mode
+            options[4] = 0; // Status
+
+            X11::XChangeProperty(x11->display, x11->window_handle, _MOTIF_WM_HINTS, _MOTIF_WM_HINTS, 32, PropModeReplace, (const unsigned char *) options, 5);
+        }
+    }
+}
+
+b8 x11_create_window(Window *window, string title, s32 x, s32 y, s32 w, s32 h, Window_Style_Flags flags) {
+    X11::XSetErrorHandler(x11_error_handler);
+
+    char *cstring = to_cstring(Default_Allocator, title);
+    defer { free_cstring(Default_Allocator, cstring); };
+
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+    x11->display          = X11::XOpenDisplay(null);
+    x11->screen_number    = X11::XDefaultScreen(x11->display);
+
+    x11_adjust_position_and_size(&x, &y, &w, &h);
+
+    unsigned long white_pixel = X11::XWhitePixel(x11->display, x11->screen_number);
+    unsigned long black_pixel = X11::XBlackPixel(x11->display, x11->screen_number);
+    
+    //
+    // Actually create the window.
+    //
+    x11->window_handle = X11::XCreateSimpleWindow(x11->display, XRootWindow(x11->display, x11->screen_number), x, y, w, h, 2, black_pixel, white_pixel);
+    X11::XStoreName(x11->display, x11->window_handle, cstring);
+    X11::XSelectInput(x11->display, x11->window_handle, ExposureMask | ButtonPressMask | ButtonReleaseMask | KeyPressMask | KeyReleaseMask | EnterWindowMask | LeaveWindowMask | PointerMotionMask | Button1MotionMask | VisibilityChangeMask | FocusChangeMask);
+    X11::XMapWindow(x11->display, x11->window_handle);
+    X11::XFlush(x11->display);
+    X11::XSync(x11->display, false);
+
+    //
+    // Wait in a busy loop until the window has become visible.
+    // Before the window is visible, it ignores any drawing to it, which is just simply terrible.
+    // If we didn't do this, we couldn't set the set foreground color or immediately draw something to this window
+    // in user code.
+    //
+    while(true) {
+        X11::XEvent event;
+        X11::XNextEvent(x11->display, &event);
+        if(event.type == VisibilityNotify) break;
+    }
+
+    // Install a custom atom for window closing by the human user.
+    // Apparently this isn't considered standard behaviour on linux or something, which is why we need to jump
+    // through this stupid hoop to get the message that the human just closed our window...
+    x11->window_delete_atom = X11::XInternAtom(x11->display, "WM_DELETE_WINDOW", false);
+    X11::XSetWMProtocols(x11->display, x11->window_handle, &x11->window_delete_atom, 1);
+
+    // Create a Graphics Context and initialize the fore- and background of the window. Without this, we can't
+    // actually represent colors for some god-forsaken reason.
+    x11->gc = X11::XCreateGC(x11->display, x11->window_handle, 0, null);
+    X11::XSetForeground(x11->display, x11->gc, white_pixel);
+    X11::XSetBackground(x11->display, x11->gc, black_pixel);
+
+    // Set the initial window attributes
+    x11_set_window_style(window, flags);
+    x11_query_position_and_size(window);
+
+    // Set the initial window attributes
+    unsigned long ignored_one; // X11 doesn't like null pointers for seemingly optional parameters.
+    unsigned int ignored_two;
+    int ignored_three;
+    X11::XQueryPointer(x11->display, x11->window_handle, &ignored_one, &ignored_one, &ignored_three, &ignored_three, &window->mouse_x, &window->mouse_y, &ignored_two);
+
+    X11::Window current_focused;
+    s32 current_focus_mode;
+    X11::XGetInputFocus(x11->display, &current_focused, &current_focus_mode);
+    
+    window->focused = current_focused == x11->window_handle;    
+
+    return true;
+}
+
+void x11_destroy_window(Window *window) {
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+    XFreeGC(x11->display, x11->gc);
+    XDestroyWindow(x11->display, x11->window_handle);
+    XCloseDisplay(x11->display);
+    x11->gc             = null;
+    x11->window_handle  = null;
+    x11->screen_number  = 0;
+    x11->display        = null;
+}
+
 #endif
 
 b8 create_window(Window *window, string title, s32 x, s32 y, s32 w, s32 h, Window_Style_Flags flags) {
@@ -440,7 +902,7 @@ b8 create_window(Window *window, string title, s32 x, s32 y, s32 w, s32 h, Windo
 #if FOUNDATION_WIN32
     return win32_create_window(window, title, x, y, w, h, flags);
 #elif FOUNDATION_LINUX
-    return false;
+    return x11_create_window(window, title, x, y, w, h, flags);
 #endif
 }
 
@@ -478,12 +940,28 @@ void update_window(Window *window) {
         TranslateMessage(&msg);
         DispatchMessageA(&msg);
     }
+#elif FOUNDATION_LINUX
+    //
+    // Handle all X11 events.
+    //
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+
+    s32 event_count = XEventsQueued(x11->display, QueuedAfterFlush);
+    X11::XEvent event;
+
+    for(s32 i = 0; i < event_count; ++i) {
+        X11::XNextEvent(x11->display, &event);
+        x11_event_handler(window, &event);
+    }
+
 #endif
 }
 
 void destroy_window(Window *window) {
 #if FOUNDATION_WIN32
     win32_destroy_window(window);
+#elif FOUNDATION_LINUX
+    x11_destroy_window(window);
 #endif
 }
 
@@ -494,6 +972,11 @@ void show_window(Window *window) {
     if(window->maximized) command = SW_SHOWMAXIMIZED;
     ShowWindow(win32->hwnd, command);
     win32_query_position_and_size(window);
+#elif FOUNDATION_LINUX
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+    X11::XMapWindow(x11->display, x11->window_handle);
+    X11::XFlush(x11->display); // Wait until the window is actually shown (?)
+    x11_query_position_and_size(window);
 #endif
 }
 
@@ -512,6 +995,8 @@ b8 set_window_icon_from_file(Window *window, string file_path) {
     
     return true;
 #elif FOUNDATION_LINUX
+    // @Incomplete:
+    // https://www.gamedev.net/forums/topic/697892-solved-how-to-set-the-window-bars-icon-in-x11/
     return false;
 #endif
 }
@@ -541,6 +1026,9 @@ void set_window_name(Window *window, string name) {
 #if FOUNDATION_WIN32
     Window_Win32_State *win32 = (Window_Win32_State *) window->platform_data;
     SetWindowTextA(win32->hwnd, cstring);
+#elif FOUNDATION_LINUX
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+    X11::XStoreName(x11->display, x11->window_handle, cstring);
 #endif
     
     free_cstring(Default_Allocator, cstring);
@@ -570,6 +1058,8 @@ void set_window_position_and_size(Window *window, s32 x, s32 y, s32 w, s32 h, b8
     show_window(window); // This will toggle maximization on the window.
     
     win32_query_position_and_size(window);
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
@@ -598,6 +1088,8 @@ void set_window_style(Window *window, Window_Style_Flags style_flags) {
     
     win32_query_position_and_size(window);
     window->resized_this_frame = true;
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
@@ -613,6 +1105,8 @@ void set_cursor_position(Window *window, s32 x, s32 y) {
     ScreenToClient(win32->hwnd, &point);
     window->mouse_x = point.x;
     window->mouse_y = point.y;
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
@@ -624,18 +1118,24 @@ void get_desktop_bounds(s32 *x0, s32 *y0, s32 *x1, s32 *y1) {
     *y0 = desktop_rectangle.top;
     *x1 = desktop_rectangle.right;
     *y1 = desktop_rectangle.bottom;
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
 void hide_cursor() {
 #if FOUNDATION_WIN32
     while(ShowCursor(false) >= 0) {}
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
 void show_cursor() {
 #if FOUNDATION_WIN32
     ShowCursor(true);
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
@@ -647,18 +1147,24 @@ void confine_cursor(s32 x0, s32 y0, s32 x1, s32 y1) {
     rect.right  = x1;
     rect.bottom = y1;
     ClipCursor(&rect);
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
 void unconfine_cursor() {
 #if FOUNDATION_WIN32
     ClipCursor(null);
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
 void window_sleep(f32 seconds) {
 #if FOUNDATION_WIN32
     Sleep((DWORD) (seconds * 1000.0f));
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
@@ -671,6 +1177,8 @@ void window_ensure_frame_time(s64 frame_start, s64 frame_end, f32 requested_fps)
         if(milliseconds > 1) {
 #if FOUNDATION_WIN32
             Sleep(milliseconds - 1);
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
         }
         
@@ -702,6 +1210,8 @@ void set_clipboard_data(Window *window, string data) {
     EmptyClipboard();
     SetClipboardData(CF_TEXT, clipboard_handle);
     CloseClipboard();
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
@@ -723,6 +1233,7 @@ string get_clipboard_data(Window *window, Allocator *allocator) {
 
     return result;
 #elif FOUNDATION_LINUX
+    // @Incomplete
     return ""_s;
 #endif
 }
@@ -730,6 +1241,8 @@ string get_clipboard_data(Window *window, Allocator *allocator) {
 void deallocate_clipboard_data(Allocator *allocator, string *data) {
 #if FOUNDATION_WIN32
     deallocate_string(allocator, data);
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 
@@ -799,6 +1312,8 @@ void blit_pixels_to_window(Window *window, u8 *pixels, s32 width, s32 height) {
     if(!SetDIBitsToDevice(win32->dc, 0, 0, width, height, 0, 0, 0, height, pixels, &bmi, DIB_RGB_COLORS)) {
         foundation_error("SetDIBitsToDevice failed."); // Unfortunately, (most) GDI functions do not use GetLastError()
     }
+#elif FOUNDATION_LINUX
+    // @Incomplete
 #endif
 }
 

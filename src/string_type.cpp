@@ -872,7 +872,7 @@ string mprint(Allocator *allocator, const char *format, ...) {
     string result = allocate_string(allocator, count);
     va_list list1;
     va_start(list1, format);
-    _vsnprintf((char *) result.data, result.count, format, list1); // Don't do the terminating null character!
+    vsnprintf((char *) result.data, result.count, format, list1); // Don't do the terminating null character!
     va_end(list1);
 
     return result;
