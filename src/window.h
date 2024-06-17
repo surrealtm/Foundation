@@ -188,9 +188,9 @@ void set_window_position_and_size(Window *window, s32 x, s32 y, s32 w, s32 h, b8
 void set_window_style(Window *window, Window_Style_Flags style_flags);
 void set_cursor_position(Window *window, s32 x, s32 y);
 
-void get_desktop_bounds(s32 *x0, s32 *y0, s32 *x1, s32 * y1);
-void hide_cursor();
-void show_cursor();
+void get_desktop_bounds(Window *window, s32 *x0, s32 *y0, s32 *x1, s32 * y1);
+void hide_cursor(Window *window);
+void show_cursor(Window *window);
 void confine_cursor(s32 x0, s32 y0, s32 x1, s32 y1);
 void unconfine_cursor();
 

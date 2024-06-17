@@ -143,6 +143,7 @@ int main() {
 int main() {
     Window window;
     create_window(&window, "Hello Linux"_s);
+    set_window_icon_from_file(&window, "data/textures/icon.bmp"_s);
     show_window(&window);
     
     while(!window.should_close) {

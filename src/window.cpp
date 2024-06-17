@@ -707,19 +707,19 @@ void x11_event_handler(Window *window, X11::XEvent *event) {
 
 void x11_adjust_position_and_size(s32 *x, s32 *y, s32 *w, s32 *h) {
     if(*x == WINDOW_DONT_CARE) {
-        *x = 0;
+        *x = 256;
     }
 
     if(*y == WINDOW_DONT_CARE) {
-        *y = 0;
+        *y = 128;
     }
 
     if(*w == WINDOW_DONT_CARE) {
-        *w = 0;
+        *w = DEFAULT_WINDOW_WIDTH;
     }
 
     if(*h == WINDOW_DONT_CARE) {
-        *h = 0;
+        *h = DEFAULT_WINDOW_HEIGHT;
     }
 }
 
@@ -981,12 +981,12 @@ void show_window(Window *window) {
 }
 
 b8 set_window_icon_from_file(Window *window, string file_path) {
-#if FOUNDATION_WIN32
-    Window_Win32_State *win32 = (Window_Win32_State *) window->platform_data;
-    
     char *cstring = to_cstring(Default_Allocator, file_path);
     defer { free_cstring(Default_Allocator, cstring); };
-    
+
+#if FOUNDATION_WIN32
+    Window_Win32_State *win32 = (Window_Win32_State *) window->platform_data;
+        
     HANDLE icon = LoadImageA(null, cstring, IMAGE_ICON, 0, 0, LR_LOADFROMFILE);
     if(icon == null) return false;
     
@@ -995,8 +995,6 @@ b8 set_window_icon_from_file(Window *window, string file_path) {
     
     return true;
 #elif FOUNDATION_LINUX
-    // @Incomplete:
-    // https://www.gamedev.net/forums/topic/697892-solved-how-to-set-the-window-bars-icon-in-x11/
     return false;
 #endif
 }
@@ -1059,7 +1057,36 @@ void set_window_position_and_size(Window *window, s32 x, s32 y, s32 w, s32 h, b8
     
     win32_query_position_and_size(window);
 #elif FOUNDATION_LINUX
-    // @Incomplete
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+
+    X11::Window root_window;
+    int current_x, current_y;
+    unsigned int current_w, current_h, current_border_width, current_depth;
+    X11::XGetGeometry(x11->display, x11->window_handle, &root_window, &current_x, &current_y, &current_w, &current_h, &current_border_width, &current_depth);
+
+    if(x == WINDOW_DONT_CARE) x = current_x;
+    if(y == WINDOW_DONT_CARE) y = current_y;
+    if(w == WINDOW_DONT_CARE) w = current_w;
+    if(h == WINDOW_DONT_CARE) h = current_h;
+
+    x11_adjust_position_and_size(&x, &y, &w, &h); // Currently this doesn't actually do anything, because it seems X11 always takes in the 'drawable' coordinates (whereas win32 also includes border and title bar space)
+
+    X11::XWindowChanges window_changes;
+    window_changes.x = x;
+    window_changes.y = y;
+    window_changes.width = w;
+    window_changes.height = h;
+    X11::XConfigureWindow(x11->display, x11->window_handle, CWX | CWY | CWWidth | CWHeight, &window_changes);
+
+    window->maximized = maximized;
+
+    if(window->maximized) {
+        x11_set_window_style(window, WINDOW_STYLE_Maximized);
+    } else {
+        x11_set_window_style(window, WINDOW_STYLE_Default);
+    }
+    
+    x11_query_position_and_size(window);
 #endif
 }
 
@@ -1089,7 +1116,8 @@ void set_window_style(Window *window, Window_Style_Flags style_flags) {
     win32_query_position_and_size(window);
     window->resized_this_frame = true;
 #elif FOUNDATION_LINUX
-    // @Incomplete
+    x11_set_window_style(window, style_flags);
+    x11_query_position_and_size(window);
 #endif
 }
 
@@ -1106,11 +1134,12 @@ void set_cursor_position(Window *window, s32 x, s32 y) {
     window->mouse_x = point.x;
     window->mouse_y = point.y;
 #elif FOUNDATION_LINUX
-    // @Incomplete
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+    X11::XWarpPointer(x11->display, null, x11->window_handle, 0, 0, 0, 0, x, y);
 #endif
 }
 
-void get_desktop_bounds(s32 *x0, s32 *y0, s32 *x1, s32 *y1) {
+void get_desktop_bounds(Window *window, s32 *x0, s32 *y0, s32 *x1, s32 *y1) {
 #if FOUNDATION_WIN32
     RECT desktop_rectangle;
     GetWindowRect(GetDesktopWindow(), &desktop_rectangle);
@@ -1119,23 +1148,47 @@ void get_desktop_bounds(s32 *x0, s32 *y0, s32 *x1, s32 *y1) {
     *x1 = desktop_rectangle.right;
     *y1 = desktop_rectangle.bottom;
 #elif FOUNDATION_LINUX
-    // @Incomplete
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+
+    s32 _x, _y;
+    u32 _w, _h, _b, _d;
+
+    X11::Window root = X11::XDefaultRootWindow(x11->display);
+    X11::Window root_return;
+    X11::XGetGeometry(x11->display, root, &root_return, &_x, &_y, &_w, &_h, &_b, &_d);
+
+    *x0 = _x;
+    *y0 = _y;
+    *x1 = _x + _w;
+    *y1 = _y + _h;
 #endif
 }
 
-void hide_cursor() {
+void hide_cursor(Window *window) {
 #if FOUNDATION_WIN32
     while(ShowCursor(false) >= 0) {}
 #elif FOUNDATION_LINUX
-    // @Incomplete
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+
+    char empty_data[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    X11::XColor black;
+    black.red = black.green = black.blue = 0;
+    
+    X11::Pixmap empty_bitmap = X11::XCreateBitmapFromData(x11->display, x11->window_handle, empty_data, 8, 8);
+    X11::Cursor invisible_cursor = X11::XCreatePixmapCursor(x11->display, empty_bitmap, empty_bitmap, &black, &black, 0, 0);
+
+    X11::XDefineCursor(x11->display, x11->window_handle, invisible_cursor);
+    X11::XFreeCursor(x11->display, invisible_cursor);
+    X11::XFreePixmap(x11->display, empty_bitmap);
 #endif
 }
 
-void show_cursor() {
+void show_cursor(Window *window) {
 #if FOUNDATION_WIN32
     ShowCursor(true);
 #elif FOUNDATION_LINUX
-    // @Incomplete
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;   
+    XUndefineCursor(x11->display, x11->window_handle);
 #endif
 }
 
@@ -1164,7 +1217,7 @@ void window_sleep(f32 seconds) {
 #if FOUNDATION_WIN32
     Sleep((DWORD) (seconds * 1000.0f));
 #elif FOUNDATION_LINUX
-    // @Incomplete
+    X11::usleep((__useconds_t) (seconds * 1000000.0));
 #endif
 }
 
@@ -1178,7 +1231,7 @@ void window_ensure_frame_time(s64 frame_start, s64 frame_end, f32 requested_fps)
 #if FOUNDATION_WIN32
             Sleep(milliseconds - 1);
 #elif FOUNDATION_LINUX
-    // @Incomplete
+            X11::usleep((__useconds_t) ((milliseconds - 1) * 1000.0));
 #endif
         }
         
