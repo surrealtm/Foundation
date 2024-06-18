@@ -3,6 +3,10 @@
 // This source file gets #include'd in the header file, because templates are shit!
 //
 
+
+
+/* --------------------------------------------- Resizable Array --------------------------------------------- */
+
 template<typename T>
 void Resizable_Array<T>::maybe_grow(b8 force) {
     if(!this->data) {
@@ -169,6 +173,248 @@ T &Resizable_Array<T>::operator[](s64 index) {
 
 
 
+/* ------------------------------------------ Resizable Block Array ------------------------------------------ */
+
+template<typename T, s64 block_capacity>
+s64 Resizable_Block_Array<T, block_capacity>::calculate_block_entry_count(Block *block) {
+    if(block == this->last) return this->count - (this->block_count - 1) * block_capacity;
+    return block_capacity;
+}
+
+template<typename T, s64 block_capacity>
+typename Resizable_Block_Array<T, block_capacity>::Block *Resizable_Block_Array<T, block_capacity>::find_previous_to_block(Block *block) {
+    if(block == this->first) return null;
+
+    Block *previous = this->first;
+    while(previous->next != block) {
+        previous = previous->next;
+    }
+
+    return previous;
+}
+
+template<typename T, s64 block_capacity>
+typename Resizable_Block_Array<T, block_capacity>::Block *Resizable_Block_Array<T, block_capacity>::find_block(s64 index, s64 *index_in_block) {
+    s64 block_index = index / block_capacity;
+    *index_in_block = index - block_index * block_capacity;
+
+    Block *block = this->first;
+    while(block_index > 0) {
+        block = block->next;
+        --block_index;
+    }
+    
+    return block;
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::move_entries(Block *src_block, s64 src_index_in_block, s64 dst_index_in_block) {
+    if(dst_index_in_block > src_index_in_block) {
+        if(src_block->next) this->move_entries(src_block->next, src_index_in_block, dst_index_in_block);
+
+        s64 entries_in_block              = this->calculate_block_entry_count(src_block);
+        s64 entries_moved_in_block        = dst_index_in_block - src_index_in_block;
+        s64 entries_staying_in_this_block = block_capacity - dst_index_in_block;
+        
+        b8 needs_to_move_stuff_to_next_block = src_block->next != null || dst_index_in_block + entries_moved_in_block > block_capacity; // We can maybe save us moving stuff to the next block if we are the very last, and the moved data still fits into this block.
+        if(needs_to_move_stuff_to_next_block) {
+            if(src_block->next == null) this->maybe_grow(true);
+
+            s64 entries_moving_to_next_block = entries_in_block - entries_staying_in_this_block;
+            Block *dst_block = src_block->next;
+            memmove(&dst_block->data[0], &src_block->data[entries_staying_in_this_block], entries_moving_to_next_block * sizeof(T));
+        }
+        
+        memmove(&src_block->data[dst_index_in_block], &src_block->data[src_index_in_block], entries_staying_in_this_block * sizeof(T));
+    } else if(dst_index_in_block < src_index_in_block) {
+        s64 entries_in_block               = this->calculate_block_entry_count(src_block);
+        s64 entries_coming_from_this_block = block_capacity - src_index_in_block;
+        
+        memmove(&src_block->data[dst_index_in_block], &src_block->data[src_index_in_block], entries_coming_from_this_block * sizeof(T));
+
+        b8 needs_to_take_stuff_from_next_block = src_block->next != null;
+        if(needs_to_take_stuff_from_next_block) {
+            s64 entries_coming_from_next_block = src_index_in_block - dst_index_in_block;
+            Block *dst_block = src_block->next;
+            memmove(&src_block->data[dst_index_in_block + entries_coming_from_this_block], &dst_block->data[0], entries_coming_from_next_block * sizeof(T));
+        }
+        
+        if(src_block->next) this->move_entries(src_block->next, src_index_in_block, dst_index_in_block);
+    }
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::maybe_grow(b8 force) {
+    if(!this->first) {
+        Block *block = (Block *) this->allocator->allocate(sizeof(Block));
+        block->next  = null;
+
+        this->first = this->last = block;
+        ++this->block_count;
+    } else if(force || this->count % block_capacity == 0) {
+        Block *block = (Block *) this->allocator->allocate(sizeof(Block));
+        block->next  = null;
+
+        this->last->next = block;
+        this->last = block;
+        ++this->block_count;
+    }
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::maybe_shrink() {
+    if(this->last == null) return;
+
+    while(this->count - (this->block_count - 1) * block_capacity == 0) {
+        Block *previous_to_last = this->find_previous_to_block(this->last);
+
+        Block *block_to_free = this->last;
+        this->allocator->deallocate(block_to_free);
+        --this->block_count;
+
+        previous_to_last->next = null;
+        this->last = previous_to_last;
+    }
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::clear() {
+    Block *block = this->first;
+    while(block) {
+        Block *next = block->next;
+        this->allocator->deallocate(block);
+        block = next;
+    }
+
+    this->count = 0;
+    this->first = null;
+    this->last  = null;
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::clear_without_deallocation() {
+    this->first = null;
+    this->last  = null;
+    this->count = 0;
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::add(T const &data) {
+    this->maybe_grow();
+
+    s64 index_in_block;
+    Block *block = this->find_block(this->count, &index_in_block);
+    block->data[index_in_block] = data;
+
+    ++this->count;
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::insert(s64 index, T const &data) {
+    assert(index >= 0 && index <= this->count);
+
+    s64 index_in_block;
+    Block *block = this->find_block(index, &index_in_block);
+
+    this->move_entries(block, index_in_block, index_in_block + 1);
+
+    block->data[index_in_block] = data;
+
+    ++this->count;
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::remove(s64 index) {
+    assert(index >= 0 && index < this->count);
+
+    s64 index_in_block;
+    Block *block = this->find_block(index, &index_in_block);
+
+    this->move_entries(block, index_in_block + 1, index_in_block);
+    --this->count;
+
+    this->maybe_shrink();
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::remove_range(s64 first, s64 last) {
+    // We don't know if first and last are in the same block, if they span over more than one block, etc.
+    // That makes a general "optimized" solution (by removing the entire range at once) pretty difficult...
+    for(s64 i = first; i <= last; ++i) this->remove(first);
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::remove_value(T const &value) {
+    for(s64 i = 0; i < this->count; ++i) {
+        if(this->operator[](i) == value) {
+            this->remove(i);
+            break;
+        }
+    }
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::remove_value_pointer(T *pointer) {
+    for(s64 i = 0; i < this->count; ++i) {
+        s64 index_in_block;
+        Block *block = this->find_block(this->count, &index_in_block);
+        if(&block->data[index_in_block] == pointer) {
+            this->remove(i);
+            break;
+        }
+    }
+}
+
+template<typename T, s64 block_capacity>
+T *Resizable_Block_Array<T, block_capacity>::push() {
+    this->add(T());
+    return &this->operator[](this->count - 1);
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::pop() {
+    assert(this->count > 0);
+    this->remove(this->count - 1);
+}
+
+template<typename T, s64 block_capacity>
+void Resizable_Block_Array<T, block_capacity>::pop_first() {
+    assert(this->count > 0);
+    this->remove(0);
+}
+
+template<typename T, s64 block_capacity>
+Resizable_Block_Array<T, block_capacity> Resizable_Block_Array<T, block_capacity>::copy() {
+    Resizable_Block_Array<T, block_capacity> copy{};
+    copy.allocator = this->allocator;
+
+    Block *my_block = this->first;
+    while(my_block) {
+        copy.maybe_grow(true);
+        Block *other_block = copy.last;
+
+        s64 count = this->calculate_block_entry_count(my_block);
+        memcpy(other_block->data, my_block->data, count * sizeof(T));
+        copy.count += count;
+        
+        my_block = my_block->next;
+    }
+    
+    return copy;
+}
+
+template<typename T, s64 block_capacity>
+T &Resizable_Block_Array<T, block_capacity>::operator[](s64 index) {
+    assert(index >= 0 && index < this->count);
+    s64 index_in_block;
+    Block *block = this->find_block(index, &index_in_block);
+    return block->data[index_in_block];
+}
+
+
+
+/* ----------------------------------------------- Linked List ----------------------------------------------- */
+
 template<typename T>
 Linked_List_Node<T> *Linked_List<T>::make_node(T const &value) {
     Linked_List_Node<T> *node = (Linked_List_Node<T> *) this->allocator->allocate(sizeof(Linked_List_Node<T>));
@@ -226,7 +472,7 @@ void Linked_List<T>::remove_node(Linked_List_Node<T> *node) {
         this->head = this->head->next;
     }
 
-    this->allocator->deallocate(node);
+    this->allocator->deallocate(node);
     
     --this->count;
 }
@@ -272,7 +518,7 @@ T *Linked_List<T>::push() {
     this->add(T{});
     return &this->tail->data;
 }
-
+
 template<typename T>
 T Linked_List<T>::pop() {
     assert(this->count > 0);

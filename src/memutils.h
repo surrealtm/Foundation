@@ -206,6 +206,7 @@ struct Resizable_Array {
 	
 	void maybe_grow(b8 force = false);
 	void maybe_shrink();
+
 	void clear();
 	void clear_without_deallocation(); // If using this on a temp arena, etc.
     void reserve(s64 count);
@@ -224,6 +225,68 @@ struct Resizable_Array {
 
     Iterator begin() { return Iterator { this->data }; }
 	Iterator end()   { return Iterator { this->data + this->count }; }
+};
+
+template<typename T, s64 block_capacity>
+struct Resizable_Block_Array {
+    struct Block {
+        Block *next;
+        T data[block_capacity];
+    };
+
+    struct Iterator {
+        Resizable_Block_Array<T, block_capacity> *array;
+        Block *block;
+        s64 index_in_block;
+
+        b8 operator==(Iterator const &it) { return this->block == it.block && this->index_in_block == it.index_in_block; }
+        b8 operator!=(Iterator const &it) { return this->block != it.block || this->index_in_block != it.index_in_block; }
+        Iterator &operator++() {
+            ++this->index_in_block;
+
+            s64 entry_count = array->calculate_block_entry_count(this->block);
+            if(this->index_in_block == entry_count && this->block->next) {
+                this->block = this->block->next;
+                this->index_in_block = 0;
+            }
+
+            return *this;
+        }
+        
+        T &operator*()  { return this->block->data[this->index_in_block]; }
+        T *operator->() { return this->block->data[this->index_in_block]; }
+    };
+    
+    Allocator *allocator = Default_Allocator;
+    Block *first    = null;
+    Block *last     = null;
+	s64 block_count = 0;
+    s64 count       = 0;
+
+    s64 calculate_block_entry_count(Block *block);
+    Block *find_previous_to_block(Block *block);
+    Block *find_block(s64 index, s64 *index_in_block);
+    void move_entries(Block *src_block, s64 src_index_in_block, s64 dst_index_in_block);
+    void maybe_grow(b8 force = false);
+    void maybe_shrink();
+
+    void clear();
+    void clear_without_deallocation(); // If using this on a temp arena, etc.
+    void add(T const &data);
+    void insert(s64 index, T const &data);
+    void remove(s64 index);
+    void remove_range(s64 first, s64 last);
+    void remove_value(T const &value);
+    void remove_value_pointer(T  *pointer);
+    T *push();
+    void pop();
+    void pop_first();
+    Resizable_Block_Array<T, block_capacity> copy();
+
+    T &operator[](s64 index);
+
+	Iterator begin() { return Iterator{this, this->first, 0}; }
+	Iterator end()   { return Iterator{this, this->last,  this->count - (this->block_count - 1) * block_capacity}; }
 };
 
 template<typename T>

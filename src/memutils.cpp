@@ -28,7 +28,7 @@ void *Allocator::allocate(u64 size) {
 }
 
 void Allocator::deallocate(void *pointer) {
-	if(pointer == null) return; // Silently ignore "null" deallocations
+	if(pointer == null || this->_deallocate_procedure == null) return; // Silently ignore "null" deallocations
 
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	++this->stats.deallocations;

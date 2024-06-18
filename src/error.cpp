@@ -47,7 +47,7 @@ void set_custom_error_message(string message) {
 }
 
 void set_custom_error_message(const char *message) {
-    internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), strlen(message));
+    internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), cstring_length(message));
     copy_cstring(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), message, internal_custom_error_message_count);
 }
 
