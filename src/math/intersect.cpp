@@ -124,14 +124,14 @@ Triangle_Intersection_Result<T> ray_triangle_intersection(const v3<T> &ray_origi
 
     v3<T> tvector = ray_origin - p0;
     T u = v3_dot_v3(tvector, pvector);
-    if(u < 0.0f || u > determinant) {
+    if(u < -intersect_epsilon<T>() || u > determinant + intersect_epsilon<T>()) {
         result.intersection = false;
         return result;
     }
 
     v3<T> qvector = v3_cross_v3(tvector, edge1);
     T v = v3_dot_v3(ray_direction, qvector);
-    if(v < 0.0f || u + v > determinant) {
+    if(v < -intersect_epsilon<T>() || u + v > determinant + intersect_epsilon<T>()) {
         result.intersection = false;
         return result;
     }
@@ -168,14 +168,14 @@ Triangle_Intersection_Result<T> ray_double_sided_triangle_intersection(const v3<
     
     v3<T> tvector = ray_origin - p0;
     T u = v3_dot_v3(tvector, pvector) * inverse_determinant;
-    if(u < 0.0f || u > 1.0f) {
+    if(u < -intersect_epsilon<T>() || u > 1.0f + intersect_epsilon<T>()) {
         result.intersection = false;
         return result;
     }
 
     v3<T> qvector = v3_cross_v3(tvector, edge1);
     T v = v3_dot_v3(ray_direction, qvector) * inverse_determinant;
-    if(v < 0.0f || u + v > 1.0f) {
+    if(v < -intersect_epsilon<T>() || u + v > 1.0f + intersect_epsilon<T>()) {
         result.intersection = false;
         return result;
     }
