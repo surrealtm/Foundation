@@ -70,9 +70,10 @@ struct Data_Array {
     b8 id_is_valid(Data_Array_Id id);
 
     void clear_free_list();
-    void push_free_list(Data_Array_Id index);
-    Data_Array_Id pop_free_list();
+    void push_free_list(Data_Array_Id id);
+    Data_Array_Id pop_free_list(s64 index = 0);
     void rebuild_free_list();
+    void remove_from_free_list_if_exists(Data_Array_Id id);
 };
 
 // Because C++ is a terrible language, we need to supply the template definitions in the header file for

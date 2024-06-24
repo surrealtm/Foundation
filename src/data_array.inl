@@ -67,6 +67,8 @@ T *Data_Array<T>::push_with_id(Data_Array_Id id) {
     
     ++this->count;
 
+    this->remove_from_free_list_if_exists(id);
+    
     return ptr;
 }
 
@@ -74,7 +76,7 @@ template<typename T>
 void Data_Array<T>::remove_by_id(Data_Array_Id id) {
     assert(this->id_is_valid(id), "Tried to remove an invalid Data Array Id.");
     s64 index = this->indirection[id];
-    this->remove_by_index(index);
+    if(index != INVALID_DATA_ARRAY_INDEX) this->remove_by_index(index);
 }
 
 template<typename T>
@@ -89,11 +91,11 @@ void Data_Array<T>::remove_by_index(s64 removed_index) {
     this->data[removed_index] = this->data[last_index];
 
     this->id[removed_index] = last_id;
-    this->id[last_index] = INVALID_DATA_ARRAY_ID;
+    this->id[last_index]    = INVALID_DATA_ARRAY_ID;
 
-    this->indirection[removed_id] = INVALID_DATA_ARRAY_INDEX;
     this->indirection[last_id]    = removed_index;
-
+    this->indirection[removed_id] = INVALID_DATA_ARRAY_INDEX;
+    
     this->push_free_list(removed_id);
     
     --this->count;
@@ -143,11 +145,11 @@ void Data_Array<T>::push_free_list(Data_Array_Id id) {
 }
 
 template<typename T>
-Data_Array_Id Data_Array<T>::pop_free_list() {
-    assert(this->free_list_count > 0);
-    Data_Array_Id id = this->free_list[0];
+Data_Array_Id Data_Array<T>::pop_free_list(s64 index) {
+    assert(this->free_list_count > index);
+    Data_Array_Id id = this->free_list[index];
 
-    memmove(&this->free_list[0], &this->free_list[1], (this->free_list_count - 1) * sizeof(Data_Array_Id));
+    memmove(&this->free_list[index], &this->free_list[index + 1], (this->free_list_count - index - 1) * sizeof(Data_Array_Id));
     --this->free_list_count;
 
     if(this->free_list_count == 0) {
@@ -182,5 +184,15 @@ void Data_Array<T>::rebuild_free_list() {
         
     for(s64 i = 0; i < this->allocated; ++i) {
         if(this->indirection[i] == INVALID_DATA_ARRAY_INDEX) this->add_to_free_list(i);
+    }
+}
+
+template<typename T>
+void Data_Array<T>::remove_from_free_list_if_exists(Data_Array_Id id) {
+    for(s64 i = 0; i < this->free_list_count; ++i) {
+        if(this->free_list[i] == id) {
+            this->pop_free_list(i);
+            break;
+        }
     }
 }
