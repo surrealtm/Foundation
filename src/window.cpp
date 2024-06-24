@@ -172,6 +172,10 @@ LRESULT CALLBACK win32_callback(HWND hwnd, UINT message, WPARAM wparam, LPARAM l
         window->focused = false;
         break;
         
+    case WM_ACTIVATE:
+        if(window->callback_on_activation) window->callback_on_activation(window);
+        break;
+
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN: {
         Key_Code key = win32_key_map(wparam);

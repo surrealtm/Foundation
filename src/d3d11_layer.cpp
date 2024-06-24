@@ -245,6 +245,11 @@ void destroy_d3d11() {
     d3d_device  = null;
 }
 
+static
+void restore_d3d11_fullscreen_state(Window *window) {
+    set_d3d11_fullscreen(window, true);
+}
+
 void create_d3d11_context(Window *window) {
     create_d3d11_device();
 
@@ -276,11 +281,12 @@ void create_d3d11_context(Window *window) {
     d3d11->default_frame_buffer->has_depth = false;
 
     D3D11_CALL(d3d11->swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) &d3d11->default_frame_buffer->colors[0].texture));
-    D3D11_CALL(d3d_device->CreateRenderTargetView(d3d11->default_frame_buffer->colors[0].texture, 0, &d3d11->default_frame_buffer->colors[0].render_view));
+    D3D11_CALL(d3d_device->CreateRenderTargetView(d3d11->default_frame_buffer->colors[0].texture, 0, &d3d11->default_frame_buffer->colors[0].render_view));    
 }
 
 void destroy_d3d11_context(Window *window) {
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
+    d3d11->swapchain->SetFullscreenState(false, null); // For proper cleanup, because D3D11 might keep some interal things or something? We get a leak otherwise
     d3d11->default_frame_buffer->colors[0].texture->Release();
     d3d11->default_frame_buffer->colors[0].render_view->Release();
     d3d11->swapchain->Release();
@@ -292,6 +298,14 @@ void destroy_d3d11_context(Window *window) {
 void swap_d3d11_buffers(Window *window) {
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
     d3d11->swapchain->Present(1, 0);
+}
+
+void set_d3d11_fullscreen(Window *window, b8 fullscreen) {
+    Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
+    if(d3d11->swapchain) {
+        d3d11->swapchain->SetFullscreenState(fullscreen, null);
+        window->callback_on_activation = fullscreen ? (Window_Callback) restore_d3d11_fullscreen_state : null;
+    }
 }
 
 void clear_d3d11_state() {

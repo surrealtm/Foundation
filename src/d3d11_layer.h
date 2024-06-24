@@ -225,6 +225,7 @@ struct Pipeline_State {
 void create_d3d11_context(Window *window);
 void destroy_d3d11_context(Window *window);
 void swap_d3d11_buffers(Window *window);
+void set_d3d11_fullscreen(Window *window, b8 fullscreen);
 void clear_d3d11_state();
 Frame_Buffer *get_default_frame_buffer(Window *window);
 void resize_default_frame_buffer(Window *window);

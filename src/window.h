@@ -143,14 +143,15 @@ enum Window_Style_Flags {
     WINDOW_STYLE_Maximized      = 0x4,
 };
 
-typedef void (*Window_Resize_Callback)(void *);
+typedef void (*Window_Callback)(void *);
 
 struct Window {
     u8 platform_data[WINDOW_PLATFORM_STATE_SIZE]; // Used by the different OS implementations (win32, linux) for platform dependent handles.
     u8 graphics_data[WINDOW_GRAPHICS_STATE_SIZE]; // Used by the different graphics backends (d3d11) for graphics handles.
 
     void *callback_during_resize_user_pointer;
-    Window_Resize_Callback callback_during_resize;
+    Window_Callback callback_during_resize; // Can be used for rendering during resizing by the user. The argument is the user pointer above.
+    Window_Callback callback_on_activation; // Used for setting the fullscreen state by the d3d11 backend. The argument is this window.
     
     s32 x, y, w, h;
     
