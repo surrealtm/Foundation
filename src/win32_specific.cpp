@@ -401,7 +401,7 @@ b8 os_looks_like_absolute_file_path(string file_path) {
 string os_convert_to_absolute_file_path(Allocator *allocator, string file_path) {
     char *cstring = to_cstring(Default_Allocator, file_path);
 	u32 buffer_size = GetFullPathNameA(cstring, 0, null, null);
-    string result = allocate_string(allocator, buffer_size);
+    string result = allocate_string(allocator, buffer_size - 1); // buffer_size includes the null terminator
     GetFullPathNameA(cstring, buffer_size, (LPSTR) result.data, null);
 	free_cstring(Default_Allocator, cstring);
     return result;
