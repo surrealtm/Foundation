@@ -192,8 +192,8 @@ void set_cursor_position(Window *window, s32 x, s32 y);
 void get_desktop_bounds(Window *window, s32 *x0, s32 *y0, s32 *x1, s32 * y1);
 void hide_cursor(Window *window);
 void show_cursor(Window *window);
-void confine_cursor(s32 x0, s32 y0, s32 x1, s32 y1);
-void unconfine_cursor();
+void confine_cursor(Window *window);
+void unconfine_cursor(Window *window);
 
 void window_sleep(f32 seconds);
 void window_ensure_frame_time(s64 frame_start, s64 frame_end, f32 requested_fps);

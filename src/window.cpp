@@ -430,6 +430,8 @@ namespace X11 {
 # include <X11/Xos.h>
 };
 
+#define X11_EVENT_MASK (ExposureMask | ButtonPressMask | ButtonReleaseMask | KeyPressMask | KeyReleaseMask | EnterWindowMask | LeaveWindowMask | PointerMotionMask | Button1MotionMask | VisibilityChangeMask | FocusChangeMask)
+
 struct Window_X11_State {
     X11::Display *display;
     s32 screen_number;
@@ -826,7 +828,7 @@ b8 x11_create_window(Window *window, string title, s32 x, s32 y, s32 w, s32 h, W
     //
     x11->window_handle = X11::XCreateSimpleWindow(x11->display, XRootWindow(x11->display, x11->screen_number), x, y, w, h, 2, black_pixel, white_pixel);
     X11::XStoreName(x11->display, x11->window_handle, cstring);
-    X11::XSelectInput(x11->display, x11->window_handle, ExposureMask | ButtonPressMask | ButtonReleaseMask | KeyPressMask | KeyReleaseMask | EnterWindowMask | LeaveWindowMask | PointerMotionMask | Button1MotionMask | VisibilityChangeMask | FocusChangeMask);
+    X11::XSelectInput(x11->display, x11->window_handle, X11_EVENT_MASK);
     X11::XMapWindow(x11->display, x11->window_handle);
     X11::XFlush(x11->display);
     X11::XSync(x11->display, false);
@@ -1196,24 +1198,27 @@ void show_cursor(Window *window) {
 #endif
 }
 
-void confine_cursor(s32 x0, s32 y0, s32 x1, s32 y1) {
+void confine_cursor(Window *window) {
 #if FOUNDATION_WIN32
     RECT rect;
-    rect.left   = x0;
-    rect.top    = y0;
-    rect.right  = x1;
-    rect.bottom = y1;
+    rect.left   = window->x;
+    rect.top    = window->y;
+    rect.right  = window->x + window->w;
+    rect.bottom = window->y + window->h;
     ClipCursor(&rect);
 #elif FOUNDATION_LINUX
-    // @Incomplete
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+    unsigned int event_mask = ButtonPressMask | ButtonReleaseMask | EnterWindowMask | LeaveWindowMask | PointerMotionMask | Button1MotionMask | VisibilityChangeMask | FocusChangeMask;
+    X11::XGrabPointer(x11->display, x11->window_handle, True, event_mask, GrabModeAsync, GrabModeAsync, x11->window_handle, None, CurrentTime);
 #endif
 }
 
-void unconfine_cursor() {
+void unconfine_cursor(Window *window) {
 #if FOUNDATION_WIN32
     ClipCursor(null);
 #elif FOUNDATION_LINUX
-    // @Incomplete
+    Window_X11_State *x11 = (Window_X11_State *) window->platform_data;
+    X11::XUngrabPointer(x11->display, CurrentTime);
 #endif
 }
 
