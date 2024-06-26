@@ -157,9 +157,9 @@ T Resizable_Array<T>::pop_first() {
 }
 
 template<typename T>
-Resizable_Array<T> Resizable_Array<T>::copy() {
+Resizable_Array<T> Resizable_Array<T>::copy(Allocator *allocator) {
     Resizable_Array<T> result;
-    result.allocator = this->allocator;
+    result.allocator = allocator;
     result.reserve(this->count);
     for(s64 i = 0; i < this->count; ++i) result.add(this->data[i]);
     return result;
