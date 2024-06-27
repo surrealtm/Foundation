@@ -612,10 +612,12 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
         //
         // Print out leading zeros.
         //
-        for(u64 i = required_digits; i < format.digits; ++i) {
-            this->append_char('0');
+        if(format.digits != MAX_U8) {
+            for(u64 i = required_digits; i < format.digits; ++i) {
+                this->append_char('0');
+            }
         }
-
+        
         //
         // Print out the actual value.
         //
@@ -647,10 +649,12 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
         //
         // Print out leading zeros.
         //
-        for(u64 i = required_digits; i < format.digits; ++i) {
-            this->append_char('0');
+        if(format.digits != MAX_U8) {
+            for(u64 i = required_digits; i < format.digits; ++i) {
+                this->append_char('0');
+            }
         }
-
+        
         //
         // Print out the actual value.
         //
@@ -683,10 +687,12 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
         //
         // Print out leading zeros.
         //
-        for(u64 i = required_digits; i < format.digits; ++i) {
-            this->append_char('0');
+        if(format.digits != MAX_U8) {
+            for(u64 i = required_digits; i < format.digits; ++i) {
+                this->append_char('0');
+            }
         }
-
+        
         //
         // Print out the decimal spaces.
         //
