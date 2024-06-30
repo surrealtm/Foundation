@@ -2,7 +2,10 @@
 
 template<typename T>
 struct v2 {
-    T x, y;
+    union {
+        struct { T x, y; };
+        T values[2];
+    };
 
     v2() : x(0), y(0) {};
     v2(T v) : x(v), y(v) {};

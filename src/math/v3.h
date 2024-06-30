@@ -2,7 +2,10 @@
 
 template<typename T>
 struct v3 {
-    T x, y, z;
+    union {
+        struct { T x, y, z; };
+        T values[3];
+    };
 
     v3() : x(0), y(0), z(0) {};
     v3(T v) : x(v), y(v), z(v) {};
