@@ -86,6 +86,8 @@ b8 strings_equal(const string &lhs, const string &rhs);
 b8 string_starts_with(string lhs, string rhs);
 b8 string_ends_with(string lhs, string rhs);
 
+string read_next_line(string *input);
+
 u64 string_hash(const string &input);
 u64 string_hash(const char *input);
 

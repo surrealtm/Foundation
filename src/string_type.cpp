@@ -282,6 +282,25 @@ b8 string_ends_with(string lhs, string rhs) {
 }
 
 
+string read_next_line(string *input) {
+    s64 end = search_string(*input, '\n');
+    if(end == -1) {
+        string result = *input;
+        *input = ""_s;
+        return result;
+    }
+
+    string result = substring_view(*input, 0, end);
+
+    if(end + 1 < input->count) {
+        *input = substring_view(*input, end + 1, input->count);
+    } else {
+        *input = ""_s;
+    }
+    return result;
+}
+
+
 u64 string_hash(const string &input) {
     // fnv1a_64 hash
     u64 prime = 1099511628211;
