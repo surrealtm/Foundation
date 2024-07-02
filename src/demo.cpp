@@ -6,13 +6,14 @@
 #include "math/algebra.h"
 
 #include "window.h"
-#include "d3d11_layer.h"
 #include "font.h"
 
-#define D3D11_DEMO false
-#define LINUX_DEMO true
+#define D3D11_DEMO    false
+#define LINUX_DEMO    false
+#define SOFTWARE_DEMO true
 
 #if D3D11_DEMO
+#include "d3d11_layer.h"
 
 struct Constants {
     m4f projection;
@@ -21,18 +22,18 @@ struct Constants {
 
 int main() {
     os_enable_high_resolution_clock();
-
+    
     //install_allocator_console_logger(Default_Allocator, "Heap");
     
 	Window window;
 	create_window(&window, "Foundation"_s);
     set_window_icon_from_file(&window, "diffraction.ico"_s);
     show_window(&window);
-
+    
     create_d3d11_context(&window);
     
     Frame_Buffer *default_frame_buffer = get_default_frame_buffer(&window);
-
+    
     Frame_Buffer my_frame_buffer; // @Incomplete: Support resizing?
     create_frame_buffer(&my_frame_buffer, 8);
     create_frame_buffer_color_attachment(&my_frame_buffer, window.w, window.h, false);
@@ -40,12 +41,12 @@ int main() {
     
     Pipeline_State pipeline_state = { false, false, false, false };
     create_pipeline_state(&pipeline_state);
-
+    
     Vertex_Buffer_Array vertex_buffer;
     create_vertex_buffer_array(&vertex_buffer, VERTEX_BUFFER_Triangles);
     allocate_vertex_data(&vertex_buffer, 5 * 6 * 2, 2);
     allocate_vertex_data(&vertex_buffer, 5 * 6 * 2, 2);
-
+    
     Constants constants;
     constants.projection = make_orthographic_projection_matrix((f32) window.w, (f32) window.h, -1, 1);
     constants.color = v3f(1, 1, 1);
@@ -60,33 +61,33 @@ int main() {
     
     Shader shader;
     create_shader_from_file(&shader, "data\\shader\\rgba.hlsl"_s, inputs, ARRAY_COUNT(inputs));
-
+    
     Texture texture;
     create_texture_from_file(&texture, "data\\textures\\rock.png"_s, TEXTURE_FILTER_Nearest | TEXTURE_WRAP_Edge);
     
     Font font;
     create_font_from_file(&font, "C:\\Windows\\Fonts\\times.ttf"_s, 50, FONT_FILTER_Lcd_With_Alpha, GLYPH_SET_Extended_Ascii);
-
+    
     for(Font_Atlas *atlas = font.atlas; atlas != null; atlas = atlas->next) {
         Texture *texture = Default_Allocator->New<Texture>();
         create_texture_from_memory(texture, atlas->bitmap, atlas->w, atlas->h, atlas->channels, TEXTURE_FILTER_Nearest | TEXTURE_WRAP_Edge);
-    
+        
         atlas->user_handle = texture;
     }
-
+    
     f32 total_time = 0.f;
     
 	while(!window.should_close) {
         Hardware_Time frame_start = os_get_hardware_time();
-
+        
         {
             update_window(&window);
-
+            
             Text_Mesh text_mesh = build_text_mesh(&font, "AVWa!"_s, 100, 100, TEXT_ALIGNMENT_Left | TEXT_ALIGNMENT_Median, Default_Allocator);
             update_vertex_data(&vertex_buffer, 0, text_mesh.vertices, text_mesh.glyph_count * 6 * 2);
             update_vertex_data(&vertex_buffer, 1, text_mesh.uvs, text_mesh.glyph_count * 6 * 2);
             free_text_mesh(&text_mesh, Default_Allocator);
-
+            
             constants.color.x = cosf(total_time) * 0.5f + 0.5f;
             constants.color.y = sinf(total_time) * 0.5f + 0.5f;
             update_shader_constant_buffer(&constants_buffer, &constants);
@@ -100,12 +101,12 @@ int main() {
             bind_pipeline_state(&pipeline_state);
             bind_texture((Texture *) font.atlas->user_handle, 0);
             draw_vertex_buffer_array(&vertex_buffer);
-
+            
             blit_frame_buffer(default_frame_buffer, &my_frame_buffer);
-
+            
             swap_d3d11_buffers(&window);
         }
-
+        
         total_time += window.frame_time;
         
         Hardware_Time frame_end = os_get_hardware_time();
@@ -117,7 +118,7 @@ int main() {
         destroy_texture(texture);
         Default_Allocator->deallocate(texture);
     }
-
+    
     destroy_font(&font);
     destroy_texture(&texture);
     destroy_pipeline_state(&pipeline_state);
@@ -128,13 +129,13 @@ int main() {
     
     destroy_d3d11_context(&window);
 	destroy_window(&window);
-
+    
 #if FOUNDATION_DEVELOPER
     if(Default_Allocator->stats.allocations > Default_Allocator->stats.deallocations) {
         foundation_error("Detected Memory Leaks on the Heap Allocator!");
     }
 #endif
-
+    
 	return 0;
 }
 
@@ -145,19 +146,47 @@ int main() {
     create_window(&window, "Hello Linux"_s);
     set_window_icon_from_file(&window, "data/textures/icon.bmp"_s);
     show_window(&window);
-
+    
     confine_cursor(&window);
     
     while(!window.should_close) {
         update_window(&window);
         window_sleep(0.016f);
     }
-
+    
     unconfine_cursor(&window);
     destroy_window(&window);
     return 0;
 }
 
+#elif SOFTWARE_DEMO
+#include "software_renderer.h"
+
+int main() {
+    Window window;
+    create_window(&window, "Hello Linux"_s);
+    show_window(&window);
+    
+    Frame_Buffer frame_buffer;
+    create_frame_buffer(&frame_buffer, window.w, window.h, 4);
+    
+    Texture texture;
+    create_texture_from_file(&texture, "data/textures/rock.png"_s);
+    
+    while(!window.should_close) {
+        update_window(&window);
+        
+        bind_frame_buffer(&frame_buffer);
+        clear_frame(Color(50, 100, 200, 255));
+        draw_quad(100, 100, 200, 200, Color(0, 255, 0, 255), Color(255, 255, 0, 255), Color(255, 0, 0, 255), Color(0, 0, 0, 255));
+        swap_buffers(&window, &frame_buffer);
+        
+        window_sleep(0.016f);
+    }
+    
+    destroy_texture(&texture);
+    destroy_window(&window);
+    return 0;
+}
+
 #endif
-
-

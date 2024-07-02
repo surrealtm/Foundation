@@ -148,18 +148,18 @@ typedef void (*Window_Callback)(void *);
 struct Window {
     u8 platform_data[WINDOW_PLATFORM_STATE_SIZE]; // Used by the different OS implementations (win32, linux) for platform dependent handles.
     u8 graphics_data[WINDOW_GRAPHICS_STATE_SIZE]; // Used by the different graphics backends (d3d11) for graphics handles.
-
-    void *callback_during_resize_user_pointer;
-    Window_Callback callback_during_resize; // Can be used for rendering during resizing by the user. The argument is the user pointer above.
-    Window_Callback callback_on_activation; // Used for setting the fullscreen state by the d3d11 backend. The argument is this window.
+    
+    void *callback_during_resize_user_pointer = null;
+    Window_Callback callback_during_resize = null; // Can be used for rendering during resizing by the user. The argument is the user pointer above.
+    Window_Callback callback_on_activation = null; // Used for setting the fullscreen state by the d3d11 backend. The argument is this window.
     
     s32 x, y, w, h;
     
     b8 should_close,
-        maximized,
-        focused,
-        resized_this_frame,
-        moved_this_frame;
+    maximized,
+    focused,
+    resized_this_frame,
+    moved_this_frame;
     
     s32 mouse_x, mouse_y; // The pixel position of the cursor inside the window.
     s32 mouse_delta_x, mouse_delta_y; // The pixel delta of mouse movement since the previous frame. 
@@ -205,8 +205,8 @@ void deallocate_clipboard_data(Allocator *allocator, string *data);
 
 
 struct Window_Buffer {
-    s32 width, height;
-    u8 *pixels;
+    s32 w, h;
+    u8 *buffer;
 };
 
 void acquire_window_buffer(Window *window, Window_Buffer *buffer);
@@ -214,8 +214,10 @@ void destroy_window_buffer(Window_Buffer *buffer);
 void clear_window_buffer(Window_Buffer *buffer, u8 r, u8 g, u8 b);
 void paint_window_buffer(Window_Buffer *buffer, s32 x, s32 y, u8 r, u8 g, u8 b);
 void query_window_buffer(Window_Buffer *buffer, s32 x, s32 y, u8 *r, u8 *g, u8 *b);
+void blit_pixels_to_window(Window *window, u8 *buffer, s32 w, s32 h);
 void blit_window_buffer(Window *window, Window_Buffer *buffer);
-void blit_pixels_to_window(Window *window, u8 *pixels, s32 width, s32 height);
+u8 *convert_bgra_to_rgba(u8 *input, s32 w, s32 h);
+u8 *convert_rgba_to_bgra(u8 *input, s32 w, s32 h);
 u8 *convert_window_buffer_to_rgba(Window_Buffer *buffer);
 
 
