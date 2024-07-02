@@ -45,3 +45,4 @@ void swap_buffers(Window *dst, Frame_Buffer *src);
 void clear_frame(Color color);
 void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Color color0, Color color1, Color color2, Color color3);
 void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Color color);
+void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Texture *texture);

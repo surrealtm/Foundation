@@ -179,6 +179,7 @@ int main() {
         bind_frame_buffer(&frame_buffer);
         clear_frame(Color(50, 100, 200, 255));
         draw_quad(100, 100, 200, 200, Color(0, 255, 0, 255), Color(255, 255, 0, 255), Color(255, 0, 0, 255), Color(0, 0, 0, 255));
+        draw_quad(200, 100, 300, 200, &texture);
         swap_buffers(&window, &frame_buffer);
         
         window_sleep(0.016f);

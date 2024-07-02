@@ -9,7 +9,7 @@
 enum Draw_Command_Kind {
     DRAW_COMMAND_Nothing,
     DRAW_COMMAND_Clear,
-    DRAW_COMMAND_Triangles,
+    DRAW_COMMAND_Draw,
 };
 
 enum Draw_Command_Options {
@@ -21,11 +21,12 @@ enum Draw_Command_Options {
 BITWISE(Draw_Command_Options);
 
 struct Draw_AABB {
-    v2i min, max;
+    v2f min, max;
 };
 
 struct Draw_Vertex {
-    v4i position;
+    v2f position;
+    v2f uv;
     Color color;
 };
 
@@ -45,7 +46,7 @@ struct Draw_Command {
             s32 vertex_count;
             
             Draw_Command_Options options;
-        } triangles;
+        } draw;
     };
 };
 
@@ -67,6 +68,23 @@ u8 *get_pixel_in_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y) {
 }
 
 static
+u8 *get_pixel_in_texture(Texture *texture, s32 x, s32 y) {
+    s64 offset = ((s64) y * (s64) texture->w + x) * texture->channels;
+    return &texture->buffer[offset];
+}
+
+static
+Color query_texture(Texture *texture, v2f uv) {
+    u8 *pixel = get_pixel_in_texture(texture, (s32) (uv.x * texture->w), (s32) (uv.y * texture->h));
+    Color result;
+    result.r = texture->channels > 0 ? *(pixel + 0) : 255;
+    result.g = texture->channels > 1 ? *(pixel + 1) : 255;
+    result.b = texture->channels > 2 ? *(pixel + 2) : 255;
+    result.a = texture->channels > 3 ? *(pixel + 3) : 255;
+    return result;
+}
+
+static
 void include_vertex_in_aabb(Draw_AABB *aabb, Draw_Vertex *vertex) {
     aabb->min.x = min(aabb->min.x, vertex->position.x);
     aabb->min.y = min(aabb->min.y, vertex->position.y);
@@ -77,8 +95,8 @@ void include_vertex_in_aabb(Draw_AABB *aabb, Draw_Vertex *vertex) {
 static
 Draw_AABB calculate_aabb_for_vertices(Draw_Vertex *v0, Draw_Vertex *v1, Draw_Vertex *v2) {
     Draw_AABB aabb;
-    aabb.min = v2i(MAX_S32, MAX_S32);
-    aabb.max = v2i(MIN_S32, MIN_S32);
+    aabb.min = v2f(MAX_F32, MAX_F32);
+    aabb.max = v2f(MIN_F32, MIN_F32);
     include_vertex_in_aabb(&aabb, v0);
     include_vertex_in_aabb(&aabb, v1);
     include_vertex_in_aabb(&aabb, v2);
@@ -86,20 +104,20 @@ Draw_AABB calculate_aabb_for_vertices(Draw_Vertex *v0, Draw_Vertex *v1, Draw_Ver
 }
 
 static
-b8 point_inside_triangle(const v4i &p, const v4i &p0, const v4i &p1, const v4i &p2, f32 *s, f32 *t, f32 *u) {
+b8 point_inside_triangle(const v2f &p, const v2f &p0, const v2f &p1, const v2f &p2, f32 *s, f32 *t, f32 *u) {
     f32 A = (-p1.y * p2.x + p0.y * (-p1.x + p2.x) + p0.x * (p1.y - p2.y) + p1.x * p2.y) / 2.f;
     f32 sign = (A < 0) ? -1.f : 1.f;
-    f32 _s = (p0.y * p2.x - p0.x * p2.y + (p2.y - p0.y) * p.x + (p0.x - p2.x) * p.y) * sign;
-    f32 _t = (p0.x * p1.y - p0.y * p1.x + (p0.y - p1.y) * p.x + (p1.x - p0.x) * p.y) * sign;
+    f32 _t = (p0.y * p2.x - p0.x * p2.y + (p2.y - p0.y) * p.x + (p0.x - p2.x) * p.y) * sign;
+    f32 _u = (p0.x * p1.y - p0.y * p1.x + (p0.y - p1.y) * p.x + (p1.x - p0.x) * p.y) * sign;
     
     f32 denom = 2.f * A * sign;
     
-    b8 inside_triangle = _s >= 0 && _t >= 0 && (_s + _t) < denom;
+    b8 inside_triangle = _t >= 0 && _u >= 0 && (_t + _u) < denom;
     if(!inside_triangle) return false;
     
-    *s = _s / denom;
     *t = _t / denom;
-    *u = 1.f - *s - *t;
+    *u = _u / denom;
+    *s = 1.f - *t - *u;
     
     return true;
 }
@@ -116,6 +134,14 @@ Color interpolate(f32 s, Color s_color, f32 t, Color t_color, f32 u, Color u_col
     result.g = (u8) (interpolate(s, s_color.g / 255.f, t, t_color.g / 255.f, u, u_color.g / 255.f) * 255.f);
     result.b = (u8) (interpolate(s, s_color.b / 255.f, t, t_color.b / 255.f, u, u_color.b / 255.f) * 255.f);
     result.a = (u8) (interpolate(s, s_color.a / 255.f, t, t_color.a / 255.f, u, u_color.a / 255.f) * 255.f);
+    return result;
+}
+
+static
+v2f interpolate(f32 s, v2f s_vector, f32 t, v2f t_vector, f32 u, v2f u_vector) {
+    v2f result;
+    result.x = interpolate(s, s_vector.x, t, t_vector.x, u, u_vector.x);
+    result.y = interpolate(s, s_vector.y, t, t_vector.y, u, u_vector.y);
     return result;
 }
 
@@ -138,9 +164,9 @@ Draw_Command *make_draw_command(Draw_Command_Kind kind) {
 
 static
 Draw_Command *make_triangle_draw_command(s32 vertex_count) {
-    Draw_Command *command = make_draw_command(DRAW_COMMAND_Triangles);
-    command->triangles.vertex_count = vertex_count;
-    command->triangles.vertices     = (Draw_Vertex *) Default_Allocator->allocate(command->triangles.vertex_count * sizeof(Draw_Vertex));
+    Draw_Command *command = make_draw_command(DRAW_COMMAND_Draw);
+    command->draw.vertex_count = vertex_count;
+    command->draw.vertices     = (Draw_Vertex *) Default_Allocator->allocate(command->draw.vertex_count * sizeof(Draw_Vertex));
     return command;
 }
 
@@ -149,24 +175,31 @@ void draw_triangle(Draw_Command *cmd, Draw_Vertex *v0, Draw_Vertex *v1, Draw_Ver
     Draw_AABB aabb = calculate_aabb_for_vertices(v0, v1, v2);
     u8 color_array[4];
     
-    for(s32 y = aabb.min.y; y <= aabb.max.y; ++y) {
-        for(s32 x = aabb.min.x; x <= aabb.max.x; ++x) {
-            v2i point = v2i(x, y);
+    for(f32 y = aabb.min.y; y <= aabb.max.y; ++y) {
+        for(f32 x = aabb.min.x; x <= aabb.max.x; ++x) {
+            v2f point = v2f(x, y);
             
             f32 s, t, u;
-            if(!point_inside_triangle(v4i(point.x, point.y, 0, 1), v0->position, v1->position, v2->position, &s, &t, &u)) continue;
+            if(!point_inside_triangle(point, v0->position, v1->position, v2->position, &s, &t, &u)) continue;
             
-            if(cmd->triangles.options & DRAW_OPTION_Colored) {
-                Color interpolated_color = interpolate(u, v0->color, s, v1->color, t, v2->color);
+            if(cmd->draw.options & DRAW_OPTION_Textured) {
+                v2f interpolated_uv = interpolate(s, v0->uv, t, v1->uv, u, v2->uv);
+                Color texture_color = query_texture(cmd->draw.texture, interpolated_uv);
+                color_array[0] = texture_color.r;
+                color_array[1] = texture_color.g;
+                color_array[2] = texture_color.b;
+                color_array[3] = texture_color.a;
+            }
+            
+            if(cmd->draw.options & DRAW_OPTION_Colored) {
+                Color interpolated_color = interpolate(s, v0->color, t, v1->color, u, v2->color);
                 color_array[0] = interpolated_color.r;
                 color_array[1] = interpolated_color.g;
                 color_array[2] = interpolated_color.b;
                 color_array[3] = interpolated_color.a;
-            } else {
-                color_array[0] = color_array[1] = color_array[2] = color_array[3] = 255;
             }
             
-            u8 *pixel = get_pixel_in_frame_buffer(cmd->frame_buffer, x, y);
+            u8 *pixel = get_pixel_in_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y);
             memcpy(pixel, color_array, cmd->frame_buffer->channels);
         }
     }
@@ -186,9 +219,9 @@ void execute_draw_command(Draw_Command *cmd) {
             }
         } break;
         
-        case DRAW_COMMAND_Triangles: {
-            for(s64 i = 0; i < cmd->triangles.vertex_count; i += 3) {
-                draw_triangle(cmd, &cmd->triangles.vertices[i], &cmd->triangles.vertices[i + 1], &cmd->triangles.vertices[i + 2]);
+        case DRAW_COMMAND_Draw: {
+            for(s64 i = 0; i < cmd->draw.vertex_count; i += 3) {
+                draw_triangle(cmd, &cmd->draw.vertices[i], &cmd->draw.vertices[i + 1], &cmd->draw.vertices[i + 2]);
             }
         } break;
     }
@@ -257,28 +290,46 @@ void swap_buffers(Window *dst, Frame_Buffer *src) {
 
 /* ----------------------------------------------- Draw Commands ----------------------------------------------- */
 
+static
+Draw_Command *make_quad_command(s32 x0, s32 y0, s32 x1, s32 y1) {
+    Draw_Command *command = make_triangle_draw_command(6);
+    command->draw.vertices[0].position = v2f((f32) x0, (f32) y0);
+    command->draw.vertices[1].position = v2f((f32) x1, (f32) y1);
+    command->draw.vertices[2].position = v2f((f32) x1, (f32) y0);
+    command->draw.vertices[3].position = v2f((f32) x0, (f32) y0);
+    command->draw.vertices[4].position = v2f((f32) x0, (f32) y1);
+    command->draw.vertices[5].position = v2f((f32) x1, (f32) y1);
+    return command;
+}
+
 void clear_frame(Color color) {
     Draw_Command *command = make_draw_command(DRAW_COMMAND_Clear);
     command->clear.color = color;
 }
 
 void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Color color0, Color color1, Color color2, Color color3) {
-    Draw_Command *command = make_triangle_draw_command(6);
-    command->triangles.vertices[0].position = v4i(x0, y0, 0, 1);
-    command->triangles.vertices[0].color    = color0;
-    command->triangles.vertices[1].position = v4i(x1, y1, 0, 1);
-    command->triangles.vertices[1].color    = color2;
-    command->triangles.vertices[2].position = v4i(x1, y0, 0, 1);
-    command->triangles.vertices[2].color    = color1;
-    command->triangles.vertices[3].position = v4i(x0, y0, 0, 1);
-    command->triangles.vertices[3].color    = color0;
-    command->triangles.vertices[4].position = v4i(x0, y1, 0, 1);
-    command->triangles.vertices[4].color    = color3;
-    command->triangles.vertices[5].position = v4i(x1, y1, 0, 1);
-    command->triangles.vertices[5].color    = color2;
-    command->triangles.options = DRAW_OPTION_Colored;
+    Draw_Command *command = make_quad_command(x0, y0, x1, y1);
+    command->draw.vertices[0].color = color0;
+    command->draw.vertices[1].color = color2;
+    command->draw.vertices[2].color = color1;
+    command->draw.vertices[3].color = color0;
+    command->draw.vertices[4].color = color3;
+    command->draw.vertices[5].color = color2;
+    command->draw.options = DRAW_OPTION_Colored;
 }
 
 void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Color color) {
     draw_quad(x0, y0, x1, y1, color, color, color, color);
+}
+
+void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Texture *texture) {
+    Draw_Command *command = make_quad_command(x0, y0, x1, y1);
+    command->draw.vertices[0].uv = v2f(0, 0);
+    command->draw.vertices[1].uv = v2f(1, 1);
+    command->draw.vertices[2].uv = v2f(1, 0);
+    command->draw.vertices[3].uv = v2f(0, 0);
+    command->draw.vertices[4].uv = v2f(0, 1);
+    command->draw.vertices[5].uv = v2f(1, 1);
+    command->draw.texture = texture;
+    command->draw.options = DRAW_OPTION_Textured;
 }
