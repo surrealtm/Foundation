@@ -28,9 +28,7 @@ void Chained_Hash_Table<K, V>::create(s64 bucket_count, Hash_Procedure hash, Com
 
     this->bucket_count    = __hash_table_next_power_of_two(bucket_count);
     this->bucket_mask     = this->bucket_count - 1; // Mask all lower bits so that we can map hash values to the bucket count.
-    this->buckets         = (Entry *) this->allocator->allocate(this->bucket_count * sizeof(Entry));
-    this->bucket_occupied = (b8 *) this->allocator->allocate(this->bucket_count * sizeof(b8));
-    memset(this->bucket_occupied, 0, this->bucket_count * sizeof(b8));
+    this->buckets         = (Entry **) this->allocator->allocate(this->bucket_count * sizeof(Entry *));
 
 #if FOUNDATION_DEVELOPER
     this->stats = Hash_Table_Stats();
@@ -44,19 +42,16 @@ void Chained_Hash_Table<K, V>::resize(s64 bucket_count) {
     //
     // Temporarily save the old hash table.
     //
-    Entry *previous_buckets      = this->buckets;
-    b8 *previous_bucket_occupied = this->bucket_occupied;
-    s64 previous_bucket_count    = this->bucket_count;
+    Entry **previous_buckets  = this->buckets;
+    s64 previous_bucket_count = this->bucket_count;
     
     //
     // Allocate the new hash table.
     //
-    this->count           = 0;
-    this->bucket_count    = __hash_table_next_power_of_two(bucket_count);
-    this->bucket_mask     = this->bucket_count - 1; // Mask all lower bits so that we can map hash values to the bucket count.
-    this->buckets         = (Entry *) this->allocator->allocate(this->bucket_count * sizeof(Entry));
-    this->bucket_occupied = (b8 *) this->allocator->allocate(this->bucket_count * sizeof(b8));
-    memset(this->bucket_occupied, 0, this->bucket_count * sizeof(b8));
+    this->count        = 0;
+    this->bucket_count = __hash_table_next_power_of_two(bucket_count);
+    this->bucket_mask  = this->bucket_count - 1; // Mask all lower bits so that we can map hash values to the bucket count.
+    this->buckets      = (Entry *) this->allocator->allocate(this->bucket_count * sizeof(Entry));
 
 #if FOUNDATION_DEVELOPER
     this->stats = Hash_Table_Stats();
@@ -65,19 +60,13 @@ void Chained_Hash_Table<K, V>::resize(s64 bucket_count) {
     //
     // Copy all hash table entries into the new one.
     //
-    for(s64 i = 0; i < previous_bucket_count; ++i) {
-        if(!previous_bucket_occupied[i]) continue;
-        
-        auto *bucket = &previous_buckets[i];
+    for(s64 i = 0; i < previous_bucket_count; ++i) {       
+        auto *bucket = previous_buckets[i];
         while(bucket) {
             this->add(bucket->key, bucket->value);
-            if(bucket != &previous_buckets[i]) {
-                auto *next = bucket->next;
-                this->allocator->deallocate(bucket);
-                bucket = next;
-            } else {
-                bucket = bucket->next;
-            }
+            auto *next = bucket->next;
+            this->allocator->deallocate(bucket);
+            bucket = next;
         }
     }
 
@@ -85,13 +74,12 @@ void Chained_Hash_Table<K, V>::resize(s64 bucket_count) {
     // Deallocate the old hash table.
     //
     this->allocator->deallocate(previous_buckets);
-    this->allocator->deallocate(previous_bucket_occupied);
 }
 
 template<typename K, typename V>
 void Chained_Hash_Table<K, V>::destroy() {
     for(s64 i = 0; i < this->bucket_count; ++i) {
-        auto *bucket = this->buckets[i].next;
+        auto *bucket = this->buckets[i];
 
         while(bucket) {
             auto *next = bucket->next;
@@ -101,9 +89,7 @@ void Chained_Hash_Table<K, V>::destroy() {
     }
 
     this->allocator->deallocate(this->buckets);
-    this->allocator->deallocate(this->bucket_occupied);
     this->buckets         = null;
-    this->bucket_occupied = null;
     this->bucket_mask     = 0;
     this->bucket_count    = 0;
     this->count           = 0;
@@ -120,10 +106,8 @@ void Chained_Hash_Table<K, V>::remove(K const &k) {
     u64 hash = this->hash(k);
     u64 bucket_index = hash & this->bucket_mask;
 
-    if(!this->bucket_occupied[bucket_index]) return;
-
     Entry *previous = null;
-    Entry *entry = &this->buckets[bucket_index];
+    Entry *entry = this->buckets[bucket_index];
     while(entry && (entry->hash != hash || !this->compare(entry->key, k))) {
         previous = entry;
         entry = entry->next;
@@ -133,15 +117,11 @@ void Chained_Hash_Table<K, V>::remove(K const &k) {
 
     if(previous) {
         previous->next = entry->next;
-        this->allocator->deallocate(entry);
-    } else if(entry->next) {
-        auto *next = entry->next;
-        *entry = *entry->next;
-        this->allocator->deallocate(next);
     } else {
-        this->bucket_occupied[bucket_index] = false;
+        this->buckets[bucket_index] = entry->next;
     }
 
+    this->allocator->deallocate(entry);
     --this->count;
 
 #if FOUNDATION_DEVELOPER
@@ -156,26 +136,23 @@ V *Chained_Hash_Table<K, V>::push(K const &k) {
     u64 hash = this->hash(k);
     u64 bucket_index = hash & this->bucket_mask;
 
-    Entry *entry;
+    Entry *entry = (Entry *) this->allocator->allocate(sizeof(Entry));
 
-    if(this->bucket_occupied[bucket_index]) {
-        entry = (Entry *) this->allocator->allocate(sizeof(Entry));
-        entry->next  = this->buckets[bucket_index].next;
+    if(this->buckets[bucket_index]) {
+        entry->next  = this->buckets[bucket_index];
         entry->hash  = hash;
         entry->key   = k;
-        this->buckets[bucket_index].next = entry;
 
 #if FOUNDATION_DEVELOPER
         this->stats.collisions += 1;
 #endif
     } else {
-        entry = &this->buckets[bucket_index];
         entry->next    = null;
         entry->hash    = hash;
         entry->key     = k;
-        this->bucket_occupied[bucket_index] = true;
     }
     
+    this->buckets[bucket_index] = entry;
     ++this->count;
 
 #if FOUNDATION_DEVELOPER
@@ -189,9 +166,8 @@ template<typename K, typename V>
 V *Chained_Hash_Table<K, V>::query(K const &k) {
     u64 hash = this->hash(k);
     u64 bucket_index = hash & this->bucket_mask;
-    if(!this->bucket_occupied[bucket_index]) return null;
-
-    auto *entry = &this->buckets[bucket_index];
+    
+    auto *entry = this->buckets[bucket_index];
     while(entry && (entry->hash != hash || !this->compare(entry->key, k))) entry = entry->next;
     
     return entry ? &entry->value : null;

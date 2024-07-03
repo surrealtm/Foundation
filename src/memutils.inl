@@ -36,6 +36,7 @@ void Resizable_Array<T>::maybe_shrink() {
     if(this->count < this->allocated / 2 - 1 && this->allocated >= Resizable_Array::INITIAL_SIZE * 2) {
         // If the array is less-than-half full, shrink the array
         this->allocated /= 2;
+        assert(this->count > 0 && this->count <= this->allocated);
 
         if(!this->allocator->_reallocate_procedure) {
             // Not all allocators actually provide a reallocation strategy (e.g. Memory Arenas). In that case,
@@ -88,7 +89,7 @@ template<typename T>
 void Resizable_Array<T>::insert(s64 index, T const &data) {
     assert(index >= 0 && index <= this->count);
     this->maybe_grow();
-    if(index < this->count) memcpy(&this->data[index + 1], &this->data[index], (this->count - index) * sizeof(T));
+    if(index < this->count) memmove(&this->data[index + 1], &this->data[index], (this->count - index) * sizeof(T));
     this->data[index] = data;
     ++this->count;
 }
@@ -96,7 +97,7 @@ void Resizable_Array<T>::insert(s64 index, T const &data) {
 template<typename T>
 void Resizable_Array<T>::remove(s64 index) {
     assert(index >= 0 && index < this->count);
-    memcpy(&this->data[index], &this->data[index + 1], (this->count - index) * sizeof(T));
+    memmove(&this->data[index], &this->data[index + 1], (this->count - index) * sizeof(T));
     --this->count;
     this->maybe_shrink();
 }
@@ -105,7 +106,8 @@ template<typename T>
 void Resizable_Array<T>::remove_range(s64 first_to_remove, s64 last_to_remove) {
     assert(first_to_remove >= 0 && first_to_remove < this->count);
     assert(last_to_remove >= 0 && last_to_remove < this->count);
-    memcpy(&this->data[first_to_remove], &this->data[last_to_remove + 1], (this->count - last_to_remove - 1) * sizeof(T));
+    assert(last_to_remove >= first_to_remove);
+    memmove(&this->data[first_to_remove], &this->data[last_to_remove + 1], (this->count - last_to_remove - 1) * sizeof(T));
     this->count -= (last_to_remove - first_to_remove) + 1;
     this->maybe_shrink();
 }

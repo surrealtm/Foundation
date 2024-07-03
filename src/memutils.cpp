@@ -328,10 +328,10 @@ b8 Memory_Pool::Block::is_continuous_with(Block *block) {
 
 void Memory_Pool::Block::merge_with(Block *block) {
 	if(block->offset_to_next) {
-		u64 next_block = (u64) block + block->offset_to_next;
-		this->offset_to_next = next_block - (u64) this;
-	} else
+		this->offset_to_next = (u64) block->next() - (u64) this;
+	} else {
 		this->offset_to_next = 0;
+	}
 
 	this->size_in_bytes += block->size_in_bytes + sizeof(Memory_Pool::Block);
 }
@@ -346,7 +346,7 @@ void Memory_Pool::destroy() {
 }
 
 void *Memory_Pool::push(u64 size) {
-	assert(size <= 0x7fffffffffffffff); // Make sure we only require 63 bits for the size, or else our Block struct cannot properly encode it.
+	assert(size > 0 && size <= 0x7fffffffffffffff); // Make sure we only require 63 bits for the size, or else our Block struct cannot properly encode it.
 
 	//
 	// Query the Memory Pool for an inactive block that can be reused for this
@@ -374,11 +374,13 @@ void *Memory_Pool::push(u64 size) {
 			u64 split_start = align_to((u64) unused_block->data() + size, 16, u64);
 		
 			Block *split_block = (Block *) split_start;
-			if(unused_block->offset_to_next)
+			if(unused_block->offset_to_next) {
 				split_block->offset_to_next = (u64) unused_block + unused_block->offset_to_next - split_start;
-			else
+			} else {
 				split_block->offset_to_next = 0;
-			
+            }
+
+            split_block->original_allocation_size = -1;
 			split_block->size_in_bytes  = split_size;
 			split_block->used           = false;
 
@@ -417,7 +419,7 @@ void *Memory_Pool::push(u64 size) {
 		// arena was us.
 		//
 		if(this->last_block != null &&
-			(char *) this->last_block->data() + this->last_block->size_in_bytes == (char *) this->arena->base + this->arena->size) {
+			(u64) this->last_block->data() + this->last_block->size_in_bytes == (u64) this->arena->base + this->arena->size) {
 			u64 padding = this->arena->ensure_alignment(16);
 			assert(size < 0x7fffffffffffffef); // Make sure adding the padding won't overflow the size.
 			this->last_block->size_in_bytes += padding;
@@ -430,13 +432,12 @@ void *Memory_Pool::push(u64 size) {
 		block->offset_to_next = 0;
 		block->size_in_bytes  = size;
 		block->used           = true;
-
 		block->original_allocation_size = size;
 		
 		if(this->last_block) {
 			assert(this->first_block != null);
 			assert(this->last_block->offset_to_next == 0);
-			this->last_block->offset_to_next = (char *) block - (char *)this->last_block;
+			this->last_block->offset_to_next = (u64) block - (u64)this->last_block;
 			this->last_block = block;
 		} else {
 			this->first_block = block;
@@ -535,8 +536,9 @@ void Memory_Pool::debug_print(u32 indent) {
 		u64 index = 0;
 		Block *block = this->first_block;
 		while(block) {
-			u64 offset = (char *) block - (char *) this->arena->base;
-			printf("%-*s    > %" PRIu64 ": %" PRIu64 "b, %s. (Offset: %" PRIu64 ").\n", indent, "", index, block->size_in_bytes, block->used ? "Used" : "Free", offset);
+			assert((u8 *) block >= this->arena->base && (u8 *) block < (u8 *) this->arena->base + this->arena->size);
+			s64 offset_in_arena = (s64) block - (s64) this->arena->base;
+			printf("%-*s    > %" PRIu64 ": %" PRIu64 "b (Original: %" PRIu64 "b), %s. (Offset inside arena: %" PRIu64 "b, offset to next block: %" PRIu64 "b).\n", indent, "", index, block->size_in_bytes, block->original_allocation_size, block->used ? "Used" : "Free", offset_in_arena, block->offset_to_next); // An original allocation size of (u64) -1 means that this is a split_block (look into the memory pool's push procedure).
 			block = block->next();
 			++index;
 		}

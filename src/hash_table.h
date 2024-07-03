@@ -65,8 +65,7 @@ struct Chained_Hash_Table {
     s64 count; // The total number of valid entries currently in the table.
     s64 bucket_count; // This internally gets rounded up to the next power of two, so that we can use the buket mask.
     s64 bucket_mask; // Masks all the lower bits to map a hash value into the bucket array.
-    b8 *bucket_occupied; // We don't explicitely allocate the first entry of each bucket (meaning: The bucket array contains the actual entries, not pointers to the first entries). To know whether an entry actually "exists", we require a boolean value. The next entries in each bucket are allocated, therefore implicitely indicating whether they exist or not.
-    Entry *buckets;
+    Entry **buckets; // For pointer stability, all entries must always be allocated. This is a bit sadge, but it has definitely bitten me in the arse before.
 
 #if FOUNDATION_DEVELOPER
     Hash_Table_Stats stats;

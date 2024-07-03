@@ -213,6 +213,8 @@ void deallocate_string(Allocator *allocator, string *_string) {
 
 
 string copy_string(Allocator *allocator, string input) {
+    if(input.count == 0) return ""_s;
+
     string output;
     output.count = input.count;
     output.data  = (u8 *) allocator->allocate(output.count);
