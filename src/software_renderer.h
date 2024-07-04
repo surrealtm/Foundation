@@ -27,6 +27,7 @@ struct Frame_Buffer {
 /* ------------------------------------------------- Texture ------------------------------------------------- */
 
 void create_texture_from_file(Texture *texture, string file_path);
+void create_texture_from_memory(Texture *texture, s32 w, s32 h, u8 channels, u8 *buffer); // This makes a copy from the buffer!
 void destroy_texture(Texture *texture);
 
 

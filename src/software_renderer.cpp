@@ -173,7 +173,7 @@ Draw_Command *make_triangle_draw_command(s32 vertex_count) {
 static
 void draw_triangle(Draw_Command *cmd, Draw_Vertex *v0, Draw_Vertex *v1, Draw_Vertex *v2) {
     Draw_AABB aabb = calculate_aabb_for_vertices(v0, v1, v2);
-    u8 color_array[4];
+    u8 color_array[4] = { 0, 0, 0, 255 };
     
     for(f32 y = aabb.min.y; y <= aabb.max.y; ++y) {
         for(f32 x = aabb.min.x; x <= aabb.max.x; ++x) {
@@ -240,6 +240,11 @@ void flush_draw_commands() {
 
 /* ------------------------------------------------- Texture ------------------------------------------------- */
 
+static
+b8 texture_is_valid_for_draw(Texture *texture) {
+    return texture->buffer != 0 && texture->w > 0 && texture->h > 0 && texture->channels > 0;
+}
+
 void create_texture_from_file(Texture *texture, string file_path) {
     char *cstring = to_cstring(Default_Allocator, file_path);
     defer { free_cstring(Default_Allocator, cstring); };
@@ -247,8 +252,18 @@ void create_texture_from_file(Texture *texture, string file_path) {
     texture->buffer = stbi_load(cstring, (int *) &texture->w, (int *) &texture->h, (int *) &texture->channels, 0);
 }
 
+void create_texture_from_memory(Texture *texture, s32 w, s32 h, u8 channels, u8 *buffer) {
+    texture->w = w;
+    texture->h = h;
+    texture->channels = channels;
+    
+    s64 bytes = (s64) texture->w * (s64) texture->h * (s64) texture->channels;
+    texture->buffer = (u8 *) Default_Allocator->allocate(bytes);
+    memcpy(texture->buffer, buffer, bytes);
+}
+
 void destroy_texture(Texture *texture) {
-    stbi_image_free(texture->buffer);
+    Default_Allocator->deallocate(texture->buffer); // stbi_load uses the Default_Allocator thanks to the macros in foundation.cpp
     texture->buffer   = null;
     texture->w        = 0;
     texture->h        = 0;
@@ -331,5 +346,5 @@ void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Texture *texture) {
     command->draw.vertices[4].uv = v2f(0, 1);
     command->draw.vertices[5].uv = v2f(1, 1);
     command->draw.texture = texture;
-    command->draw.options = DRAW_OPTION_Textured;
+    command->draw.options = texture_is_valid_for_draw(texture) ? DRAW_OPTION_Textured : DRAW_OPTION_Nothing;
 }
