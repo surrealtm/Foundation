@@ -164,8 +164,13 @@ int main() {
 
 int main() {
     Window window;
-    create_window(&window, "Hello Linux"_s);
+    create_window(&window, "Hello Windows"_s);
     show_window(&window);
+    
+    string working_directory = os_get_working_directory();
+    printf("Working dir: %.*s\n", (u32) working_directory.count, working_directory.data);
+    
+    printf("File exists: %d\n", os_file_exists("data/textures/rock.png"_s));
     
     Frame_Buffer frame_buffer;
     create_frame_buffer(&frame_buffer, window.w, window.h, 4);

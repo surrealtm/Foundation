@@ -15,55 +15,55 @@ void *Allocator::allocate(u64 size) {
 	++this->stats.allocations;
 	this->stats.working_set += size;
 	if(this->stats.working_set > this->stats.peak_working_set) this->stats.peak_working_set = this->stats.working_set;
-
+    
 #endif
-
+    
 	void *pointer = this->_allocate_procedure(this->data, size);
-
+    
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	if(this->callbacks.allocation_callback)  this->callbacks.allocation_callback(this, this->callbacks.user_pointer, pointer, size);
 #endif
-
+    
 	return pointer;
 }
 
 void Allocator::deallocate(void *pointer) {
 	if(pointer == null || this->_deallocate_procedure == null) return; // Silently ignore "null" deallocations
-
+    
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	++this->stats.deallocations;
 	u64 size = this->_query_allocation_size_procedure(this->data, pointer);
 	this->stats.working_set -= size;
-
+    
 	if(this->callbacks.deallocation_callback) this->callbacks.deallocation_callback(this, this->callbacks.user_pointer, pointer, size);
 #endif
-
+    
 	this->_deallocate_procedure(this->data, pointer);
 }
 
 void *Allocator::reallocate(void *old_pointer, u64 new_size) {
-	if(old_pointer == null) return null; // Silently ignore "null" deallocations
-
+	if(old_pointer == null) return this->allocate(new_size); // Mimick the default realloc behaviour.
+    
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	++this->stats.reallocations;
 	u64 old_size = this->_query_allocation_size_procedure(this->data, old_pointer);
 	this->stats.working_set += (new_size - old_size);
 	if(this->stats.working_set > this->stats.peak_working_set) this->stats.peak_working_set = this->stats.working_set;
 #endif
-
+    
 	void *new_pointer = this->_reallocate_procedure(this->data, old_pointer, new_size);
-
+    
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	if(this->callbacks.reallocation_callback) this->callbacks.reallocation_callback(this, this->callbacks.user_pointer, old_pointer, old_size, new_pointer, new_size);
 #endif
-
+    
 	return new_pointer;
 }
 
 void Allocator::reset() {
 	this->_reset_procedure(this->data);
 	this->reset_stats();
-
+    
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	if(this->callbacks.clear_callback) this->callbacks.clear_callback(this, this->callbacks.user_pointer);
 #endif
@@ -88,7 +88,7 @@ void Allocator::debug_print(u32 indent) {
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	f32 working_set_decimal, peak_working_set_decimal;
 	Memory_Unit working_set_unit, peak_working_set_unit;
-
+    
 	working_set_unit = get_best_memory_unit(this->stats.working_set, &working_set_decimal);
 	peak_working_set_unit = get_best_memory_unit(this->stats.peak_working_set, &peak_working_set_decimal);
 	
@@ -109,7 +109,7 @@ void Allocator::debug_print(u32 indent) {
 
 void *heap_allocate(void * /*data = null */, u64 size) {
 	void *pointer = null;
-
+    
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	// To support allocator statistics at runtime, we need to store the allocation
 	// size somewhere. While malloc does this somewhere under the hood, we don't
@@ -123,14 +123,14 @@ void *heap_allocate(void * /*data = null */, u64 size) {
 		foundation_error("A call to malloc failed for the requested size of '%lld'.", size);
 		return null;
 	}
-
+    
 	u64 *_u64 = (u64 *) pointer;
 	*_u64 = size;
 	pointer = (void *) ((u64) pointer + extra_size);
 #else
 	pointer = malloc(size);
 #endif
-
+    
     memset(pointer, 0, size);
     
 	return pointer;
@@ -138,7 +138,7 @@ void *heap_allocate(void * /*data = null */, u64 size) {
 
 void heap_deallocate(void * /*data = null */, void *pointer) {
 	if(!pointer) return;
-
+    
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	// We gave the user code an adjusted pointer, not what malloc actually returned to
 	// us. Free however requires that exact pointer malloc returned, so we need to
@@ -153,7 +153,7 @@ void heap_deallocate(void * /*data = null */, void *pointer) {
 
 void *heap_reallocate(void * /*data = null */, void *old_pointer, u64 new_size) {
 	void *new_pointer;
-
+    
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	// We gave the user code an adjusted pointer, not what malloc actually returned to
 	// us. Free however requires that exact pointer malloc returned, so we need to
@@ -161,22 +161,24 @@ void *heap_reallocate(void * /*data = null */, void *old_pointer, u64 new_size) 
 	u64 extra_size = align_to(sizeof(u64), 16, u64);
 	old_pointer = (void *) ((u64) old_pointer - extra_size);
 	new_pointer = realloc(old_pointer, new_size + extra_size);
-
-	if(new_pointer) {
-		u64 *_u64 = (u64 *) new_pointer;
-		*_u64 = new_size;
-		new_pointer = (void *) ((u64) new_pointer + extra_size);
+	if(!new_pointer) {
+		foundation_error("A call to malloc failed for the requested size of '%lld'.", new_size);
+		return null;
 	}
+    
+	u64 *_u64 = (u64 *) new_pointer;
+	*_u64 = new_size;
+	new_pointer = (void *) ((u64) new_pointer + extra_size);
 #else
 	new_pointer = realloc(old_pointer, new_size);
 #endif
-
+    
     return new_pointer;
 }
 
 u64 heap_query_allocation_size(void * /*data = null */, void *pointer) {
 	u64 size;
-
+    
 #if FOUNDATION_ALLOCATOR_STATISTICS
 	u64 extra_size = align_to(sizeof(u64), 16, u64);
 	u64 *_u64 = (u64 *) ((u64) pointer - extra_size);
@@ -185,7 +187,7 @@ u64 heap_query_allocation_size(void * /*data = null */, void *pointer) {
 	foundation_error("FOUNDATION_ALLOCATOR_STATISTICS is off, heap_query_allocation_size is unsupported.");
 	size = 0;
 #endif
-
+    
 	return size;
 }
 
@@ -236,11 +238,11 @@ u64 Memory_Arena::ensure_alignment(u64 alignment) {
 
 void *Memory_Arena::push(u64 size) {
 	assert(this->base != null); // Make sure the arena is set up properly.
-
+    
 	if(this->size + size > this->committed) {
         u64 commit_size = align_to(size, this->commit_size, u64);
 		assert(commit_size >= size);
-
+        
 		if(this->committed + commit_size <= this->reserved) {
 			if(os_commit_memory((char *) this->base + this->committed, commit_size)) {
 				this->committed += commit_size;
@@ -253,7 +255,7 @@ void *Memory_Arena::push(u64 size) {
 			return null;
 		}
 	}
-
+    
 	char *pointer = (char *) this->base + this->size;
 	this->size += size;
 	return pointer;
@@ -265,11 +267,11 @@ u64 Memory_Arena::mark() {
 
 void Memory_Arena::release_from_mark(u64 mark) {
 	assert(mark <= this->size);
-
+    
 	this->size = mark;
-
+    
 	u64 decommit_size = ((u64) floorf((this->committed - mark) / (f32) this->commit_size)) * this->commit_size;
-
+    
 	if(decommit_size) {
 		os_decommit_memory((char *) this->base + this->committed - decommit_size, decommit_size);
 		this->committed -= decommit_size;
@@ -279,13 +281,13 @@ void Memory_Arena::release_from_mark(u64 mark) {
 void Memory_Arena::debug_print(u32 indent) {
 	f32 reserved_decimal, committed_decimal, size_decimal, commit_size_decimal, os_region_decimal;
 	Memory_Unit reserved_unit, committed_unit, size_unit, commit_size_unit, os_region_unit;
-
+    
 	reserved_unit    = get_best_memory_unit(this->reserved, &reserved_decimal);
 	committed_unit   = get_best_memory_unit(this->committed, &committed_decimal);
 	size_unit        = get_best_memory_unit(this->size, &size_decimal);
 	commit_size_unit = get_best_memory_unit(this->commit_size, &commit_size_decimal);
 	os_region_unit   = get_best_memory_unit(os_get_committed_region_size(this->base), &os_region_decimal);
-
+    
 	printf("%-*s=== Memory Arena ===\n", indent, "");
 	printf("%-*s    Reserved:    %.3f%s.\n", indent, "", reserved_decimal, memory_unit_suffix(reserved_unit));
 	printf("%-*s    Committed:   %.3f%s.\n", indent, "", committed_decimal, memory_unit_suffix(committed_unit));
@@ -304,7 +306,7 @@ Allocator Memory_Arena::allocator() {
 		[](void *data) -> void { ((Memory_Arena *) data)->reset(); },
 		null,
 	};
-
+    
 	return allocator;
 }
 
@@ -314,7 +316,7 @@ Allocator Memory_Arena::allocator() {
 
 Memory_Pool::Block *Memory_Pool::Block::next() {
 	if(this->offset_to_next == 0) return null;
-
+    
 	return (Block *) (((char *) this) + this->offset_to_next);
 }
 
@@ -332,7 +334,7 @@ void Memory_Pool::Block::merge_with(Block *block) {
 	} else {
 		this->offset_to_next = 0;
 	}
-
+    
 	this->size_in_bytes += block->size_in_bytes + sizeof(Memory_Pool::Block);
 }
 
@@ -347,19 +349,19 @@ void Memory_Pool::destroy() {
 
 void *Memory_Pool::push(u64 size) {
 	assert(size > 0 && size <= 0x7fffffffffffffff); // Make sure we only require 63 bits for the size, or else our Block struct cannot properly encode it.
-
+    
 	//
 	// Query the Memory Pool for an inactive block that can be reused for this
 	// allocation.
 	//
 	Block *unused_block = this->first_block;
-
+    
 	while(unused_block != null && (unused_block->used || unused_block->size_in_bytes < size)) {
 		unused_block = unused_block->next();
 	}
-
+    
 	void *data = null;
-
+    
 	if(unused_block) {
 		//
 		// There exist an unused block that is big enough for this allocation to reuse it.
@@ -372,21 +374,21 @@ void *Memory_Pool::push(u64 size) {
 			//
 			u64 split_size  = unused_block->size_in_bytes - reused_size - sizeof(Memory_Pool::Block);
 			u64 split_start = align_to((u64) unused_block->data() + size, 16, u64);
-		
+            
 			Block *split_block = (Block *) split_start;
 			if(unused_block->offset_to_next) {
 				split_block->offset_to_next = (u64) unused_block + unused_block->offset_to_next - split_start;
 			} else {
 				split_block->offset_to_next = 0;
             }
-
+            
             split_block->original_allocation_size = -1;
 			split_block->size_in_bytes  = split_size;
 			split_block->used           = false;
-
+            
 			unused_block->offset_to_next = (u64) split_block - (u64) unused_block;
 			unused_block->size_in_bytes  = reused_size;
-		
+            
 			if(this->last_block == unused_block) this->last_block = split_block;
 		}
 		
@@ -394,15 +396,15 @@ void *Memory_Pool::push(u64 size) {
 		// Mark this block as used now.
 		//
 		unused_block->used = true;
-
+        
 		//
 		// Allocators guarantee zero initialization on allocate().
 		//
 		
 		memset(unused_block->data(), 0, size);
-
+        
 		unused_block->original_allocation_size = size;
-
+        
 		data = unused_block->data();
 	} else {
 		//
@@ -410,7 +412,7 @@ void *Memory_Pool::push(u64 size) {
 		// this allocation.
 		// Allocate a new block, set it up and add it to the list.
 		//
-
+        
 		//
 		// Ensure alignment for this new block. Just increasing the arena's data size
 		// would make the memory blocks non-continuous (disabling block merging on free), 
@@ -419,7 +421,7 @@ void *Memory_Pool::push(u64 size) {
 		// arena was us.
 		//
 		if(this->last_block != null &&
-			(u64) this->last_block->data() + this->last_block->size_in_bytes == (u64) this->arena->base + this->arena->size) {
+           (u64) this->last_block->data() + this->last_block->size_in_bytes == (u64) this->arena->base + this->arena->size) {
 			u64 padding = this->arena->ensure_alignment(16);
 			assert(size < 0x7fffffffffffffef); // Make sure adding the padding won't overflow the size.
 			this->last_block->size_in_bytes += padding;
@@ -443,17 +445,17 @@ void *Memory_Pool::push(u64 size) {
 			this->first_block = block;
 			this->last_block = block;
 		}
-	
+        
 		data = block->data();
 	}
-
+    
 	return data;
 }
 
 void Memory_Pool::release(void *pointer) {
 	// Silently ignore 'null' releases.
 	if(!pointer) return;
-
+    
 	//
 	// Find the block that corresponds to this pointer.
 	//
@@ -463,13 +465,13 @@ void Memory_Pool::release(void *pointer) {
 		previous_block = block;
 		block = block->next();
 	}
-
+    
 	if(!block || block->data() != pointer) {
 		// The pointer is invalid, it does not correspond to a block.
 		foundation_error("Attempted to release pointer from Memory_Pool which does not correspond to a block.");
 		return;
 	}
-
+    
 	//
 	// Release this block. If possible, merge with the previous and the next block
 	// so that the block list stays as small as possible.
@@ -484,7 +486,7 @@ void Memory_Pool::release(void *pointer) {
 		previous_block->merge_with(block);
 		block = previous_block;
 	}
-
+    
 	Block *next = block->next();
 	if(next && !next->used && block->is_continuous_with(next)) {
 		//
@@ -515,23 +517,23 @@ u64 Memory_Pool::query_allocation_size(void *pointer) {
 	while(block && block->data() < pointer) {
 		block = block->next();
 	}
-
+    
 	if(block == null) return 0;
-
+    
 	assert(block != null && block->data() == pointer);
 	assert(block->used);
-
+    
 	return block->original_allocation_size;
 }
 
 void Memory_Pool::debug_print(u32 indent) {
 	printf("%-*s=== Memory Pool ===\n", indent, "");
-
+    
 	printf("%-*s  Underlying Arena:\n", indent, "");
 	this->arena->debug_print(indent + 4);
-
+    
 	printf("%-*s  Pool Blocks:\n", indent, "");
-
+    
 	if(this->first_block) {
 		u64 index = 0;
 		Block *block = this->first_block;
@@ -544,7 +546,7 @@ void Memory_Pool::debug_print(u32 indent) {
 		}
 	} else
 		printf("%-*s    (Empty Pool).\n", indent, "");
-
+    
 	printf("%-*s=== Memory Pool ===\n", indent, "");
 }
 
@@ -557,7 +559,7 @@ Allocator Memory_Pool::allocator() {
 		[](void *data) -> void { ((Memory_Pool*) data)->destroy(); },
 		[](void *data, void *pointer) -> u64   { return ((Memory_Pool *) data)->query_allocation_size(pointer); } 
 	};
-
+    
 	return allocator;
 }
 
@@ -567,44 +569,44 @@ Allocator Memory_Pool::allocator() {
 
 const char *memory_unit_suffix(Memory_Unit unit) {
 	const char *string;
-
+    
 	switch(unit) {
-	case Bytes:      string = "b"; break;
-	case Kilobytes:  string = "kb"; break;
-	case Megabytes:  string = "mb"; break;
-	case Gigabytes:  string = "gb"; break;
-	case Terrabytes: string = "tb"; break;
-    default: string = "<>"; break;
+        case Bytes:      string = "b"; break;
+        case Kilobytes:  string = "kb"; break;
+        case Megabytes:  string = "mb"; break;
+        case Gigabytes:  string = "gb"; break;
+        case Terrabytes: string = "tb"; break;
+        default: string = "<>"; break;
 	}
-
+    
 	return string;
 }
 
 Memory_Unit get_best_memory_unit(s64 bytes, f32 *decimal) {
 	Memory_Unit unit = Bytes;
 	*decimal = (f32) bytes;
-
+    
 	while(unit < MEMORY_UNIT_COUNT && bytes >= 1000) {
 		unit = (Memory_Unit) (unit + 1);
 		*decimal = (f32) bytes / 1000.0f;
 		bytes /= 1000;
 	}
-		
+    
 	return unit;
 }
 
 f64 convert_to_memory_unit(s64 bytes, Memory_Unit target_unit) {
 	f64 decimal;
-
+    
 	switch(target_unit) {
-	case Bytes:      decimal = (f64) bytes; break;
-	case Kilobytes:  decimal = (f64) bytes / 1000.0; break;
-	case Megabytes:  decimal = (f64) bytes / 1000000.0; break;
-	case Gigabytes:  decimal = (f64) bytes / 1000000000.0; break;
-	case Terrabytes: decimal = (f64) bytes / 1000000000000.0; break;
-    default: decimal = 1; break;
+        case Bytes:      decimal = (f64) bytes; break;
+        case Kilobytes:  decimal = (f64) bytes / 1000.0; break;
+        case Megabytes:  decimal = (f64) bytes / 1000000.0; break;
+        case Gigabytes:  decimal = (f64) bytes / 1000000000.0; break;
+        case Terrabytes: decimal = (f64) bytes / 1000000000000.0; break;
+        default: decimal = 1; break;
 	}
-
+    
 	return decimal;
 }
 

@@ -250,6 +250,11 @@ void create_texture_from_file(Texture *texture, string file_path) {
     defer { free_cstring(Default_Allocator, cstring); };
     
     texture->buffer = stbi_load(cstring, (int *) &texture->w, (int *) &texture->h, (int *) &texture->channels, 0);
+    
+    // nocheckin
+    if(!texture->buffer) {
+        printf("Failed to load texture: %s\n", stbi_failure_reason());
+    }
 }
 
 void create_texture_from_memory(Texture *texture, s32 w, s32 h, u8 channels, u8 *buffer) {
