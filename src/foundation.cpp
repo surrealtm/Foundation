@@ -1,15 +1,5 @@
 #include "foundation.h"
 #include "os_specific.h"
-#include "memutils.h"
-
-
-#define STBI_MALLOC(size) Default_Allocator->allocate(size)
-#define STBI_REALLOC(ptr, new_size) Default_Allocator->reallocate(ptr, new_size)
-#define STBI_FREE(ptr) Default_Allocator->deallocate(ptr)
-
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "Dependencies/stb_image.h"
 
 #include <stdarg.h> // For va_list
 #include <string.h> // For strlen

@@ -43,12 +43,12 @@ struct Chained_Hash_Table {
             } else {
                 do {
                     ++this->bucket_index;
-                } while(this->bucket_index < this->table->bucket_count && !this->table->bucket_occupied[this->bucket_index]);
+                } while(this->bucket_index < this->table->bucket_count && this->table->buckets[this->bucket_index] == null);
 
-                if(this->bucket_index == this->table->bucket_count) {
-                    this->entry_pointer = null;
+                if(this->bucket_index < this->table->bucket_count) {
+                    this->entry_pointer = this->table->buckets[this->bucket_index];
                 } else {
-                    this->entry_pointer = &this->table->buckets[this->bucket_index];
+                    this->entry_pointer = null;
                 }
             }
 

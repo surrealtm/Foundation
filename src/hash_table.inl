@@ -180,12 +180,12 @@ typename Chained_Hash_Table<K, V>::Iterator Chained_Hash_Table<K, V>::begin() {
     iterator.table = this;
     iterator.bucket_index  = 0;
 
-    while(iterator.bucket_index < this->bucket_count && !this->bucket_occupied[iterator.bucket_index]) {
+    while(iterator.bucket_index < this->bucket_count && this->buckets[iterator.bucket_index] == null) {
         ++iterator.bucket_index;
     }
 
-    if(iterator.bucket_index != this->bucket_count) {
-        iterator.entry_pointer = &this->buckets[iterator.bucket_index];
+    if(iterator.bucket_index < this->bucket_count) {
+        iterator.entry_pointer = this->buckets[iterator.bucket_index];
     } else {
         iterator.entry_pointer = null;
     }
