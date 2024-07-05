@@ -234,7 +234,10 @@ int main() {
 
     Synthesizer synth;
     create_synth(&synth, AUDIO_CHANNELS, AUDIO_SAMPLE_RATE);
-               
+
+    Oscillator module = sine_oscillator(400);
+    synth.module = &module;
+    
     Audio_Player player;
     Error_Code error = create_audio_player(&player);
     if(error != Success) printf("Error Initialization Player: %.*s\n", (u32) error_string(error).count, error_string(error).data);

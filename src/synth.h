@@ -2,6 +2,10 @@
 
 #include "foundation.h"
 
+struct Synthesizer_Module {
+    virtual f32 tick(f32 time) = 0;
+};
+
 enum Oscillator_Kind {
     OSCILLATOR_Sine,
     OSCILLATOR_Square,
@@ -9,7 +13,7 @@ enum Oscillator_Kind {
     OSCILLATOR_Triangle,
 };
 
-struct Oscillator {
+struct Oscillator : Synthesizer_Module {
     Oscillator_Kind kind;
     f32 frequency;
     f32 amplitude;
@@ -19,8 +23,15 @@ struct Oscillator {
     //   Sawtooth: 32
     //   Triangle:  2
     u32 partial_count;
+
+    Oscillator(Oscillator_Kind kind, f32 frequency, f32 amplitude, u32 partial_count) :
+        kind(kind), frequency(frequency), amplitude(amplitude), partial_count(partial_count) {};
     
-    f32 generate(f32 time);
+    f32 tick(f32 time);
+};
+
+struct Noise : Synthesizer_Module {
+    f32 tick(f32 time);
 };
 
 struct Synthesizer {
@@ -35,6 +46,8 @@ struct Synthesizer {
     u64 available_samples;
     
     u64 total_frames_generated;
+
+    Synthesizer_Module *module;
 };
 
 Oscillator sine_oscillator(f32 frequency, f32 amplitude = 1.f);

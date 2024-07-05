@@ -1,5 +1,6 @@
 #include "synth.h"
 #include "memutils.h"
+#include "random.h"
 #include "math/maths.h"
 
 //
@@ -26,7 +27,7 @@ Oscillator triangle_oscillator(f32 frequency, f32 amplitude, u32 partial_count) 
     return Oscillator{ OSCILLATOR_Triangle, frequency, amplitude, partial_count };
 }
 
-f32 Oscillator::generate(f32 time) {
+f32 Oscillator::tick(f32 time) {
     f32 result = 0.f;
     const f32 angular_frequency = this->frequency * FTAU;
     
@@ -45,20 +46,30 @@ f32 Oscillator::generate(f32 time) {
         for(u32 n = 1; n < this->partial_count; ++n) {
             result += (1.f / n) * sinf(angular_frequency * n * time);
         }
+        result *= 1.7f / PI; // Normalization to bring the result into the [-1;1] range
     } break;
 
     case OSCILLATOR_Triangle: {
         f32 amp = -1.f;
-        for(u32 n = 1; n <= this->partial_count * 2; n *= 2) {
+        for(u32 n = 1; n <= this->partial_count * 2; n += 2) {
             amp = (amp > 0.f ? -1.f : 1.f) / (n * n);
             result += amp * sinf(angular_frequency * n * time);
         }
+        result *= 8.f / (PI * PI); // Normalization to bring the result into the [-1;1] range
     } break;
     }
 
     result *= this->amplitude;
 
     return result;
+}
+
+
+
+/* -------------------------------------------------- Noise -------------------------------------------------- */
+
+f32 Noise::tick(f32 time) {
+    return get_random_f32_uniform(-1.f, 1.f);
 }
 
 
@@ -87,14 +98,14 @@ void destroy_synth(Synthesizer *synth) {
 }
 
 void update_synth(Synthesizer *synth, u64 requested_frames) {
-    u64 frames_to_generate = min(requested_frames, (synth->buffer_size_in_frames - synth->available_frames));
+    if(!synth->module) return;
 
-    auto osc = sawtooth_oscillator(400, .5f);
+    u64 frames_to_generate = min(requested_frames, (synth->buffer_size_in_frames - synth->available_frames));
     
     for(u32 i = 0; i < frames_to_generate; ++i) {
         f32 time = (f32) synth->total_frames_generated / (f32) synth->sample_rate;
         
-        f32 frame = osc.generate(time);
+        f32 frame = synth->module->tick(time);
 
         for(u8 j = 0; j < synth->channels; ++j) {
             u64 offset = (u64) (synth->available_frames + i) * synth->channels + j;
