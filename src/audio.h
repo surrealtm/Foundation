@@ -13,7 +13,7 @@
 
 #define AUDIO_SAMPLE_RATE             48000
 #define AUDIO_CHANNELS                    2
-#define AUDIO_UPDATES_PER_SECOND         15 // @Incomplete: Are other values here also okay?
+#define AUDIO_UPDATES_PER_SECOND         15
 #define AUDIO_SAMPLES_PER_UPDATE     (AUDIO_SAMPLE_RATE / AUDIO_UPDATES_PER_SECOND)
 #define AUDIO_NANOSECONDS_PER_UPDATE (1000000000 / AUDIO_UPDATES_PER_SECOND)
 
@@ -32,6 +32,7 @@ enum Audio_Source_State {
 };
 
 enum Audio_Buffer_Format {
+    AUDIO_BUFFER_FORMAT_Unknown,
     AUDIO_BUFFER_FORMAT_Pcm16,
     AUDIO_BUFFER_FORMAT_Float32,
 };
@@ -39,13 +40,14 @@ enum Audio_Buffer_Format {
 struct Audio_Buffer {
     string name; // Usually the file path, but can be set manually.
 
-    Audio_Buffer_Format format;
-    u8 *data;
-    
     u8 channels;
     u32 sample_rate;
-    u64 frame_count;
+    Audio_Buffer_Format format;
+
+    u8 *data;
     u64 size_in_bytes;
+    
+    u64 frame_count; // Valid number of frames in the data buffer
 
     b8 __drflac_cleanup; // Depending on how an audio buffer was loaded, we may require different cleanups.
 };
@@ -77,9 +79,11 @@ Error_Code create_audio_buffer_from_wav_memory(Audio_Buffer *buffer, string file
 Error_Code create_audio_buffer_from_wav_file(Audio_Buffer *buffer, string file_path);
 Error_Code create_audio_buffer_from_flac_memory(Audio_Buffer *buffer, string file_content, string buffer_name);
 Error_Code create_audio_buffer_from_flac_file(Audio_Buffer *buffer, string file_path);
+void create_streaming_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name);
 void destroy_audio_buffer(Audio_Buffer *buffer);
+void update_streaming_audio_buffer(Audio_Buffer *buffer, u8 *data, u64 frame_count);
 
-Audio_Source *acquire_audio_source(Audio_Player *player);
+Audio_Source *acquire_audio_source(Audio_Player *player, Audio_Volume_Type type);
 void release_audio_source(Audio_Player *player, Audio_Source *source);
 
 void play_audio_buffer(Audio_Player *player, Audio_Buffer *buffer, Audio_Volume_Type type);

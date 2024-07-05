@@ -33,11 +33,11 @@ Error_Code win32_create_audio_client(Audio_Win32_State *win32) {
         return ERROR_Custom_Error_Message;
     }
 
-    IID device_enumerator_iid = win32_make_guid(0xA95664D2, 0x9614, 0x4F35, 0xA746DE8DB63617E6);
-    CLSID device_enumerator_clsid = win32_make_guid(0xBCDE0395, 0xE52F, 0x467C, 0x8E3DC4579291692E);
+    IID device_enumerator_iid = win32_make_guid(0xA95664D2, 0x9614, 0x4F35, 0xE61736B68DDE46A7);
+    CLSID device_enumerator_clsid = win32_make_guid(0xBCDE0395, 0xE52F, 0x467C, 0x2E69919257C43D8E);
 
     IMMDeviceEnumerator *device_enumerator;
-    result = CoCreateInstance(device_enumerator_iid, null, CLSCTX_ALL, device_enumerator_iid, (void **) &device_enumerator);
+    result = CoCreateInstance(device_enumerator_clsid, null, CLSCTX_ALL, device_enumerator_iid, (void **) &device_enumerator);
     if(result != S_OK) {
         set_custom_error_message("Failed to initialize the Com library (%s).", win32_hresult_to_string(result));
         return ERROR_Custom_Error_Message;
@@ -51,14 +51,14 @@ Error_Code win32_create_audio_client(Audio_Win32_State *win32) {
         return ERROR_Custom_Error_Message;
     }
 
-    IID audio_client_iid = win32_make_guid(0x1CB9AD4C, 0xDBFA, 0x4c32, 0xB178C2F568A703B2);
+    IID audio_client_iid = win32_make_guid(0x1CB9AD4C, 0xDBFA, 0x4c32, 0xB203A768F5C278B1);
     result = win32->device->Activate(audio_client_iid, CLSCTX_ALL, null, (void **) &win32->audio_client);
     if(result != S_OK) {
         set_custom_error_message("Failed to activate the audio client (%s).", win32_hresult_to_string(result));
         return ERROR_Custom_Error_Message;
     }
 
-    GUID floating_point_subformat_guid = win32_make_guid(0x3, 0x0, 0x10, 0x8000AA0389B71);
+    GUID floating_point_subformat_guid = win32_make_guid(0x3, 0x0, 0x10, 0x719B3800AA000080);
     WAVEFORMATEX waveformat;
     waveformat.wFormatTag      = WAVE_FORMAT_IEEE_FLOAT;
     waveformat.nChannels       = AUDIO_CHANNELS;
@@ -85,11 +85,14 @@ Error_Code win32_create_audio_client(Audio_Win32_State *win32) {
 static
 Error_Code win32_create_audio_player(Audio_Player *player) {
     Audio_Win32_State *win32 = (Audio_Win32_State *) player->platform_data;
+    win32->device        = null;
+    win32->audio_client  = null;
+    win32->render_client = null;
     
     Error_Code error = win32_create_audio_client(win32);
     if(error != Success) return error;
 
-    IID audio_render_client_iid = win32_make_guid(0xF294ACFC, 0x3146, 0x4483, 0xA7BFADDCA7C260E2);
+    IID audio_render_client_iid = win32_make_guid(0xF294ACFC, 0x3146, 0x4483, 0xE260C2A7DCADBFA7);
 
     HRESULT result;
     result = win32->audio_client->GetService(audio_render_client_iid, (void **) &win32->render_client);
@@ -116,6 +119,8 @@ void win32_destroy_audio_player(Audio_Player *player) {
     if(win32->audio_client)  win32->audio_client->Release();
     if(win32->device)        win32->device->Release();
 
+    CoUninitialize(); // If we have multiple ole objects, this may cause trouble. Therefore there should be a better way to handle this probably, but I do not currently know how.
+
     win32->audio_client  = null;
     win32->render_client = null;
     win32->device        = null;
@@ -126,6 +131,10 @@ void win32_destroy_audio_player(Audio_Player *player) {
 static
 f32 *win32_acquire_audio_buffer(Audio_Player *player, u32 *frames_to_output) {
     Audio_Win32_State *win32 = (Audio_Win32_State *) player->platform_data;
+    if(!win32->audio_client || !win32->render_client) {
+        *frames_to_output = 0;
+        return null;
+    }
 
     f32 *buffer = null;
 
@@ -161,10 +170,28 @@ f32 *win32_acquire_audio_buffer(Audio_Player *player, u32 *frames_to_output) {
     return buffer;
 }
 
+static
+void win32_release_audio_buffer(Audio_Player *player, u32 frames_to_output) {
+    Audio_Win32_State *win32 = (Audio_Win32_State *) player->platform_data;
+    win32->render_client->ReleaseBuffer(frames_to_output, 0);
+}
+
 #endif
 
 
 /* ------------------------------------------------- Helpers ------------------------------------------------- */
+
+static
+u64 get_size_in_bytes_per_frame(Audio_Buffer_Format format, u8 channels) {
+    u64 size_in_bytes;
+
+    switch(format) {
+    case AUDIO_BUFFER_FORMAT_Pcm16: size_in_bytes = sizeof(s16); break;
+    case AUDIO_BUFFER_FORMAT_Float32: size_in_bytes = sizeof(f32); break;
+    }
+    
+    return size_in_bytes * channels;
+}
 
 static
 f32 calculate_audio_source_volume(Audio_Player *player, Audio_Source *source) {
@@ -205,10 +232,13 @@ f32 query_audio_buffer(Audio_Buffer *buffer, u64 sample) {
 /* ----------------------------------------------- Audio Player ----------------------------------------------- */
 
 Error_Code create_audio_player(Audio_Player *player) {
+    for(s64 i = 0; i < AUDIO_VOLUME_COUNT; ++i)
+        player->volumes[i] = 1.f;
+
 #if FOUNDATION_WIN32
     return win32_create_audio_player(player);
 #endif
-
+    
     return Success;
 }
 
@@ -238,18 +268,18 @@ void update_audio_player(Audio_Player *player) {
             for(u32 i = 0; i < source_frames_to_output; ++i) {
                 for(u8 j = 0; j < AUDIO_CHANNELS; ++j) {
                     u64 source_buffer_offset = (source.frame_offset_in_buffer + i) * source.playing_buffer->channels + j;
-                    u64 output_offset = i * AUDIO_CHANNELS + j;
+                    u64 output_offset = (u64) i * AUDIO_CHANNELS + j;
                     f32 output_sample = output[output_offset];
                     f32 source_sample = query_audio_buffer(source.playing_buffer, source_buffer_offset);
-                    output[output_offset] = mix_audio_samples(output_sample, source_sample, source_volume);
+                    output[output_offset] = source_sample; // nocheckin: mix_audio_samples(output_sample, source_sample, source_volume);
                 }                
             }
-
+            
             source.frame_offset_in_buffer += source_frames_to_output;
             if(source.frame_offset_in_buffer == source.playing_buffer->frame_count) source.state = AUDIO_SOURCE_Completed;
         }
 
-        if(source.state == AUDIO_SOURCE_Completed && !source.remove_on_completion) {
+        if(source.state == AUDIO_SOURCE_Completed && source.remove_on_completion) {
             //
             // Remove this source from the linked list.
             //
@@ -274,6 +304,10 @@ void update_audio_player(Audio_Player *player) {
             ++it;
         }
     }
+
+#if FOUNDATION_WIN32
+    win32_release_audio_buffer(player, frames_to_output);
+#endif
 }
 
 
@@ -300,31 +334,66 @@ Error_Code create_audio_buffer_from_flac_file(Audio_Buffer *buffer, string file_
     return Success;
 }
 
+void create_streaming_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name) {
+    buffer->name             = buffer_name;
+    buffer->format           = format;
+    buffer->channels         = channels;
+    buffer->sample_rate      = sample_rate;
+    buffer->frame_count      = 0;
+    buffer->size_in_bytes    = frame_count * get_size_in_bytes_per_frame(buffer->format, buffer->channels);
+    buffer->__drflac_cleanup = false;
+    buffer->data = (u8 *) Default_Allocator->allocate(buffer->size_in_bytes);
+}
+
 void destroy_audio_buffer(Audio_Buffer *buffer) {
     // @Incomplete
+    if(buffer->__drflac_cleanup) {
+    
+    } else {
+        Default_Allocator->deallocate(buffer->data);
+    }
 
+    buffer->format           = AUDIO_BUFFER_FORMAT_Unknown;
+    buffer->channels         = 0;
+    buffer->sample_rate      = 0;
+    buffer->frame_count      = 0;
+    buffer->size_in_bytes    = 0;
+    buffer->__drflac_cleanup = false;
+    buffer->data             = null;
+}
+
+void update_streaming_audio_buffer(Audio_Buffer *buffer, u8 *data, u64 frame_count) {
+    u64 max_frames = buffer->size_in_bytes / get_size_in_bytes_per_frame(buffer->format, buffer->channels);
+    buffer->frame_count = min(frame_count, max_frames);
+    memcpy(buffer->data, data, buffer->frame_count * get_size_in_bytes_per_frame(buffer->format, buffer->channels));
 }
 
 
 
 /* ----------------------------------------------- Audio Source ----------------------------------------------- */
 
-Audio_Source *acquire_audio_source(Audio_Player *player) {
-    // @Incomplete
-    return null;
+Audio_Source *acquire_audio_source(Audio_Player *player, Audio_Volume_Type type) {
+    Audio_Source *source         = player->sources.push();
+    source->volume_type          = type;
+    source->state                = AUDIO_SOURCE_Paused;
+    source->remove_on_completion = false;
+    source->volume               = 1.f;
+    source->loop                 = false;
+    return source;
 }
 
 void release_audio_source(Audio_Player *player, Audio_Source *source) {
-    // @Incomplete
-
+    player->sources.remove_value_pointer(source);
 }
 
 void play_audio_buffer(Audio_Player *player, Audio_Buffer *buffer, Audio_Volume_Type type) {
-    // @Incomplete
-
+    Audio_Source *source = acquire_audio_source(player, type);
+    source->remove_on_completion = true;
+    play_audio_buffer(source, buffer);
 }
 
 void play_audio_buffer(Audio_Source *source, Audio_Buffer *buffer) {
-    // @Incomplete
-
+    source->playing_buffer = buffer;
+    source->frame_offset_in_buffer = 0;
+    source->state = AUDIO_SOURCE_Playing;
 }

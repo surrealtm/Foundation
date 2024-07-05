@@ -1314,7 +1314,7 @@ void deallocate_clipboard_data(Allocator *allocator, string *data) {
 
 void acquire_window_buffer(Window *window, Window_Buffer *buffer) {
     s64 pixels = window->w * window->h * 4;
-    buffer->buffer= (u8 *) Default_Allocator->allocate(pixels * sizeof(u8));
+    buffer->buffer = (u8 *) Default_Allocator->allocate(pixels * sizeof(u8));
     
     if(buffer->buffer) {
         buffer->w = window->w;
@@ -1354,7 +1354,7 @@ void query_window_buffer(Window_Buffer *buffer, s32 x, s32 y, u8 *r, u8 *g, u8 *
     *r = buffer->buffer[offset + 2];
 }
 
-void blit_pixels_to_window(Window *window, u8 *buffer, s32 w, s32 h) {
+void blit_pixels_to_window(Window *window, u8 *buffer, s32 w, s32 h, u8 channels) {
 #if FOUNDATION_WIN32
     Window_Win32_State *win32 = (Window_Win32_State *) window->platform_data;
     
@@ -1363,7 +1363,7 @@ void blit_pixels_to_window(Window *window, u8 *buffer, s32 w, s32 h) {
     bmi.bmiHeader.biWidth       = w;
     bmi.bmiHeader.biHeight      = -h;
     bmi.bmiHeader.biPlanes      = 1;
-    bmi.bmiHeader.biBitCount    = 32;
+    bmi.bmiHeader.biBitCount    = channels * 8;
     bmi.bmiHeader.biCompression = BI_RGB;
     bmi.bmiHeader.biSizeImage   = 0;
     
@@ -1376,11 +1376,11 @@ void blit_pixels_to_window(Window *window, u8 *buffer, s32 w, s32 h) {
 }
 
 void blit_window_buffer(Window *window, Window_Buffer *buffer) {
-    blit_pixels_to_window(window, buffer->buffer, buffer->w, buffer->h);
+    blit_pixels_to_window(window, buffer->buffer, buffer->w, buffer->h, 4);
 }
 
 u8 *convert_bgra_to_rgba(u8 *input, s32 w, s32 h) {
-    u8 *result = (u8 *) Default_Allocator->allocate(w* h* 4);
+    u8 *result = (u8 *) Default_Allocator->allocate(w * h * 4);
     
     for(s64 y = 0; y < h; ++y) {
         for(s64 x = 0; x < w; ++x) {

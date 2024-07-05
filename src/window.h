@@ -214,7 +214,7 @@ void destroy_window_buffer(Window_Buffer *buffer);
 void clear_window_buffer(Window_Buffer *buffer, u8 r, u8 g, u8 b);
 void paint_window_buffer(Window_Buffer *buffer, s32 x, s32 y, u8 r, u8 g, u8 b);
 void query_window_buffer(Window_Buffer *buffer, s32 x, s32 y, u8 *r, u8 *g, u8 *b);
-void blit_pixels_to_window(Window *window, u8 *buffer, s32 w, s32 h);
+void blit_pixels_to_window(Window *window, u8 *buffer, s32 w, s32 h, u8 channels);
 void blit_window_buffer(Window *window, Window_Buffer *buffer);
 u8 *convert_bgra_to_rgba(u8 *input, s32 w, s32 h);
 u8 *convert_rgba_to_bgra(u8 *input, s32 w, s32 h);

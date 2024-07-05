@@ -55,7 +55,7 @@ void set_custom_error_message(const char *message, s64 count) {
 void set_custom_error_message(const char *format, ...) {
     va_list args;
     va_start(args, format);
-    vsnprintf(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), format, args);
+    internal_custom_error_message_count = vsnprintf(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), format, args);
     va_end(args);
 }
 

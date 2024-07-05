@@ -6,8 +6,6 @@
 
 #include "Dependencies/stb_image.h"
 
-// @Incomplete: Alpha channel when mixing colors!!
-
 enum Draw_Command_Kind {
     DRAW_COMMAND_Nothing,
     DRAW_COMMAND_Clear,
@@ -54,6 +52,10 @@ struct Draw_Command {
 };
 
 struct Software_Renderer {
+    Window *window;
+    u8 *internal_back_buffer;
+    u8 internal_back_buffer_channels;
+    
     Frame_Buffer *bound_frame_buffer = null;
     
     b8 command_system_setup = false;
@@ -78,6 +80,8 @@ u8 *get_pixel_in_texture(Texture *texture, s32 x, s32 y) {
 
 static
 Color query_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y) {
+    if(x < 0 || x >= frame_buffer->w || y < 0 || y >= frame_buffer->h) return Color(255, 255, 255, 255);
+
     u8 *pixel = get_pixel_in_frame_buffer(frame_buffer, x, y);
     Color result;
     result.r = frame_buffer->channels > 0 ? *(pixel + 0) : 255;
@@ -120,8 +124,8 @@ Draw_AABB calculate_aabb_for_vertices(Frame_Buffer *frame_buffer, Draw_Vertex *v
     // Don't bother trying to render pixels outside of the frame buffer's area.
     aabb.min.x = max(aabb.min.x, 0);
     aabb.min.y = max(aabb.min.y, 0);
-    aabb.max.x = min(aabb.max.x, (f32) frame_buffer->w);
-    aabb.max.y = min(aabb.max.y, (f32) frame_buffer->h);
+    aabb.max.x = min(aabb.max.x, (f32) frame_buffer->w - 1);
+    aabb.max.y = min(aabb.max.y, (f32) frame_buffer->h - 1);
     
     return aabb;
 }
@@ -209,10 +213,19 @@ Draw_Command *make_draw_command(Draw_Command_Kind kind) {
 
 static
 Draw_Command *make_triangle_draw_command(s32 vertex_count) {
-    Draw_Command *command = make_draw_command(DRAW_COMMAND_Draw);
+    Draw_Command *command      = make_draw_command(DRAW_COMMAND_Draw);
     command->draw.vertex_count = vertex_count;
     command->draw.vertices     = (Draw_Vertex *) Default_Allocator->allocate(command->draw.vertex_count * sizeof(Draw_Vertex));
     return command;
+}
+
+static
+void destroy_draw_command(Draw_Command *command) {
+    switch(command->kind) {
+    case DRAW_COMMAND_Draw:
+        Default_Allocator->deallocate(command->draw.vertices);    
+        break;
+    }
 }
 
 static
@@ -273,9 +286,38 @@ static
 void flush_draw_commands() {
     for(Draw_Command &cmd : state.commands) {
         execute_draw_command(&cmd);
+        destroy_draw_command(&cmd);
     }
     
     state.commands.clear();
+}
+
+
+
+/* -------------------------------------------- Software Renderer -------------------------------------------- */
+
+static
+void create_back_buffer() {
+    state.internal_back_buffer_channels = 4;
+    state.internal_back_buffer = (u8 *) Default_Allocator->allocate(state.window->w * state.window->h * state.internal_back_buffer_channels);   
+}
+
+static
+void maybe_resize_software_renderer() {
+    if(!state.window->resized_this_frame) return;
+
+    Default_Allocator->deallocate(state.internal_back_buffer);
+    create_back_buffer();
+}
+
+void create_software_renderer(Window *window) {
+    state.window = window;
+    create_back_buffer();
+}
+
+void destroy_software_renderer() {
+    Default_Allocator->deallocate(state.internal_back_buffer);
+    state.internal_back_buffer = null;
 }
 
 
@@ -292,11 +334,6 @@ void create_texture_from_file(Texture *texture, string file_path) {
     defer { free_cstring(Default_Allocator, cstring); };
     
     texture->buffer = stbi_load(cstring, (int *) &texture->w, (int *) &texture->h, (int *) &texture->channels, 0);
-    
-    // nocheckin
-    if(!texture->buffer) {
-        printf("Failed to load texture: %s\n", stbi_failure_reason());
-    }
 }
 
 void create_texture_from_memory(Texture *texture, s32 w, s32 h, u8 channels, u8 *buffer) {
@@ -340,17 +377,37 @@ void bind_frame_buffer(Frame_Buffer *frame_buffer) {
     state.bound_frame_buffer = frame_buffer;
 }
 
-void swap_buffers(Window *dst, Frame_Buffer *src) {
+void swap_buffers(Frame_Buffer *src) {
+    //
+    // Flush all remaining commands
+    //
     flush_draw_commands();
+
+    //
+    // Convert the specificed source buffer into the internal window format (which is BGRA on windows).
+    //
+    maybe_resize_software_renderer();
+    s32 w = min(src->w, state.window->w);
+    s32 h = min(src->h, state.window->h);
+    for(s32 y = 0; y < h; ++y) {
+        for(s32 x = 0; x < w; ++x) {
+            Color color = query_frame_buffer(src, x, y);
+            s64 offset = (y * w + x) * state.internal_back_buffer_channels;
+            state.internal_back_buffer[offset + 0] = color.b;
+            state.internal_back_buffer[offset + 1] = color.g;
+            state.internal_back_buffer[offset + 2] = color.r;
+        }
+    }
     
-    u8 *bgra = convert_rgba_to_bgra(src->buffer, src->w, src->h);
-    blit_pixels_to_window(dst, bgra, src->w, src->h);
-    Default_Allocator->deallocate(bgra);
+    //
+    // Actually blit the pixels onto the window.
+    //
+    blit_pixels_to_window(state.window, state.internal_back_buffer, src->w, src->h, state.internal_back_buffer_channels);
 }
 
 
 
-/* ----------------------------------------------- Draw Commands ----------------------------------------------- */
+/* ---------------------------------------------- Draw Commands ---------------------------------------------- */
 
 static
 Draw_Command *make_quad_command(s32 x0, s32 y0, s32 x1, s32 y1) {
