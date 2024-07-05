@@ -162,35 +162,65 @@ int main() {
 #elif SOFTWARE_DEMO
 #include "software_renderer.h"
 
+static
+void draw_channel(Window *window, f32 *samples, u32 sample_count, s32 channel_index, s32 channel_count) {
+    const s32 channel_height = 100;
+
+    const s32 x0 = 10, x1 = window->w - 10;
+    const s32 y0 = window->h / 2 - (channel_index * channel_count - channel_count / 2) * channel_height, y1 = y0 + channel_height;
+            
+    draw_quad(x0, y0, x1, y1, Color(50, 50, 50, 200));
+
+    u32 frame_count = sample_count / channel_count;
+
+    const s32 w = min((x1 - x0) + 1, (s32) frame_count);
+    const s32 h = y1 - y0;
+    const f32 frames_per_pixel = (f32) frame_count / (f32) w;
+    
+    f32 frame = 0.f;
+    for(s32 x = 0; x < w; ++x) {
+        u32 first_frame = (u32) roundf(frame), one_plus_last_frame = min(frame_count, (u32) roundf(frame + frames_per_pixel));
+
+        f32 avg = 0.f;
+        for(u32 i = first_frame; i < one_plus_last_frame; ++i) avg += samples[i * channel_count];
+
+        avg /= (f32) (one_plus_last_frame - first_frame);
+
+        f32 y = (y0 + y1) / 2.f;
+        draw_quad(x0 + x, (s32) y, x0 + x + 1, (s32) (y - avg * 0.5f * h), Color(255, 255, 255, 255));
+
+        frame += frames_per_pixel;
+    }
+}
+
 int main() {
     Window window;
     create_window(&window, "Hello Windows"_s);
     show_window(&window);
     
-    string working_directory = os_get_working_directory();
-    printf("Working dir: %.*s\n", (u32) working_directory.count, working_directory.data);
-    
-    printf("File exists: %d\n", os_file_exists("data/textures/rock.png"_s));
-    
     Frame_Buffer frame_buffer;
     create_frame_buffer(&frame_buffer, window.w, window.h, 4);
-    
-    Texture texture;
-    create_texture_from_file(&texture, "data/textures/rock.png"_s);
-    
+       
     while(!window.should_close) {
         update_window(&window);
         
         bind_frame_buffer(&frame_buffer);
         clear_frame(Color(50, 100, 200, 255));
-        draw_quad(100, 100, 200, 200, Color(0, 255, 0, 255), Color(255, 255, 0, 255), Color(255, 0, 0, 255), Color(0, 0, 0, 255));
-        draw_quad(200, 100, 300, 200, &texture);
+
+        // Draw the synth
+        {
+            f32 samples[] = { 0.f, 0.25f, 1.f, -.2f, -.3f, -1.f, .5f, .7f, 0.2f, 0.f };
+            u32 sample_count = ARRAY_COUNT(samples);
+
+            draw_channel(&window, samples, sample_count, 0, 1);
+            //            draw_channel(&window, 1, 2);
+        }
+
         swap_buffers(&window, &frame_buffer);
         
         window_sleep(0.016f);
     }
     
-    destroy_texture(&texture);
     destroy_window(&window);
     return 0;
 }

@@ -6,6 +6,8 @@
 
 #include "Dependencies/stb_image.h"
 
+// @Incomplete: Alpha channel when mixing colors!!
+
 enum Draw_Command_Kind {
     DRAW_COMMAND_Nothing,
     DRAW_COMMAND_Clear,
@@ -16,6 +18,7 @@ enum Draw_Command_Options {
     DRAW_OPTION_Nothing  = 0x0,
     DRAW_OPTION_Colored  = 0x1,
     DRAW_OPTION_Textured = 0x2,
+    DRAW_OPTION_Blending = 0x4,
 };
 
 BITWISE(Draw_Command_Options);
@@ -74,6 +77,17 @@ u8 *get_pixel_in_texture(Texture *texture, s32 x, s32 y) {
 }
 
 static
+Color query_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y) {
+    u8 *pixel = get_pixel_in_frame_buffer(frame_buffer, x, y);
+    Color result;
+    result.r = frame_buffer->channels > 0 ? *(pixel + 0) : 255;
+    result.g = frame_buffer->channels > 1 ? *(pixel + 1) : 255;
+    result.b = frame_buffer->channels > 2 ? *(pixel + 2) : 255;
+    result.a = frame_buffer->channels > 3 ? *(pixel + 3) : 255;
+    return result;
+}
+
+static
 Color query_texture(Texture *texture, v2f uv) {
     u8 *pixel = get_pixel_in_texture(texture, (s32) (uv.x * texture->w), (s32) (uv.y * texture->h));
     Color result;
@@ -93,13 +107,22 @@ void include_vertex_in_aabb(Draw_AABB *aabb, Draw_Vertex *vertex) {
 }
 
 static
-Draw_AABB calculate_aabb_for_vertices(Draw_Vertex *v0, Draw_Vertex *v1, Draw_Vertex *v2) {
+Draw_AABB calculate_aabb_for_vertices(Frame_Buffer *frame_buffer, Draw_Vertex *v0, Draw_Vertex *v1, Draw_Vertex *v2) {
     Draw_AABB aabb;
+
     aabb.min = v2f(MAX_F32, MAX_F32);
     aabb.max = v2f(MIN_F32, MIN_F32);
+
     include_vertex_in_aabb(&aabb, v0);
     include_vertex_in_aabb(&aabb, v1);
     include_vertex_in_aabb(&aabb, v2);
+
+    // Don't bother trying to render pixels outside of the frame buffer's area.
+    aabb.min.x = max(aabb.min.x, 0);
+    aabb.min.y = max(aabb.min.y, 0);
+    aabb.max.x = min(aabb.max.x, (f32) frame_buffer->w);
+    aabb.max.y = min(aabb.max.y, (f32) frame_buffer->h);
+    
     return aabb;
 }
 
@@ -145,6 +168,28 @@ v2f interpolate(f32 s, v2f s_vector, f32 t, v2f t_vector, f32 u, v2f u_vector) {
     return result;
 }
 
+static
+u8 mix(u8 lhs, u8 rhs, f32 lhs_factor, f32 rhs_factor) {
+    return (u8) (((lhs / 255.f) * lhs_factor + (rhs / 255.f) * rhs_factor) * 255.f);
+}
+
+static
+Color mix(Color lhs, Color rhs, f32 lhs_factor, f32 rhs_factor) {
+    Color result;
+    result.r = mix(lhs.r, rhs.r, lhs_factor, rhs_factor);
+    result.g = mix(lhs.g, rhs.g, lhs_factor, rhs_factor);
+    result.b = mix(lhs.b, rhs.b, lhs_factor, rhs_factor);
+    result.a = mix(lhs.a, rhs.a, lhs_factor, rhs_factor);
+    return result;
+}
+
+static
+Color mix(Color src, Color dst) { // src is the color of the currently rendererd command, dst is the color in the frame buffer
+    f32 src_alpha = src.a / 255.f;
+    f32 one_minus_src_alpha = 1.f - src_alpha;
+    return mix(src, dst, src_alpha, one_minus_src_alpha);
+}
+
 
 
 /* ------------------------------------------------ Draw Command ------------------------------------------------ */
@@ -172,8 +217,7 @@ Draw_Command *make_triangle_draw_command(s32 vertex_count) {
 
 static
 void draw_triangle(Draw_Command *cmd, Draw_Vertex *v0, Draw_Vertex *v1, Draw_Vertex *v2) {
-    Draw_AABB aabb = calculate_aabb_for_vertices(v0, v1, v2);
-    u8 color_array[4] = { 0, 0, 0, 255 };
+    Draw_AABB aabb = calculate_aabb_for_vertices(cmd->frame_buffer, v0, v1, v2);
     
     for(f32 y = aabb.min.y; y <= aabb.max.y; ++y) {
         for(f32 x = aabb.min.x; x <= aabb.max.x; ++x) {
@@ -181,26 +225,24 @@ void draw_triangle(Draw_Command *cmd, Draw_Vertex *v0, Draw_Vertex *v1, Draw_Ver
             
             f32 s, t, u;
             if(!point_inside_triangle(point, v0->position, v1->position, v2->position, &s, &t, &u)) continue;
+
+            Color source_color;
             
             if(cmd->draw.options & DRAW_OPTION_Textured) {
                 v2f interpolated_uv = interpolate(s, v0->uv, t, v1->uv, u, v2->uv);
-                Color texture_color = query_texture(cmd->draw.texture, interpolated_uv);
-                color_array[0] = texture_color.r;
-                color_array[1] = texture_color.g;
-                color_array[2] = texture_color.b;
-                color_array[3] = texture_color.a;
+                source_color = query_texture(cmd->draw.texture, interpolated_uv);
             }
             
             if(cmd->draw.options & DRAW_OPTION_Colored) {
-                Color interpolated_color = interpolate(s, v0->color, t, v1->color, u, v2->color);
-                color_array[0] = interpolated_color.r;
-                color_array[1] = interpolated_color.g;
-                color_array[2] = interpolated_color.b;
-                color_array[3] = interpolated_color.a;
+                source_color = interpolate(s, v0->color, t, v1->color, u, v2->color);
+            }
+
+            if(cmd->draw.options & DRAW_OPTION_Blending) {
+                source_color = mix(source_color, query_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y));
             }
             
-            u8 *pixel = get_pixel_in_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y);
-            memcpy(pixel, color_array, cmd->frame_buffer->channels);
+            u8 *output = get_pixel_in_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y);
+            memcpy(output, &source_color, cmd->frame_buffer->channels);
         }
     }
 }
@@ -335,7 +377,7 @@ void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Color color0, Color color1, Color
     command->draw.vertices[3].color = color0;
     command->draw.vertices[4].color = color3;
     command->draw.vertices[5].color = color2;
-    command->draw.options = DRAW_OPTION_Colored;
+    command->draw.options = DRAW_OPTION_Colored | DRAW_OPTION_Blending;
 }
 
 void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Color color) {
@@ -351,5 +393,5 @@ void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Texture *texture) {
     command->draw.vertices[4].uv = v2f(0, 1);
     command->draw.vertices[5].uv = v2f(1, 1);
     command->draw.texture = texture;
-    command->draw.options = texture_is_valid_for_draw(texture) ? DRAW_OPTION_Textured : DRAW_OPTION_Nothing;
+    command->draw.options = texture_is_valid_for_draw(texture) ? DRAW_OPTION_Textured | DRAW_OPTION_Blending : DRAW_OPTION_Nothing;
 }
