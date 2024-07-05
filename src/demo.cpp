@@ -164,44 +164,59 @@ int main() {
 #include "synth.h"
 #include "audio.h"
 
+#define CONSTANT_TIME_STRETCH true // The entire band width represents one second
+#define DRAW_AVERAGE          false // Draw average or min/max values for the sampled area
+
 static
 void draw_channel(Window *window, Synthesizer *synth, u8 channel_index) {
-    const s32 channel_height = 101;
+    s32 channel_height = 101;
 
-    const s32 x0 = 10, x1 = window->w - 10;
-    const s32 y0 = window->h / 2 - (channel_index * synth->channels - synth->channels / 2) * channel_height, y1 = y0 + channel_height;
+    s32 x0 = 10, x1 = window->w - 10;
+    s32 y0 = window->h / 2 - (channel_index * synth->channels - synth->channels / 2) * channel_height, y1 = y0 + channel_height;
             
     draw_quad(x0, y0, x1, y1, Color(50, 50, 50, 200));
 
-    const s32 w = min((x1 - x0), (s32) synth->available_frames);
-    const s32 h = y1 - y0;
-
-#define CONSTANT_TIME_STRETCH true // The entire band width represents one second
+    s32 w = min((x1 - x0), (s32) synth->available_frames);
+    s32 h = y1 - y0;
 
 #if CONSTANT_TIME_STRETCH
-    const f32 frames_per_pixel = 10; // (f32) AUDIO_SAMPLE_RATE / (f32) w;
+    f32 frames_per_pixel = (f32) AUDIO_SAMPLE_RATE / AUDIO_UPDATES_PER_SECOND / (f32) w;
 #else
-    const f32 frames_per_pixel = (f32) synth->available_frames / (f32) w;
+    f32 frames_per_pixel = (f32) synth->available_frames / (f32) w;
 #endif
-
-    //printf("Frames per pixel: %f\n", frames_per_pixel);
 
     f32 frame = 0.f;
     for(s32 x = 0; x < w; ++x) {
         u64 first_frame = (u64) roundf(frame), one_plus_last_frame = min(synth->available_frames, (u64) roundf(frame + frames_per_pixel));
 
-        if(first_frame == one_plus_last_frame) continue;
+        if(first_frame >= one_plus_last_frame) continue;
+
+        f32 sample_y0, sample_y1;
+        f32 sample_x0 = (f32) (x0 + x), sample_x1 = (f32) (x0 + x + 1);
         
+#if DRAW_AVERAGE
         f32 avg = 0.f;
-        for(u64 i = first_frame; i < one_plus_last_frame; ++i) avg += synth->buffer[i * synth->channels + channel_index];
+        for(u64 i = first_frame; i < one_plus_last_frame; ++i) {
+            avg += synth->buffer[i * synth->channels + channel_index];
+        }
 
         avg /= (f32) (one_plus_last_frame - first_frame);
 
-        // printf("First: %u, 1+Last: %u, Avg: %f\n", first_frame, one_plus_last_frame, avg); // nocheckin
+        sample_y0 = (y0 + y1) / 2.f;
+        sample_y1 = sample_y0 - avg * 0.5f * h;
+#else
+        f32 sample_min = 0.f, sample_max = 0.f;
+        for(u64 i = first_frame; i < one_plus_last_frame; ++i) {
+            sample_min = min(sample_min, synth->buffer[i * synth->channels + channel_index]);
+            sample_max = max(sample_max, synth->buffer[i * synth->channels + channel_index]);
+        }
 
-        f32 y = (y0 + y1) / 2.f;
-        draw_quad(x0 + x, (s32) y, x0 + x + 1, (s32) (y - avg * 0.5f * h), Color(255, 255, 255, 255));
+        sample_y0 = (y0 + y1) / 2.f - sample_min * 0.5f * h;
+        sample_y1 = (y0 + y1) / 2.f - sample_max * 0.5f * h;
+#endif
 
+        draw_quad((s32) sample_x0, (s32) sample_y0, (s32) sample_x1, (s32) sample_y1, Color(255, 255, 255, 255));
+        
         frame += frames_per_pixel;
     }
 }
@@ -224,6 +239,8 @@ int main() {
     Error_Code error = create_audio_player(&player);
     if(error != Success) printf("Error Initialization Player: %.*s\n", (u32) error_string(error).count, error_string(error).data);
 
+    player.volumes[AUDIO_VOLUME_Master] = .1f;
+    
     Audio_Buffer buffer;
     create_streaming_audio_buffer(&buffer, AUDIO_BUFFER_FORMAT_Float32, synth.channels, synth.sample_rate, synth.buffer_size_in_frames, "Streaming Buffer"_s);
 
@@ -236,8 +253,6 @@ int main() {
         Hardware_Time frame_start = os_get_hardware_time();
         
         update_window(&window);
-
-        //printf("Frames to generate: %u\n", frames_to_generate);
 
         update_synth(&synth, frames_to_generate);
         update_streaming_audio_buffer(&buffer, (u8 *) synth.buffer, synth.available_frames);

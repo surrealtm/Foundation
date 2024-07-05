@@ -271,7 +271,7 @@ void update_audio_player(Audio_Player *player) {
                     u64 output_offset = (u64) i * AUDIO_CHANNELS + j;
                     f32 output_sample = output[output_offset];
                     f32 source_sample = query_audio_buffer(source.playing_buffer, source_buffer_offset);
-                    output[output_offset] = source_sample; // nocheckin: mix_audio_samples(output_sample, source_sample, source_volume);
+                    output[output_offset] = mix_audio_samples(output_sample, source_sample, source_volume);
                 }                
             }
             

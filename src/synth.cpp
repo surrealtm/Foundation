@@ -6,6 +6,65 @@
 // https://issuu.com/petergoldsborough/docs/thesis
 //
 
+
+
+/* ------------------------------------------------ Oscillator ------------------------------------------------ */
+
+Oscillator sine_oscillator(f32 frequency, f32 amplitude) {
+    return Oscillator{ OSCILLATOR_Sine, frequency, amplitude, 0 };
+}
+
+Oscillator square_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
+    return Oscillator{ OSCILLATOR_Square, frequency, amplitude, partial_count };
+}
+
+Oscillator sawtooth_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
+    return Oscillator{ OSCILLATOR_Sawtooth, frequency, amplitude, partial_count };
+}
+
+Oscillator triangle_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
+    return Oscillator{ OSCILLATOR_Triangle, frequency, amplitude, partial_count };
+}
+
+f32 Oscillator::generate(f32 time) {
+    f32 result = 0.f;
+    const f32 angular_frequency = this->frequency * FTAU;
+    
+    switch(this->kind) {
+    case OSCILLATOR_Sine:
+        result = sinf(angular_frequency * time);
+        break;
+
+    case OSCILLATOR_Square: {
+        for(u32 n = 1; n <= this->partial_count * 2; n += 2) {
+            result += (1.f / n) * sinf(angular_frequency * n * time);
+        }
+    } break;
+
+    case OSCILLATOR_Sawtooth: {
+        for(u32 n = 1; n < this->partial_count; ++n) {
+            result += (1.f / n) * sinf(angular_frequency * n * time);
+        }
+    } break;
+
+    case OSCILLATOR_Triangle: {
+        f32 amp = -1.f;
+        for(u32 n = 1; n <= this->partial_count * 2; n *= 2) {
+            amp = (amp > 0.f ? -1.f : 1.f) / (n * n);
+            result += amp * sinf(angular_frequency * n * time);
+        }
+    } break;
+    }
+
+    result *= this->amplitude;
+
+    return result;
+}
+
+
+
+/* ----------------------------------------------- Synthesizer ----------------------------------------------- */
+
 void create_synth(Synthesizer *synth, u8 channels, u32 sample_rate) {
     synth->channels               = channels;
     synth->sample_rate            = sample_rate;
@@ -30,15 +89,16 @@ void destroy_synth(Synthesizer *synth) {
 void update_synth(Synthesizer *synth, u64 requested_frames) {
     u64 frames_to_generate = min(requested_frames, (synth->buffer_size_in_frames - synth->available_frames));
 
+    auto osc = sawtooth_oscillator(400, .5f);
+    
     for(u32 i = 0; i < frames_to_generate; ++i) {
         f32 time = (f32) synth->total_frames_generated / (f32) synth->sample_rate;
         
+        f32 frame = osc.generate(time);
+
         for(u8 j = 0; j < synth->channels; ++j) {
             u64 offset = (u64) (synth->available_frames + i) * synth->channels + j;
-
-            f32 HZ = 240 + j * 400;
-
-            synth->buffer[offset] = sinf(HZ * time * FTAU);
+            synth->buffer[offset] = frame;
         }
 
         ++synth->total_frames_generated;
