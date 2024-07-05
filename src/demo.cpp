@@ -161,10 +161,12 @@ int main() {
 
 #elif SOFTWARE_DEMO
 #include "software_renderer.h"
+#include "synth.h"
+#include "audio.h"
 
 static
 void draw_channel(Window *window, f32 *samples, u32 sample_count, s32 channel_index, s32 channel_count) {
-    const s32 channel_height = 100;
+    const s32 channel_height = 101;
 
     const s32 x0 = 10, x1 = window->w - 10;
     const s32 y0 = window->h / 2 - (channel_index * channel_count - channel_count / 2) * channel_height, y1 = y0 + channel_height;
@@ -173,7 +175,7 @@ void draw_channel(Window *window, f32 *samples, u32 sample_count, s32 channel_in
 
     u32 frame_count = sample_count / channel_count;
 
-    const s32 w = min((x1 - x0) + 1, (s32) frame_count);
+    const s32 w = min((x1 - x0), (s32) frame_count);
     const s32 h = y1 - y0;
     const f32 frames_per_pixel = (f32) frame_count / (f32) w;
     
@@ -200,10 +202,14 @@ int main() {
     
     Frame_Buffer frame_buffer;
     create_frame_buffer(&frame_buffer, window.w, window.h, 4);
-       
+
+    Synthesizer synth;
+    create_synth(&synth, 2, AUDIO_SAMPLE_RATE);
+    update_synth(&synth, synth.sample_rate);
+               
     while(!window.should_close) {
         update_window(&window);
-        
+
         bind_frame_buffer(&frame_buffer);
         clear_frame(Color(50, 100, 200, 255));
 
@@ -212,8 +218,8 @@ int main() {
             f32 samples[] = { 0.f, 0.25f, 1.f, -.2f, -.3f, -1.f, .5f, .7f, 0.2f, 0.f };
             u32 sample_count = ARRAY_COUNT(samples);
 
-            draw_channel(&window, samples, sample_count, 0, 1);
-            //            draw_channel(&window, 1, 2);
+            for(u8 i = 0; i < synth.channels; ++i)
+                draw_channel(&window, synth.buffer, synth.available_samples, i, synth.channels);
         }
 
         swap_buffers(&window, &frame_buffer);
@@ -221,6 +227,8 @@ int main() {
         window_sleep(0.016f);
     }
     
+    destroy_synth(&synth);
+    destroy_frame_buffer(&frame_buffer);
     destroy_window(&window);
     return 0;
 }
