@@ -7,10 +7,36 @@
 #include <psapi.h> // For getting memory usage
 #include <dbghelp.h> // For stack walking
 #include <shellscalingapi.h> // For DPI awareness.
+#include <audioclient.h>
 
 
 
 /* ---------------------------------------------- Win32 Helpers ---------------------------------------------- */
+
+const char *win32_hresult_to_string(s64 hresult) {
+    const char *output;
+
+    switch(hresult) {
+    case S_OK:                               output = "S_OK"; break;
+    case REGDB_E_CLASSNOTREG:                output = "REGDB_E_CLASSNOTREG"; break;
+    case REGDB_E_IIDNOTREG:                  output = "REGDB_E_IIDNOTREG"; break;
+    case CLASS_E_NOAGGREGATION:              output = "CLASS_E_NOAGGREGATION"; break;
+    case E_NOINTERFACE:                      output = "E_NOINTERFACE"; break;
+    case E_POINTER:                          output = "E_POINTER"; break;
+    case CO_E_NOTINITIALIZED:                output = "CO_E_NOTINITIALIZED"; break;
+    case AUDCLNT_S_BUFFER_EMPTY:             output = "AUDCLNT_S_BUFFER_EMPTY"; break;
+    case AUDCLNT_E_NOT_INITIALIZED:          output = "AUDCLNT_E_NOT_INITIALIZED"; break;
+    case AUDCLNT_E_WRONG_ENDPOINT_TYPE:      output = "AUDCLNT_E_WRONG_ENDPOINT_TYPE"; break;
+    case AUDCLNT_E_DEVICE_INVALIDATED:       output = "AUDCLNT_E_DEVICE_INVALIDATED"; break;
+    case AUDCLNT_E_SERVICE_NOT_RUNNING:      output = "AUDCLNT_E_SERVICE_NOT_RUNNING"; break;
+    case AUDCLNT_E_BUFFER_ERROR:             output = "AUDCLNT_E_BUFFER_ERROR"; break;
+    case AUDCLNT_E_OUT_OF_ORDER:             output = "AUDCLNT_E_OUT_OF_ORDER"; break;
+    case AUDCLNT_E_BUFFER_OPERATION_PENDING: output = "AUDCLNT_E_BUFFER_OPERATION_PENDING"; break;
+    default:                                 output = "UNKNOWN_HRESULT"; break;
+    }
+    
+    return output;
+}
 
 char *win32_last_error_to_string() {
 	DWORD error = GetLastError();

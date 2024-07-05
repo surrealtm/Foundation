@@ -1,5 +1,6 @@
 #include "error.h"
 #include <stdlib.h>
+#include <stdarg.h>
 
 string error_string_table[] = {
     "Success"_s,
@@ -46,14 +47,16 @@ void set_custom_error_message(string message) {
     copy_cstring(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), (const char *) message.data, internal_custom_error_message_count);
 }
 
-void set_custom_error_message(const char *message) {
-    internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), cstring_length(message));
-    copy_cstring(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), message, internal_custom_error_message_count);
-}
-
 void set_custom_error_message(const char *message, s64 count) {
     internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), count);
     copy_cstring(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), message, internal_custom_error_message_count);
+}
+
+void set_custom_error_message(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vsnprintf(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), format, args);
+    va_end(args);
 }
 
 string get_custom_error_message() {

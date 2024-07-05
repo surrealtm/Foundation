@@ -9,6 +9,7 @@ struct Allocator;
 /* --------------------------------------------------- Misc --------------------------------------------------- */
 
 #if FOUNDATION_WIN32
+const char *win32_hresult_to_string(s64 hresult);
 char *win32_last_error_to_string();
 void win32_free_last_error_string(char *string);
 #endif
