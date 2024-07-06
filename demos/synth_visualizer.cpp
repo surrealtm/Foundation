@@ -88,7 +88,7 @@ int main() {
     Noise noise;
     Envelope_Modulator envelope = envelope_modulator(&sine_osc, .2f, .5f, 1.f, 1.f);
     
-    synth.module = &envelope;
+    synth.module = &sine_osc;
 
 
     //
@@ -100,14 +100,8 @@ int main() {
 
     player.volumes[AUDIO_VOLUME_Master] = .1f;
     
-    Audio_Buffer buffer;
-    create_streaming_audio_buffer(&buffer, AUDIO_BUFFER_FORMAT_Float32, synth.channels, synth.sample_rate, synth.buffer_size_in_frames, "Streaming Buffer"_s);
+    Audio_Stream *stream = create_audio_stream(&player, &synth, (Audio_Stream_Callback) update_synth, AUDIO_VOLUME_Master, ""_s);
 
-    Audio_Source *source = acquire_audio_source(&player, AUDIO_VOLUME_Master);
-    play_audio_buffer(source, &buffer);
-
-    u32 frames_to_generate = AUDIO_SAMPLES_PER_UPDATE;
-    
     while(!window.should_close) {
         Hardware_Time frame_start = os_get_hardware_time();
         
@@ -115,14 +109,7 @@ int main() {
 
         // Update the synth and audio player
         {
-            update_synth(&synth, frames_to_generate);
-            update_streaming_audio_buffer(&buffer, (u8 *) synth.buffer, synth.available_frames);
             update_audio_player(&player);
-
-            frames_to_generate = (u32) (AUDIO_SAMPLES_PER_UPDATE - (buffer.frame_count - source->frame_offset_in_buffer));
-            consume_frames(&synth, source->frame_offset_in_buffer);
-            source->frame_offset_in_buffer = 0;
-            source->state = AUDIO_SOURCE_Playing;
         }
         
         // Draw the synth
@@ -138,7 +125,6 @@ int main() {
         window_ensure_frame_time(frame_start, frame_end, 10);
     }
     
-    destroy_audio_buffer(&buffer);
     destroy_audio_player(&player);
     destroy_synth(&synth);
     destroy_frame_buffer(&frame_buffer);

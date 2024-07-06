@@ -64,10 +64,21 @@ struct Audio_Source {
     u64 frame_offset_in_buffer;
 };
 
+typedef f32 *(*Audio_Stream_Callback)(void *user_pointer, u64 consumed_frames, u64 requested_frames);
+
+struct Audio_Stream {
+    void *user_pointer;
+    Audio_Stream_Callback callback;
+    Audio_Buffer buffer;
+    Audio_Source *source;
+};
+
 struct Audio_Player {
     u8 platform_data[AUDIO_PLATFORM_STATE_SIZE];
 
     Linked_List<Audio_Source> sources;
+    Linked_List<Audio_Stream> streams;
+    
     f32 volumes[AUDIO_VOLUME_COUNT];
 };
 
@@ -79,12 +90,14 @@ Error_Code create_audio_buffer_from_wav_memory(Audio_Buffer *buffer, string file
 Error_Code create_audio_buffer_from_wav_file(Audio_Buffer *buffer, string file_path);
 Error_Code create_audio_buffer_from_flac_memory(Audio_Buffer *buffer, string file_content, string buffer_name);
 Error_Code create_audio_buffer_from_flac_file(Audio_Buffer *buffer, string file_path);
-void create_streaming_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name);
+void create_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name);
 void destroy_audio_buffer(Audio_Buffer *buffer);
-void update_streaming_audio_buffer(Audio_Buffer *buffer, u8 *data, u64 frame_count);
 
 Audio_Source *acquire_audio_source(Audio_Player *player, Audio_Volume_Type type);
 void release_audio_source(Audio_Player *player, Audio_Source *source);
+
+Audio_Stream *create_audio_stream(Audio_Player *player, void *user_pointer, Audio_Stream_Callback callback, Audio_Volume_Type type, string buffer_name);
+void destroy_audio_stream(Audio_Player *player, Audio_Stream *stream);
 
 void play_audio_buffer(Audio_Player *player, Audio_Buffer *buffer, Audio_Volume_Type type);
 void play_audio_buffer(Audio_Source *source, Audio_Buffer *buffer);

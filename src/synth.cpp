@@ -134,9 +134,19 @@ void destroy_synth(Synthesizer *synth) {
     synth->total_frames_generated = 0;
 }
 
-void update_synth(Synthesizer *synth, u64 requested_frames) {
-    if(!synth->module) return;
+f32 *update_synth(Synthesizer *synth, u64 consumed_frames, u64 requested_frames) {
+    if(!synth->module) return null;
 
+    //
+    // Remove the frames that have been used.
+    //
+    consumed_frames = min(consumed_frames, synth->available_frames);
+    memmove(synth->buffer, &synth->buffer[consumed_frames * synth->channels], (synth->available_frames - consumed_frames) * synth->channels * sizeof(f32));
+    synth->available_frames -= consumed_frames;
+
+    //
+    // Generate new frames.
+    //
     u64 frames_to_generate = min(requested_frames, (synth->buffer_size_in_frames - synth->available_frames));
     
     for(u32 i = 0; i < frames_to_generate; ++i) {
@@ -154,9 +164,6 @@ void update_synth(Synthesizer *synth, u64 requested_frames) {
 
     synth->available_frames += frames_to_generate;
     synth->available_samples = synth->available_frames * synth->channels;
-}
 
-void consume_frames(Synthesizer *synth, u64 frames_consumed) {
-    memmove(synth->buffer, &synth->buffer[frames_consumed * synth->channels], (synth->available_frames - frames_consumed) * synth->channels * sizeof(f32));
-    synth->available_frames -= frames_consumed;
+    return synth->buffer;
 }

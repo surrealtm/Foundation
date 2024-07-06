@@ -70,5 +70,4 @@ Envelope_Modulator envelope_modulator(Synthesizer_Module *input, f32 attack_time
 
 void create_synth(Synthesizer *synth, u8 channels, u32 sample_rate);
 void destroy_synth(Synthesizer *synth);
-void update_synth(Synthesizer *synth, u64 requested_frames);
-void consume_frames(Synthesizer *synth, u64 frames_consumed);
+f32 *update_synth(Synthesizer *synth, u64 consumed_frames, u64 requested_frames);

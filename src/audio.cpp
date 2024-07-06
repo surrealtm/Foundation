@@ -227,6 +227,24 @@ f32 query_audio_buffer(Audio_Buffer *buffer, u64 sample) {
     return result;
 }
 
+static
+void update_audio_stream(Audio_Stream *stream) {
+    u64 frame_size_in_bytes = get_size_in_bytes_per_frame(stream->buffer.format, stream->buffer.channels);
+
+    u64 requested_frames = AUDIO_SAMPLES_PER_UPDATE - (stream->buffer.frame_count - stream->source->frame_offset_in_buffer);
+    u64 storable_frames = stream->buffer.size_in_bytes / frame_size_in_bytes;
+    
+    u64 frames_to_generate = min(requested_frames, storable_frames);
+    
+    f32 *frames = stream->callback(stream->user_pointer, stream->source->frame_offset_in_buffer, frames_to_generate);
+    memcpy(stream->buffer.data, frames, frames_to_generate * frame_size_in_bytes);
+    stream->buffer.frame_count = frames_to_generate;
+    
+    stream->source->frame_offset_in_buffer = 0;
+    stream->source->state = AUDIO_SOURCE_Playing;
+    stream->source->playing_buffer = &stream->buffer;
+}
+
 
 
 /* ----------------------------------------------- Audio Player ----------------------------------------------- */
@@ -249,6 +267,14 @@ void destroy_audio_player(Audio_Player *player) {
 }
 
 void update_audio_player(Audio_Player *player) {
+    //
+    // Update all audio streams.
+    //
+    for(Audio_Stream &stream : player->streams) update_audio_stream(&stream);
+    
+    //
+    // Fill the platform's sound buffer for this update.
+    //
     u32 frames_to_output;
     f32 *output;
 
@@ -334,7 +360,7 @@ Error_Code create_audio_buffer_from_flac_file(Audio_Buffer *buffer, string file_
     return Success;
 }
 
-void create_streaming_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name) {
+void create_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name) {
     buffer->name             = buffer_name;
     buffer->format           = format;
     buffer->channels         = channels;
@@ -362,12 +388,6 @@ void destroy_audio_buffer(Audio_Buffer *buffer) {
     buffer->data             = null;
 }
 
-void update_streaming_audio_buffer(Audio_Buffer *buffer, u8 *data, u64 frame_count) {
-    u64 max_frames = buffer->size_in_bytes / get_size_in_bytes_per_frame(buffer->format, buffer->channels);
-    buffer->frame_count = min(frame_count, max_frames);
-    memcpy(buffer->data, data, buffer->frame_count * get_size_in_bytes_per_frame(buffer->format, buffer->channels));
-}
-
 
 
 /* ----------------------------------------------- Audio Source ----------------------------------------------- */
@@ -384,6 +404,21 @@ Audio_Source *acquire_audio_source(Audio_Player *player, Audio_Volume_Type type)
 
 void release_audio_source(Audio_Player *player, Audio_Source *source) {
     player->sources.remove_value_pointer(source);
+}
+
+Audio_Stream *create_audio_stream(Audio_Player *player, void *user_pointer, Audio_Stream_Callback callback, Audio_Volume_Type type, string buffer_name) {
+    Audio_Stream *stream = player->streams.push();
+    stream->user_pointer = user_pointer;
+    stream->callback = callback;
+    stream->source = acquire_audio_source(player, type);
+    create_audio_buffer(&stream->buffer, AUDIO_BUFFER_FORMAT_Float32, AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_SAMPLES_PER_UPDATE, buffer_name);
+    return stream;
+}
+
+void destroy_audio_stream(Audio_Player *player, Audio_Stream *stream) {
+    release_audio_source(player, stream->source);
+    destroy_audio_buffer(&stream->buffer);
+    player->streams.remove_value_pointer(stream);
 }
 
 void play_audio_buffer(Audio_Player *player, Audio_Buffer *buffer, Audio_Volume_Type type) {
