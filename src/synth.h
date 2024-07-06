@@ -7,32 +7,32 @@ struct Synthesizer_Module {
     virtual f32 tick(f32 time) = 0;
 };
 
-enum Oscillator_Kind {
+enum Synth_Oscillator_Kind {
     OSCILLATOR_Sine,
     OSCILLATOR_Square,
     OSCILLATOR_Sawtooth,
     OSCILLATOR_Triangle,
 };
 
-struct Oscillator : Synthesizer_Module {
-    Oscillator_Kind kind;
+struct Synth_Oscillator : Synthesizer_Module {
+    Synth_Oscillator_Kind kind;
     f32 frequency;
     f32 amplitude;
     u32 partial_count;
 
-    Oscillator(Oscillator_Kind kind, f32 frequency, f32 amplitude, u32 partial_count) :
+    Synth_Oscillator(Synth_Oscillator_Kind kind, f32 frequency, f32 amplitude, u32 partial_count) :
         kind(kind), frequency(frequency), amplitude(amplitude), partial_count(partial_count) {};
     
     f32 tick(f32 time);
 };
 
-struct Noise : Synthesizer_Module {
+struct Synth_Noise : Synthesizer_Module {
     Random_Generator rand;
 
     f32 tick(f32 time);
 };
 
-struct Envelope_Modulator : Synthesizer_Module {
+struct Synth_Envelope_Modulator : Synthesizer_Module {
     Synthesizer_Module *input;
 
     f32 attack_time;
@@ -41,6 +41,14 @@ struct Envelope_Modulator : Synthesizer_Module {
     f32 sustain_level;
     f32 sustain_time;
     f32 release_time;
+    
+    f32 tick(f32 time);
+    f32 calculate_loop_time();
+};
+
+struct Synth_Loop : Synthesizer_Module {
+    Synthesizer_Module *input;
+    f32 loop; // In seconds
     
     f32 tick(f32 time);
 };
@@ -61,12 +69,14 @@ struct Synthesizer {
     Synthesizer_Module *module;
 };
 
-Oscillator sine_oscillator(f32 frequency, f32 amplitude = 1.f);
-Oscillator square_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 64);
-Oscillator sawtooth_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 64);
-Oscillator triangle_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 2);
+Synth_Oscillator sine_oscillator(f32 frequency, f32 amplitude = 1.f);
+Synth_Oscillator square_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 64);
+Synth_Oscillator sawtooth_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 64);
+Synth_Oscillator triangle_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 2);
 
-Envelope_Modulator envelope_modulator(Synthesizer_Module *input, f32 attack_time = 2.f, f32 attack_curve = 1.f, f32 decay_time = .2f, f32 sustain_level = .7f, f32 release_time = .5f);
+Synth_Envelope_Modulator envelope_modulator(Synthesizer_Module *input, f32 attack_time = .2f, f32 attack_curve = 1.f, f32 decay_time = .2f, f32 sustain_level = .7f, f32 sustain_time = .2f, f32 release_time = .5f);
+
+Synth_Loop loop(Synthesizer_Module *input, f32 time = 1.f);
 
 void create_synth(Synthesizer *synth, u8 channels, u32 sample_rate);
 void destroy_synth(Synthesizer *synth);

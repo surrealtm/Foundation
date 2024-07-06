@@ -11,23 +11,23 @@
 
 /* ------------------------------------------------ Oscillator ------------------------------------------------ */
 
-Oscillator sine_oscillator(f32 frequency, f32 amplitude) {
-    return Oscillator{ OSCILLATOR_Sine, frequency, amplitude, 0 };
+Synth_Oscillator sine_oscillator(f32 frequency, f32 amplitude) {
+    return Synth_Oscillator{ OSCILLATOR_Sine, frequency, amplitude, 0 };
 }
 
-Oscillator square_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
-    return Oscillator{ OSCILLATOR_Square, frequency, amplitude, partial_count };
+Synth_Oscillator square_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
+    return Synth_Oscillator{ OSCILLATOR_Square, frequency, amplitude, partial_count };
 }
 
-Oscillator sawtooth_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
-    return Oscillator{ OSCILLATOR_Sawtooth, frequency, amplitude, partial_count };
+Synth_Oscillator sawtooth_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
+    return Synth_Oscillator{ OSCILLATOR_Sawtooth, frequency, amplitude, partial_count };
 }
 
-Oscillator triangle_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
-    return Oscillator{ OSCILLATOR_Triangle, frequency, amplitude, partial_count };
+Synth_Oscillator triangle_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
+    return Synth_Oscillator{ OSCILLATOR_Triangle, frequency, amplitude, partial_count };
 }
 
-f32 Oscillator::tick(f32 time) {
+f32 Synth_Oscillator::tick(f32 time) {
     f32 result = 0.f;
     const f32 angular_frequency = this->frequency * FTAU;
     
@@ -68,7 +68,7 @@ f32 Oscillator::tick(f32 time) {
 
 /* -------------------------------------------------- Noise -------------------------------------------------- */
 
-f32 Noise::tick(f32 time) {
+f32 Synth_Noise::tick(f32 time) {
     return this->rand.random_f32(-1.f, 1.f);
 }
 
@@ -76,37 +76,58 @@ f32 Noise::tick(f32 time) {
 
 /* ------------------------------------------------ Modulator ------------------------------------------------ */
 
-f32 Envelope_Modulator::tick(f32 time) {
+f32 Synth_Envelope_Modulator::tick(f32 time) {
     f32 result = this->input->tick(time);
 
     f32 amp = 1.f;
     
     if(time <= this->attack_time) {
         // Attack phase
-        amp = powf(time, this->attack_curve);
+        amp = powf(time / this->attack_time, this->attack_curve);
     } else if(time <= this->attack_time + this->decay_time) {
         // Decay phase
-        amp = 1.f - (time - this->attack_time) / this->decay_time;
+        amp = 1.f - (time - this->attack_time) / this->decay_time * (1.f - this->sustain_level);
     } else if(time <= this->attack_time + this->decay_time + this->sustain_time) {
         // Sustain phase
         amp = this->sustain_level;
     } else {
         // Release phase
-        amp = 1.f - min(time - this->release_time, this->release_time) / this->release_time;
+        f32 time_in_release = time - (this->attack_time + this->decay_time + this->sustain_time);
+        amp = this->sustain_level - min(time_in_release, this->release_time) / this->release_time * this->sustain_level;
     }
     
     return result * amp;
 }
 
-Envelope_Modulator envelope_modulator(Synthesizer_Module *input, f32 attack_time, f32 attack_curve, f32 decay_time, f32 sustain_level, f32 release_time) {
-    Envelope_Modulator modulator;
+f32 Synth_Envelope_Modulator::calculate_loop_time() {
+    return this->attack_time + this->decay_time + this->sustain_time + this->release_time;
+}
+
+Synth_Envelope_Modulator envelope_modulator(Synthesizer_Module *input, f32 attack_time, f32 attack_curve, f32 decay_time, f32 sustain_level, f32 sustain_time, f32 release_time) {
+    Synth_Envelope_Modulator modulator;
     modulator.input         = input;
     modulator.attack_time   = attack_time;
     modulator.attack_curve  = attack_curve;
     modulator.decay_time    = decay_time;
     modulator.sustain_level = sustain_level;
+    modulator.sustain_time  = sustain_time;
     modulator.release_time  = release_time;
     return modulator;
+}
+
+
+
+/* --------------------------------------------------- Loop --------------------------------------------------- */
+
+f32 Synth_Loop::tick(f32 time) {
+    return this->input->tick(fmodf(time, this->loop));
+}
+
+Synth_Loop loop(Synthesizer_Module *input, f32 time) {
+    Synth_Loop loop;
+    loop.input = input;
+    loop.loop  = time;
+    return loop;
 }
 
 

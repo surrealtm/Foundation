@@ -83,12 +83,13 @@ int main() {
     //
     Synthesizer synth;
     create_synth(&synth, AUDIO_CHANNELS, AUDIO_SAMPLE_RATE);
-
-    Oscillator sine_osc = sine_oscillator(400);
-    Noise noise;
-    Envelope_Modulator envelope = envelope_modulator(&sine_osc, .2f, .5f, 1.f, 1.f);
     
-    synth.module = &sine_osc;
+    Synth_Oscillator sine_osc = sine_oscillator(400);
+    Synth_Noise noise;
+    Synth_Envelope_Modulator envelope = envelope_modulator(&sine_osc);
+    Synth_Loop loop_module = loop(&envelope, envelope.calculate_loop_time());
+    
+    synth.module = &loop_module;
 
 
     //
