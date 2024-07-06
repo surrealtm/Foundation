@@ -1,6 +1,7 @@
 #pragma once
 
 #include "foundation.h"
+#include "random.h"
 
 struct Synthesizer_Module {
     virtual f32 tick(f32 time) = 0;
@@ -31,6 +32,8 @@ struct Oscillator : Synthesizer_Module {
 };
 
 struct Noise : Synthesizer_Module {
+    Random_Generator rand;
+
     f32 tick(f32 time);
 };
 

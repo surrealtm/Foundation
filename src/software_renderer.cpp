@@ -402,7 +402,9 @@ void swap_buffers(Frame_Buffer *src) {
     //
     // Actually blit the pixels onto the window.
     //
-    blit_pixels_to_window(state.window, state.internal_back_buffer, src->w, src->h, state.internal_back_buffer_channels);
+    if(state.window->w > 0 && state.window->h > 0 && src->w > 0 && src->h > 0) {
+        blit_pixels_to_window(state.window, state.internal_back_buffer, src->w, src->h, state.internal_back_buffer_channels);
+    }
 }
 
 
@@ -412,7 +414,7 @@ void swap_buffers(Frame_Buffer *src) {
 static
 Draw_Command *make_quad_command(s32 x0, s32 y0, s32 x1, s32 y1) {
     Draw_Command *command = make_triangle_draw_command(6);
-    command->draw.vertices[0].position = v2f((f32) x0, (f32) y0);
+    command->draw.vertices[0].position = v2f((f32) x0 + 1, (f32) y0);
     command->draw.vertices[1].position = v2f((f32) x1, (f32) y1);
     command->draw.vertices[2].position = v2f((f32) x1, (f32) y0);
     command->draw.vertices[3].position = v2f((f32) x0, (f32) y0);

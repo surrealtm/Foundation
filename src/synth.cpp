@@ -46,7 +46,7 @@ f32 Oscillator::tick(f32 time) {
         for(u32 n = 1; n < this->partial_count; ++n) {
             result += (1.f / n) * sinf(angular_frequency * n * time);
         }
-        result *= 1.7f / PI; // Normalization to bring the result into the [-1;1] range
+        result *= 1.7f / FPI; // Normalization to bring the result into the [-1;1] range
     } break;
 
     case OSCILLATOR_Triangle: {
@@ -55,7 +55,7 @@ f32 Oscillator::tick(f32 time) {
             amp = (amp > 0.f ? -1.f : 1.f) / (n * n);
             result += amp * sinf(angular_frequency * n * time);
         }
-        result *= 8.f / (PI * PI); // Normalization to bring the result into the [-1;1] range
+        result *= 8.f / (FPI * FPI); // Normalization to bring the result into the [-1;1] range
     } break;
     }
 
@@ -69,7 +69,7 @@ f32 Oscillator::tick(f32 time) {
 /* -------------------------------------------------- Noise -------------------------------------------------- */
 
 f32 Noise::tick(f32 time) {
-    return get_random_f32_uniform(-1.f, 1.f);
+    return this->rand.random_f32(-1.f, 1.f);
 }
 
 
