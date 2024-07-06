@@ -131,15 +131,38 @@ Draw_AABB calculate_aabb_for_vertices(Frame_Buffer *frame_buffer, Draw_Vertex *v
 }
 
 static
+b8 is_top_or_left_edge(const v2f &from, const v2f &to, const v2f &other) {
+    return (from.y == to.y && from.y < other.y) // Top edge
+        || (from.x <= other.x && to.x <= other.x); // Left edge
+}
+
+static
 b8 point_inside_triangle(const v2f &p, const v2f &p0, const v2f &p1, const v2f &p2, f32 *s, f32 *t, f32 *u) {
     f32 A = (-p1.y * p2.x + p0.y * (-p1.x + p2.x) + p0.x * (p1.y - p2.y) + p1.x * p2.y) / 2.f;
     f32 sign = (A < 0) ? -1.f : 1.f;
-    f32 _t = (p0.y * p2.x - p0.x * p2.y + (p2.y - p0.y) * p.x + (p0.x - p2.x) * p.y) * sign;
-    f32 _u = (p0.x * p1.y - p0.y * p1.x + (p0.y - p1.y) * p.x + (p1.x - p0.x) * p.y) * sign;
+    f32 _u = (p0.x * p1.y - p0.y * p1.x + (p0.y - p1.y) * p.x + (p1.x - p0.x) * p.y) * sign; // Edge p0 -> p1
+    f32 _t = (p0.y * p2.x - p0.x * p2.y + (p2.y - p0.y) * p.x + (p0.x - p2.x) * p.y) * sign; // Edge p0 -> p2
     
+    //
+    // :FillRule
+    // Two triangles that are not overlapping but share an edge (such as when rendering a quad)
+    // need to make sure that the pixel on the shared edge gets processed once and only once.
+    // To ensure that, we essentially ensure this point is only considered in one of the triangles,
+    // by adding a bias on the other triangle (so that it is considered barely outside).
+    // We put up the rule that the left-most edge of the triangle gets this bias of one pixel,
+    // because two non-overlapping triangles cannot share their left-most edges, which means that
+    // we guarantee only one triangle gets this bias, meaning that only one triangle will process
+    // this pixel.
+    // Note that if two corners have the same X coordinate, then the triangle is only one pixel wide,
+    // in which case having a bias would lead to this triangle not being filled at all.
+    //
+    f32 ubias = is_top_or_left_edge(p0, p1, p2) ? 0.f : 1.f, 
+        tbias = is_top_or_left_edge(p2, p0, p1) ? 0.f : 1.f, 
+        sbias = is_top_or_left_edge(p1, p2, p0) ? 0.f : 1.f;
+
     f32 denom = 2.f * A * sign;
     
-    b8 inside_triangle = _t >= 0 && _u >= 0 && (_t + _u) < denom;
+    b8 inside_triangle = _u >= ubias && _t >= tbias && (_u + _t) + sbias <= denom;
     if(!inside_triangle) return false;
     
     *t = _t / denom;
@@ -414,7 +437,7 @@ void swap_buffers(Frame_Buffer *src) {
 static
 Draw_Command *make_quad_command(s32 x0, s32 y0, s32 x1, s32 y1) {
     Draw_Command *command = make_triangle_draw_command(6);
-    command->draw.vertices[0].position = v2f((f32) x0 + 1, (f32) y0);
+    command->draw.vertices[0].position = v2f((f32) x0, (f32) y0);
     command->draw.vertices[1].position = v2f((f32) x1, (f32) y1);
     command->draw.vertices[2].position = v2f((f32) x1, (f32) y0);
     command->draw.vertices[3].position = v2f((f32) x0, (f32) y0);
@@ -453,4 +476,11 @@ void draw_quad(s32 x0, s32 y0, s32 x1, s32 y1, Texture *texture) {
     command->draw.vertices[5].uv = v2f(1, 1);
     command->draw.texture = texture;
     command->draw.options = texture_is_valid_for_draw(texture) ? DRAW_OPTION_Textured | DRAW_OPTION_Blending : DRAW_OPTION_Nothing;
+}
+
+void draw_outlined_quad(s32 x0, s32 y0, s32 x1, s32 y1, s32 thickness, Color color) {
+    draw_quad(x0, y0, x1 - thickness, y0 + thickness, color);
+    draw_quad(x1 - thickness, y0, x1, y1 - thickness, color);
+    draw_quad(x0 + thickness, y1 - thickness, x1, y1, color);
+    draw_quad(x0, y0 + thickness, x0 + thickness, y1, color);
 }

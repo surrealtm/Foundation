@@ -74,6 +74,43 @@ f32 Noise::tick(f32 time) {
 
 
 
+/* ------------------------------------------------ Modulator ------------------------------------------------ */
+
+f32 Envelope_Modulator::tick(f32 time) {
+    f32 result = this->input->tick(time);
+
+    f32 amp = 1.f;
+    
+    if(time <= this->attack_time) {
+        // Attack phase
+        amp = powf(time, this->attack_curve);
+    } else if(time <= this->attack_time + this->decay_time) {
+        // Decay phase
+        amp = 1.f - (time - this->attack_time) / this->decay_time;
+    } else if(time <= this->attack_time + this->decay_time + this->sustain_time) {
+        // Sustain phase
+        amp = this->sustain_level;
+    } else {
+        // Release phase
+        amp = 1.f - min(time - this->release_time, this->release_time) / this->release_time;
+    }
+    
+    return result * amp;
+}
+
+Envelope_Modulator envelope_modulator(Synthesizer_Module *input, f32 attack_time, f32 attack_curve, f32 decay_time, f32 sustain_level, f32 release_time) {
+    Envelope_Modulator modulator;
+    modulator.input         = input;
+    modulator.attack_time   = attack_time;
+    modulator.attack_curve  = attack_curve;
+    modulator.decay_time    = decay_time;
+    modulator.sustain_level = sustain_level;
+    modulator.release_time  = release_time;
+    return modulator;
+}
+
+
+
 /* ----------------------------------------------- Synthesizer ----------------------------------------------- */
 
 void create_synth(Synthesizer *synth, u8 channels, u32 sample_rate) {

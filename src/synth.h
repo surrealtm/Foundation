@@ -18,11 +18,6 @@ struct Oscillator : Synthesizer_Module {
     Oscillator_Kind kind;
     f32 frequency;
     f32 amplitude;
-
-    // Used for all but the sine oscillator. Good values:
-    //   Square:   64
-    //   Sawtooth: 32
-    //   Triangle:  2
     u32 partial_count;
 
     Oscillator(Oscillator_Kind kind, f32 frequency, f32 amplitude, u32 partial_count) :
@@ -34,6 +29,19 @@ struct Oscillator : Synthesizer_Module {
 struct Noise : Synthesizer_Module {
     Random_Generator rand;
 
+    f32 tick(f32 time);
+};
+
+struct Envelope_Modulator : Synthesizer_Module {
+    Synthesizer_Module *input;
+
+    f32 attack_time;
+    f32 attack_curve;
+    f32 decay_time;
+    f32 sustain_level;
+    f32 sustain_time;
+    f32 release_time;
+    
     f32 tick(f32 time);
 };
 
@@ -57,6 +65,8 @@ Oscillator sine_oscillator(f32 frequency, f32 amplitude = 1.f);
 Oscillator square_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 64);
 Oscillator sawtooth_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 64);
 Oscillator triangle_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 2);
+
+Envelope_Modulator envelope_modulator(Synthesizer_Module *input, f32 attack_time = 2.f, f32 attack_curve = 1.f, f32 decay_time = .2f, f32 sustain_level = .7f, f32 release_time = .5f);
 
 void create_synth(Synthesizer *synth, u8 channels, u32 sample_rate);
 void destroy_synth(Synthesizer *synth);

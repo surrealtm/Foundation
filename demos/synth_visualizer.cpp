@@ -15,7 +15,7 @@ void draw_channel(Window *window, Synthesizer *synth, u8 channel_index) {
     s32 y0 = window->h / 2 - (channel_index * synth->channels - synth->channels / 2) * channel_height, y1 = y0 + channel_height;
             
     draw_quad(x0, y0, x1, y1, Color(50, 50, 50, 200));
-
+    
     s32 w = min((x1 - x0), (s32) synth->available_frames);
     s32 h = y1 - y0;
 
@@ -24,15 +24,15 @@ void draw_channel(Window *window, Synthesizer *synth, u8 channel_index) {
 #else
     f32 frames_per_pixel = (f32) synth->available_frames / (f32) w;
 #endif
-
+    
     f32 frame = 0.f;
     for(s32 x = 0; x < w; ++x) {
         u64 first_frame = (u64) roundf(frame), one_plus_last_frame = min(synth->available_frames, (u64) roundf(frame + frames_per_pixel));
 
         if(first_frame >= one_plus_last_frame) continue;
 
-        f32 sample_y0, sample_y1;
-        f32 sample_x0 = (f32) (x0 + x), sample_x1 = (f32) (x0 + x + 1);
+        s32 sample_x0 = (x0 + x), sample_x1 = (x0 + x + 1);
+        s32 sample_y0, sample_y1;
         
 #if DRAW_AVERAGE
         f32 avg = 0.f;
@@ -42,8 +42,8 @@ void draw_channel(Window *window, Synthesizer *synth, u8 channel_index) {
 
         avg /= (f32) (one_plus_last_frame - first_frame);
 
-        sample_y0 = (y0 + y1) / 2.f;
-        sample_y1 = sample_y0 - avg * 0.5f * h;
+        sample_y1 = (s32) ((y0 + y1) / 2.f);
+        sample_y0 = (s32) (sample_y1 - avg * 0.5f * h);
 #else
         f32 sample_min = 0.f, sample_max = 0.f;
         for(u64 i = first_frame; i < one_plus_last_frame; ++i) {
@@ -51,17 +51,22 @@ void draw_channel(Window *window, Synthesizer *synth, u8 channel_index) {
             sample_max = max(sample_max, synth->buffer[i * synth->channels + channel_index]);
         }
 
-        sample_y0 = (y0 + y1) / 2.f - sample_min * 0.5f * h;
-        sample_y1 = (y0 + y1) / 2.f - sample_max * 0.5f * h;
+        sample_y0 = (s32) ((y0 + y1) / 2.f - sample_max * 0.5f * h);
+        sample_y1 = (s32) ((y0 + y1) / 2.f - sample_min * 0.5f * h);
 #endif
-
-        draw_quad((s32) sample_x0, (s32) sample_y0, (s32) sample_x1, (s32) sample_y1, Color(255, 255, 255, 255));
+        
+        draw_quad(sample_x0, sample_y0, sample_x1, sample_y1, Color(255, 255, 255, 255));
         
         frame += frames_per_pixel;
     }
+
+    draw_outlined_quad(x0, y0, x1, y1, 2, Color(200, 200, 200, 200));
 }
 
 int main() {
+    //
+    // Display
+    //
     Window window;
     create_window(&window, "Hello Windows"_s);
     show_window(&window);
@@ -72,13 +77,23 @@ int main() {
     Frame_Buffer frame_buffer;
     create_frame_buffer(&frame_buffer, window.w, window.h, 4);
 
+
+    //
+    // Synthesizer
+    //
     Synthesizer synth;
     create_synth(&synth, AUDIO_CHANNELS, AUDIO_SAMPLE_RATE);
 
-    //Oscillator module = sine_oscillator(400);
-    Noise module;
-    synth.module = &module;
+    Oscillator sine_osc = sine_oscillator(400);
+    Noise noise;
+    Envelope_Modulator envelope = envelope_modulator(&sine_osc, .2f, .5f, 1.f, 1.f);
     
+    synth.module = &envelope;
+
+
+    //
+    // Audio output
+    //
     Audio_Player player;
     Error_Code error = create_audio_player(&player);
     if(error != Success) printf("Error Initialization Player: %.*s\n", (u32) error_string(error).count, error_string(error).data);
@@ -114,12 +129,13 @@ int main() {
         {
             bind_frame_buffer(&frame_buffer);
             clear_frame(Color(50, 100, 200, 255));
+
             for(u8 i = 0; i < synth.channels; ++i) draw_channel(&window, &synth, i);
             swap_buffers(&frame_buffer);
         }
 
         Hardware_Time frame_end = os_get_hardware_time();
-        window_ensure_frame_time(frame_start, frame_end, 30);
+        window_ensure_frame_time(frame_start, frame_end, 10);
     }
     
     destroy_audio_buffer(&buffer);
