@@ -80,4 +80,4 @@ Synth_Loop loop(Synthesizer_Module *input, f32 time = 1.f);
 
 void create_synth(Synthesizer *synth, u8 channels, u32 sample_rate);
 void destroy_synth(Synthesizer *synth);
-f32 *update_synth(Synthesizer *synth, u64 consumed_frames, u64 requested_frames);
+f32 *update_synth(Synthesizer *synth, u64 requested_frames);

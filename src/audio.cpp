@@ -68,9 +68,11 @@ Error_Code win32_create_audio_client(Audio_Win32_State *win32) {
     waveformat.wBitsPerSample  = sizeof(f32) * 8;
     waveformat.cbSize          = 0;
 
+    u32 buffer_duration = 10000000 * 2 / AUDIO_UPDATES_PER_SECOND;  // Buffer duration in hundreds of nanoseconds. We take two times the "expected" buffer size here to better handle unexpected lags.
+    
     result = win32->audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED, // Share this device with other applications
                                              AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, // Convert between our wave format and the one used by the device, with highish quality
-                                             AUDIO_NANOSECONDS_PER_UPDATE, // Buffer duration in hundreds of nanoseconds
+                                             buffer_duration,
                                              0, // Periodicity, can only be non-zero in exclusive applications
                                              &waveformat, // The audio format description
                                              null); // Audio session guid
@@ -141,6 +143,7 @@ f32 *win32_acquire_audio_buffer(Audio_Player *player, u32 *frames_to_output) {
     HRESULT result;
     
     UINT32 padding; // The amount of frames that are still queued in the buffer from the previous update
+    UINT32 size_in_frames; // The maximum size in frames of the endpoint buffer
 
     result = win32->audio_client->GetCurrentPadding(&padding);
 
@@ -150,8 +153,16 @@ f32 *win32_acquire_audio_buffer(Audio_Player *player, u32 *frames_to_output) {
         return null;
     }
 
-    if(AUDIO_SAMPLES_PER_UPDATE > padding) {
-        *frames_to_output = AUDIO_SAMPLES_PER_UPDATE - padding;
+    result = win32->audio_client->GetBufferSize(&size_in_frames);
+
+    if(result != S_OK) {
+        // GetCurrentPadding failed!
+        *frames_to_output = 0;
+        return null;
+    }
+
+    if(size_in_frames >= padding + AUDIO_SAMPLES_PER_UPDATE) {
+        *frames_to_output = size_in_frames - padding;
 
         result = win32->render_client->GetBuffer(*frames_to_output, (BYTE **) &buffer);
 
@@ -161,7 +172,7 @@ f32 *win32_acquire_audio_buffer(Audio_Player *player, u32 *frames_to_output) {
             return null;
         }
 
-        s64 buffer_size_in_bytes = *frames_to_output * AUDIO_CHANNELS * sizeof(f32);
+        u64 buffer_size_in_bytes = (u64) *frames_to_output * AUDIO_CHANNELS * sizeof(f32);
         memset(buffer, 0, buffer_size_in_bytes); // Non-zero values left in the buffer would lead to noise, since we only ever add samples onto this buffer. The buffer might still contain samples from the previous update.
     } else {
         *frames_to_output = 0;    
@@ -228,21 +239,29 @@ f32 query_audio_buffer(Audio_Buffer *buffer, u64 sample) {
 }
 
 static
-void update_audio_stream(Audio_Stream *stream) {
+void update_audio_stream(Audio_Stream *stream, u32 frames_to_output) {
     u64 frame_size_in_bytes = get_size_in_bytes_per_frame(stream->buffer.format, stream->buffer.channels);
 
-    u64 requested_frames = AUDIO_SAMPLES_PER_UPDATE - (stream->buffer.frame_count - stream->source->frame_offset_in_buffer);
-    u64 storable_frames = stream->buffer.size_in_bytes / frame_size_in_bytes;
-    
+    // Move all the frames in the buffer that have not yet been played to the front, so that the source
+    // will play them next.
+    u64 still_valid_frames = stream->buffer.frame_count - stream->source->frame_offset_in_buffer;
+    memmove(&stream->buffer.data[0], &stream->buffer.data[still_valid_frames], still_valid_frames * frame_size_in_bytes);
+
+    // Calculate the number of frames to generate this update to fill the audio buffer.
+    u64 requested_frames   = frames_to_output - still_valid_frames;
+    u64 storable_frames    = stream->buffer.size_in_bytes / frame_size_in_bytes;
     u64 frames_to_generate = min(requested_frames, storable_frames);
-    
-    f32 *frames = stream->callback(stream->user_pointer, stream->source->frame_offset_in_buffer, frames_to_generate);
-    memcpy(stream->buffer.data, frames, frames_to_generate * frame_size_in_bytes);
-    stream->buffer.frame_count = frames_to_generate;
-    
+
+    // Generate the new frames and copy them into the audio buffer
+    f32 *frames = stream->callback(stream->user_pointer, frames_to_generate);
+    memcpy(&stream->buffer.data[still_valid_frames], frames, frames_to_generate * frame_size_in_bytes);
+    stream->buffer.frame_count = still_valid_frames + frames_to_generate;
+
+    // Reset the audio source to continue playing from this buffer.
+    stream->frames_played_last_update      = stream->source->frame_offset_in_buffer;
     stream->source->frame_offset_in_buffer = 0;
-    stream->source->state = AUDIO_SOURCE_Playing;
-    stream->source->playing_buffer = &stream->buffer;
+    stream->source->state                  = AUDIO_SOURCE_Playing;
+    stream->source->playing_buffer         = &stream->buffer;
 }
 
 
@@ -268,12 +287,7 @@ void destroy_audio_player(Audio_Player *player) {
 
 void update_audio_player(Audio_Player *player) {
     //
-    // Update all audio streams.
-    //
-    for(Audio_Stream &stream : player->streams) update_audio_stream(&stream);
-    
-    //
-    // Fill the platform's sound buffer for this update.
+    // Get the OS's internal sound buffer into which we will update.
     //
     u32 frames_to_output;
     f32 *output;
@@ -282,6 +296,14 @@ void update_audio_player(Audio_Player *player) {
     output = win32_acquire_audio_buffer(player, &frames_to_output);
 #endif
 
+    //
+    // Update all audio streams.
+    //
+    for(Audio_Stream &stream : player->streams) update_audio_stream(&stream, frames_to_output);
+    
+    //
+    // Fill the platform's sound buffer for this update.
+    //
     for(auto it = player->sources.begin(); it != player->sources.end(); ) {
         Audio_Source &source = it.pointer->data;
         
@@ -336,6 +358,15 @@ void update_audio_player(Audio_Player *player) {
 #endif
 }
 
+void update_audio_player_with_silence(Audio_Player *player) {
+    u32 frames_to_output;
+
+#if FOUNDATION_WIN32
+    win32_acquire_audio_buffer(player, &frames_to_output);
+    win32_release_audio_buffer(player, frames_to_output);
+#endif
+}
+
 
 
 /* ----------------------------------------------- Audio Buffer ----------------------------------------------- */
@@ -372,9 +403,8 @@ void create_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 ch
 }
 
 void destroy_audio_buffer(Audio_Buffer *buffer) {
-    // @Incomplete
     if(buffer->__drflac_cleanup) {
-    
+        // @Incomplete
     } else {
         Default_Allocator->deallocate(buffer->data);
     }
@@ -411,7 +441,7 @@ Audio_Stream *create_audio_stream(Audio_Player *player, void *user_pointer, Audi
     stream->user_pointer = user_pointer;
     stream->callback = callback;
     stream->source = acquire_audio_source(player, type);
-    create_audio_buffer(&stream->buffer, AUDIO_BUFFER_FORMAT_Float32, AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_SAMPLES_PER_UPDATE, buffer_name);
+    create_audio_buffer(&stream->buffer, AUDIO_BUFFER_FORMAT_Float32, AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_SAMPLES_PER_UPDATE * 4, buffer_name);
     return stream;
 }
 

@@ -11,11 +11,18 @@
 
 #define AUDIO_PLATFORM_STATE_SIZE 32
 
-#define AUDIO_SAMPLE_RATE             48000
-#define AUDIO_CHANNELS                    2
-#define AUDIO_UPDATES_PER_SECOND          2 // nocheckin
-#define AUDIO_SAMPLES_PER_UPDATE     (AUDIO_SAMPLE_RATE / AUDIO_UPDATES_PER_SECOND)
-#define AUDIO_NANOSECONDS_PER_UPDATE (1000000000 / AUDIO_UPDATES_PER_SECOND)
+#ifndef AUDIO_SAMPLE_RATE
+# define AUDIO_SAMPLE_RATE        48000
+#endif
+
+#ifndef AUDIO_CHANNELS
+# define AUDIO_CHANNELS               2
+#endif
+
+#ifndef AUDIO_UPDATES_PER_SECOND
+# define AUDIO_UPDATES_PER_SECOND    10
+# define AUDIO_SAMPLES_PER_UPDATE (AUDIO_SAMPLE_RATE / AUDIO_UPDATES_PER_SECOND)
+#endif
 
 enum Audio_Volume_Type {
     AUDIO_VOLUME_Master       = 0x0,
@@ -64,13 +71,14 @@ struct Audio_Source {
     u64 frame_offset_in_buffer;
 };
 
-typedef f32 *(*Audio_Stream_Callback)(void *user_pointer, u64 consumed_frames, u64 requested_frames);
+typedef f32 *(*Audio_Stream_Callback)(void *user_pointer, u64 requested_frames);
 
 struct Audio_Stream {
     void *user_pointer;
     Audio_Stream_Callback callback;
     Audio_Buffer buffer;
     Audio_Source *source;
+    u64 frames_played_last_update;
 };
 
 struct Audio_Player {
@@ -85,6 +93,15 @@ struct Audio_Player {
 Error_Code create_audio_player(Audio_Player *player);
 void destroy_audio_player(Audio_Player *player);
 void update_audio_player(Audio_Player *player);
+
+// This can be useful to "catch up" the audio system after a long time without any updates,
+// for example after loading something from disk or program startup. In that case, the audio
+// player may have to "catch up" a large number of audio frames, which may not be available
+// at the time for seamless play (e.g. when streaming into an audio buffer which is not large
+// enough for the time gap). Instead of playing the too-small available part of the audio
+// stream, skip this update entirely by just playing silence, and then resume normal playback.
+// This avoids bad audio artifacts at the cost of a little latency.
+void update_audio_player_with_silence(Audio_Player *player);
 
 Error_Code create_audio_buffer_from_wav_memory(Audio_Buffer *buffer, string file_content, string buffer_name);
 Error_Code create_audio_buffer_from_wav_file(Audio_Buffer *buffer, string file_path);

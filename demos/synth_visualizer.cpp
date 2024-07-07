@@ -4,63 +4,101 @@
 #include "synth.h"
 #include "audio.h"
 
-#define CONSTANT_TIME_STRETCH true // The entire band width represents one second
-#define DRAW_AVERAGE          false // Draw average or min/max values for the sampled area
+struct Histogram {
+    f32 *samples;
+    u64 buffer_size_in_samples;
+    u64 latest_sample_index;
+    u64 present_sample_index;
+};
 
 static
-void draw_channel(Window *window, Synthesizer *synth, u8 channel_index) {
+void create_histogram(Histogram *histogram, u64 samples) {
+    histogram->buffer_size_in_samples = samples;
+    histogram->samples                = (f32 *) Default_Allocator->allocate(histogram->buffer_size_in_samples * sizeof(f32));
+    histogram->latest_sample_index    = 0;
+    histogram->present_sample_index   = 0;
+}
+
+static
+void destroy_histogram(Histogram *histogram) {
+    Default_Allocator->deallocate(histogram->samples);
+    histogram->samples = null;
+    histogram->buffer_size_in_samples = 0;
+}
+
+static
+void add_histogram_data(Histogram *histogram, f32 *frames, u64 frame_count, u64 frame_stride, u64 frame_offset) {
+    // Delete old samples that no longer have space in the histogram.
+    s64 unused_samples = histogram->buffer_size_in_samples - histogram->latest_sample_index;
+    if(frame_count > unused_samples) {
+        s64 samples_to_remove = frame_count - unused_samples;
+        memmove(&histogram->samples[0], &histogram->samples[samples_to_remove], (histogram->buffer_size_in_samples - samples_to_remove) * sizeof(f32));
+        histogram->latest_sample_index  -= samples_to_remove;
+        histogram->present_sample_index -= samples_to_remove;
+    }
+
+    // Move the new samples into the histogram.
+    for(u64 i = 0; i < frame_count; ++i) {
+        histogram->samples[histogram->latest_sample_index] = frames[i * frame_stride + frame_offset];
+        ++histogram->latest_sample_index;
+    }
+
+    assert(histogram->latest_sample_index <= histogram->buffer_size_in_samples);
+
+    //histogram->present_sample_index = histogram->latest_sample_index;
+}
+
+static
+void progress_histogram(Histogram *histogram, u64 samples) {
+    histogram->present_sample_index = min(histogram->present_sample_index + samples, histogram->latest_sample_index);
+}
+
+static
+f32 query_histogram(Histogram *histogram, u64 sample_index) {
+    assert(sample_index >= 0 && sample_index <= histogram->present_sample_index);
+    return histogram->samples[histogram->present_sample_index - sample_index];
+}
+
+static
+u64 get_valid_samples_in_histogram(Histogram *histogram) {
+    return histogram->present_sample_index + 1;
+}
+
+static
+void draw_histogram(Window *window, Histogram *histogram, s32 histogram_index, s32 histogram_count) {
     s32 channel_height = 101;
 
-    s32 x0 = 10, x1 = window->w - 10;
-    s32 y0 = window->h / 2 - (channel_index * synth->channels - synth->channels / 2) * channel_height, y1 = y0 + channel_height;
-            
-    draw_quad(x0, y0, x1, y1, Color(50, 50, 50, 200));
+    s32 channel_x0 = 10, channel_x1 = window->w - 10;
+    s32 channel_y0 = window->h / 2 - (histogram_index * histogram_count - histogram_count/ 2) * channel_height, channel_y1 = channel_y0 + channel_height;
+    draw_quad(channel_x0, channel_y0, channel_x1, channel_y1, Color(50, 50, 50, 200));
     
-    s32 w = min((x1 - x0), (s32) synth->available_frames);
-    s32 h = y1 - y0;
+    s32 pixels = channel_x1 - channel_x0;
+    u64 valid_samples = get_valid_samples_in_histogram(histogram);
+    f32 samples_per_pixel = (f32) AUDIO_SAMPLE_RATE / (f32) pixels;
 
-#if CONSTANT_TIME_STRETCH
-    f32 frames_per_pixel = (f32) AUDIO_SAMPLE_RATE / AUDIO_UPDATES_PER_SECOND / (f32) w;
-#else
-    f32 frames_per_pixel = (f32) synth->available_frames / (f32) w;
-#endif
-    
-    f32 frame = 0.f;
-    for(s32 x = 0; x < w; ++x) {
-        u64 first_frame = (u64) roundf(frame), one_plus_last_frame = min(synth->available_frames, (u64) roundf(frame + frames_per_pixel));
+    f32 sample_pointer = (f32) 0;
+    for(s32 x = 0; x < pixels; ++x) {
+        u64 first_sample = (u64) roundf(sample_pointer), one_plus_last_sample = min(valid_samples, (u64) roundf(sample_pointer + samples_per_pixel));
 
-        if(first_frame >= one_plus_last_frame) continue;
+        if(first_sample >= one_plus_last_sample) continue;
 
-        s32 sample_x0 = (x0 + x), sample_x1 = (x0 + x + 1);
-        s32 sample_y0, sample_y1;
-        
-#if DRAW_AVERAGE
-        f32 avg = 0.f;
-        for(u64 i = first_frame; i < one_plus_last_frame; ++i) {
-            avg += synth->buffer[i * synth->channels + channel_index];
-        }
-
-        avg /= (f32) (one_plus_last_frame - first_frame);
-
-        sample_y1 = (s32) ((y0 + y1) / 2.f);
-        sample_y0 = (s32) (sample_y1 - avg * 0.5f * h);
-#else
         f32 sample_min = 0.f, sample_max = 0.f;
-        for(u64 i = first_frame; i < one_plus_last_frame; ++i) {
-            sample_min = min(sample_min, synth->buffer[i * synth->channels + channel_index]);
-            sample_max = max(sample_max, synth->buffer[i * synth->channels + channel_index]);
+        for(u64 j = first_sample; j < one_plus_last_sample; ++j) {
+            sample_min = min(sample_min, query_histogram(histogram, j));
+            sample_max = max(sample_max, query_histogram(histogram, j));
         }
 
-        sample_y0 = (s32) ((y0 + y1) / 2.f - sample_max * 0.5f * h);
-        sample_y1 = (s32) ((y0 + y1) / 2.f - sample_min * 0.5f * h);
-#endif
+        s32 sample_x0 = (channel_x1 - x - 1);
+        s32 sample_x1 = (sample_x0 + 1);
+        s32 sample_y0 = (s32) ((channel_y0 + channel_y1) / 2.f - sample_max * 0.5f * channel_height);
+        s32 sample_y1 = (s32) ((channel_y0 + channel_y1) / 2.f - sample_min * 0.5f * channel_height);
         
         draw_quad(sample_x0, sample_y0, sample_x1, sample_y1, Color(255, 255, 255, 255));
         
-        frame += frames_per_pixel;
+        sample_pointer += samples_per_pixel;
     }
 
-    draw_outlined_quad(x0, y0, x1, y1, 2, Color(200, 200, 200, 200));
+    draw_outlined_quad(channel_x0, channel_y0, channel_x1, channel_y1, 2, Color(200, 200, 200, 200));
 }
 
 int main() {
@@ -93,6 +131,13 @@ int main() {
 
 
     //
+    // Histograms
+    //
+    Histogram histograms[AUDIO_CHANNELS];
+    for(s32 i = 0; i < AUDIO_CHANNELS; ++i) create_histogram(&histograms[i], (u64) (AUDIO_SAMPLE_RATE * 1.5f));
+
+
+    //
     // Audio output
     //
     Audio_Player player;
@@ -103,6 +148,10 @@ int main() {
     
     Audio_Stream *stream = create_audio_stream(&player, &synth, (Audio_Stream_Callback) update_synth, AUDIO_VOLUME_Master, ""_s);
 
+    update_audio_player_with_silence(&player); // Avoid sound artifacts due to the long loading times which would require wayyy too many samples to be created.
+
+    b8 updated_histogram = false;
+    
     while(!window.should_close) {
         Hardware_Time frame_start = os_get_hardware_time();
         
@@ -113,18 +162,38 @@ int main() {
             update_audio_player(&player);
         }
         
-        // Draw the synth
+        // Update the histograms
+        {
+            for(s32 i = 0; i < AUDIO_CHANNELS; ++i) {
+                progress_histogram(&histograms[i], (u64) (window.frame_time * AUDIO_SAMPLE_RATE));
+                add_histogram_data(&histograms[i], (f32 *) stream->buffer.data, stream->frames_played_last_update, stream->buffer.channels, i);
+            }
+        }
+
+        // Draw the histograms
         {
             bind_frame_buffer(&frame_buffer);
             clear_frame(Color(50, 100, 200, 255));
 
-            for(u8 i = 0; i < synth.channels; ++i) draw_channel(&window, &synth, i);
+            for(s32 i = 0; i < AUDIO_CHANNELS; ++i) {
+                draw_histogram(&window, &histograms[i], i, synth.channels);
+            }
+
             swap_buffers(&frame_buffer);
         }
 
+        if(1.f / window.frame_time < AUDIO_UPDATES_PER_SECOND) printf("Dropping frames (%d presented, %d needed).\n", (s32) (1.f / window.frame_time), AUDIO_UPDATES_PER_SECOND);
+        
         Hardware_Time frame_end = os_get_hardware_time();
-        window_ensure_frame_time(frame_start, frame_end, 10);
+        window_ensure_frame_time(frame_start, frame_end, 61);
     }
+
+
+    //
+    // Cleanup
+    //
+
+    for(s64 i = 0; i < AUDIO_CHANNELS; ++i) destroy_histogram(&histograms[i]);
     
     destroy_audio_player(&player);
     destroy_synth(&synth);
