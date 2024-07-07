@@ -19,6 +19,7 @@ struct Random_Generator {
     f32 random_f32_normal_distribution(f32 mean, f32 stddev);
     f32 random_f32_linear_distribution(f32 low, f32 high);
     f32 random_f32_exponential_distribution(f32 lambda);
+    f32 random_f32_inverse_distribution();
     
     f64 random_f64_zero_to_one();
     f64 random_f64(f64 low, f64 high);

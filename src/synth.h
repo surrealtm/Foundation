@@ -16,17 +16,26 @@ enum Synth_Oscillator_Kind {
 
 struct Synth_Oscillator : Synthesizer_Module {
     Synth_Oscillator_Kind kind;
+    f32 phase_offset = 0.f;
     f32 frequency;
     f32 amplitude;
     u32 partial_count;
 
-    Synth_Oscillator(Synth_Oscillator_Kind kind, f32 frequency, f32 amplitude, u32 partial_count) :
-        kind(kind), frequency(frequency), amplitude(amplitude), partial_count(partial_count) {};
+    Synth_Oscillator(Synth_Oscillator_Kind kind, f32 frequency, f32 amplitude, u32 partial_count, f32 phase_offset) :
+        kind(kind), frequency(frequency), amplitude(amplitude), partial_count(partial_count), phase_offset(phase_offset) {};
     
     f32 tick(f32 time);
 };
 
+enum Synth_Noise_Kind {
+    NOISE_White,
+    NOISE_Pink
+};
+
 struct Synth_Noise : Synthesizer_Module {
+    Synth_Noise_Kind kind;
+    f32 amplitude;
+    
     Random_Generator rand;
 
     f32 tick(f32 time);
@@ -46,11 +55,26 @@ struct Synth_Envelope_Modulator : Synthesizer_Module {
     f32 calculate_loop_time();
 };
 
+struct Synth_Low_Frequency_Modulator : Synthesizer_Module {
+    Synthesizer_Module *input;
+    f32 phase_offset;
+    f32 frequency;
+    f32 low, high;
+
+    f32 tick(f32 time);
+};
+
 struct Synth_Loop : Synthesizer_Module {
     Synthesizer_Module *input;
     f32 loop; // In seconds
     
     f32 tick(f32 time);
+};
+
+struct Synth_Mixer : Synthesizer_Module {
+    Synthesizer_Module *lhs, *rhs;
+
+    f32 tick(f32);
 };
 
 struct Synthesizer {
@@ -69,14 +93,19 @@ struct Synthesizer {
     Synthesizer_Module *module;
 };
 
-Synth_Oscillator sine_oscillator(f32 frequency, f32 amplitude = 1.f);
-Synth_Oscillator square_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 64);
-Synth_Oscillator sawtooth_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 64);
-Synth_Oscillator triangle_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 2);
+Synth_Oscillator sine_oscillator(f32 frequency, f32 amplitude = 1.f, f32 phase_offset = 0.f);
+Synth_Oscillator square_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 64, f32 phase_offset = 0.f);
+Synth_Oscillator sawtooth_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 64, f32 phase_offset = 0.f);
+Synth_Oscillator triangle_oscillator(f32 frequency, f32 amplitude = 1.f, u32 partial_count = 2, f32 phase_offset = 0.f);
 
-Synth_Envelope_Modulator envelope_modulator(Synthesizer_Module *input, f32 attack_time = .2f, f32 attack_curve = 1.f, f32 decay_time = .2f, f32 sustain_level = .7f, f32 sustain_time = .2f, f32 release_time = .5f);
+Synth_Noise noise(Synth_Noise_Kind kind, f32 amplitude);
+
+Synth_Envelope_Modulator envelope_modulator(Synthesizer_Module *input, f32 attack_time = .2f, f32 attack_curve = 1.f, f32 decay_time = .2f, f32 sustain_level = .7f, f32 sustain_time = .2f, f32 release_time = .3f);
+Synth_Low_Frequency_Modulator low_frequency_modulator(Synthesizer_Module *input, f32 frequency, f32 low = 0.7f, f32 high = 1.f, f32 phase_offset = 0.f);
 
 Synth_Loop loop(Synthesizer_Module *input, f32 time = 1.f);
+
+Synth_Mixer mix(Synthesizer_Module *lhs, Synthesizer_Module *rhs);
 
 void create_synth(Synthesizer *synth, u8 channels, u32 sample_rate);
 void destroy_synth(Synthesizer *synth);

@@ -71,6 +71,11 @@ f32 Random_Generator::random_f32_exponential_distribution(f32 lambda) {
     return -(logf(x) / lambda);
 }
 
+f32 Random_Generator::random_f32_inverse_distribution() {
+    f32 x = this->random_f32(-1.f, 1.f);
+    return x * x;
+}
+
 f64 Random_Generator::random_f64_zero_to_one() {
     return (f64) this->random_u64() / (f64) MAX_U64;
 }

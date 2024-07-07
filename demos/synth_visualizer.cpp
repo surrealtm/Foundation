@@ -29,7 +29,7 @@ void destroy_histogram(Histogram *histogram) {
 static
 void add_histogram_data(Histogram *histogram, f32 *frames, u64 frame_count, u64 frame_stride, u64 frame_offset) {
     // Delete old samples that no longer have space in the histogram.
-    s64 unused_samples = histogram->buffer_size_in_samples - histogram->latest_sample_index;
+    u64 unused_samples = histogram->buffer_size_in_samples - histogram->latest_sample_index;
     if(frame_count > unused_samples) {
         s64 samples_to_remove = frame_count - unused_samples;
         memmove(&histogram->samples[0], &histogram->samples[samples_to_remove], (histogram->buffer_size_in_samples - samples_to_remove) * sizeof(f32));
@@ -42,10 +42,6 @@ void add_histogram_data(Histogram *histogram, f32 *frames, u64 frame_count, u64 
         histogram->samples[histogram->latest_sample_index] = frames[i * frame_stride + frame_offset];
         ++histogram->latest_sample_index;
     }
-
-    assert(histogram->latest_sample_index <= histogram->buffer_size_in_samples);
-
-    //histogram->present_sample_index = histogram->latest_sample_index;
 }
 
 static
@@ -88,6 +84,9 @@ void draw_histogram(Window *window, Histogram *histogram, s32 histogram_index, s
             sample_max = max(sample_max, query_histogram(histogram, j));
         }
 
+        sample_min = max(-1.f, sample_min);
+        sample_max = min( 1.f, sample_max);
+
         s32 sample_x0 = (channel_x1 - x - 1);
         s32 sample_x1 = (sample_x0 + 1);
         s32 sample_y0 = (s32) ((channel_y0 + channel_y1) / 2.f - sample_max * 0.5f * channel_height);
@@ -122,12 +121,22 @@ int main() {
     Synthesizer synth;
     create_synth(&synth, AUDIO_CHANNELS, AUDIO_SAMPLE_RATE);
     
-    Synth_Oscillator sine_osc = sine_oscillator(400);
-    Synth_Noise noise;
-    Synth_Envelope_Modulator envelope = envelope_modulator(&sine_osc);
-    Synth_Loop loop_module = loop(&envelope, envelope.calculate_loop_time());
+    Synth_Oscillator first_sine             = sine_oscillator(400);
+    Synth_Noise noiser                      = noise(NOISE_Pink, .1f);
+    Synth_Envelope_Modulator envelope       = envelope_modulator(&first_sine);
+    Synth_Loop looper                       = loop(&envelope, envelope.calculate_loop_time() + .2f);
+    Synth_Low_Frequency_Modulator first_lf  = low_frequency_modulator(&looper, 10);
+    Synth_Mixer first_mixer                 = mix(&noiser, &first_lf);
     
-    synth.module = &loop_module;
+    Synth_Oscillator second_sine            = sine_oscillator(600, .2f);
+    Synth_Low_Frequency_Modulator second_lf = low_frequency_modulator(&second_sine, .25f, 0.f, 1.f);
+    Synth_Oscillator third_sine             = triangle_oscillator(350, .2f);
+    Synth_Low_Frequency_Modulator third_lf  = low_frequency_modulator(&third_sine, .25f, 0.f, 1.f, .5f);
+    Synth_Mixer second_mixer                = mix(&second_lf, &third_lf);
+    
+    Synth_Mixer final_mixer                = mix(&first_mixer, &second_mixer);
+
+    synth.module = &final_mixer;
 
 
     //
@@ -150,8 +159,6 @@ int main() {
 
     update_audio_player_with_silence(&player); // Avoid sound artifacts due to the long loading times which would require wayyy too many samples to be created.
 
-    b8 updated_histogram = false;
-    
     while(!window.should_close) {
         Hardware_Time frame_start = os_get_hardware_time();
         

@@ -11,20 +11,20 @@
 
 /* ------------------------------------------------ Oscillator ------------------------------------------------ */
 
-Synth_Oscillator sine_oscillator(f32 frequency, f32 amplitude) {
-    return Synth_Oscillator{ OSCILLATOR_Sine, frequency, amplitude, 0 };
+Synth_Oscillator sine_oscillator(f32 frequency, f32 amplitude, f32 phase_offset) {
+    return Synth_Oscillator{ OSCILLATOR_Sine, frequency, amplitude, 0, phase_offset };
 }
 
-Synth_Oscillator square_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
-    return Synth_Oscillator{ OSCILLATOR_Square, frequency, amplitude, partial_count };
+Synth_Oscillator square_oscillator(f32 frequency, f32 amplitude, u32 partial_count, f32 phase_offset) {
+    return Synth_Oscillator{ OSCILLATOR_Square, frequency, amplitude, partial_count, phase_offset };
 }
 
-Synth_Oscillator sawtooth_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
-    return Synth_Oscillator{ OSCILLATOR_Sawtooth, frequency, amplitude, partial_count };
+Synth_Oscillator sawtooth_oscillator(f32 frequency, f32 amplitude, u32 partial_count, f32 phase_offset) {
+    return Synth_Oscillator{ OSCILLATOR_Sawtooth, frequency, amplitude, partial_count, phase_offset };
 }
 
-Synth_Oscillator triangle_oscillator(f32 frequency, f32 amplitude, u32 partial_count) {
-    return Synth_Oscillator{ OSCILLATOR_Triangle, frequency, amplitude, partial_count };
+Synth_Oscillator triangle_oscillator(f32 frequency, f32 amplitude, u32 partial_count, f32 phase_offset) {
+    return Synth_Oscillator{ OSCILLATOR_Triangle, frequency, amplitude, partial_count, phase_offset };
 }
 
 f32 Synth_Oscillator::tick(f32 time) {
@@ -33,18 +33,18 @@ f32 Synth_Oscillator::tick(f32 time) {
     
     switch(this->kind) {
     case OSCILLATOR_Sine:
-        result = sinf(angular_frequency * time);
+        result = sinf(angular_frequency * time + this->phase_offset * FTAU);
         break;
 
     case OSCILLATOR_Square: {
         for(u32 n = 1; n <= this->partial_count * 2; n += 2) {
-            result += (1.f / n) * sinf(angular_frequency * n * time);
+            result += (1.f / n) * sinf(angular_frequency * n * time + this->phase_offset * FTAU);
         }
     } break;
 
     case OSCILLATOR_Sawtooth: {
         for(u32 n = 1; n < this->partial_count; ++n) {
-            result += (1.f / n) * sinf(angular_frequency * n * time);
+            result += (1.f / n) * sinf(angular_frequency * n * time + this->phase_offset * FTAU);
         }
         result *= 1.7f / FPI; // Normalization to bring the result into the [-1;1] range
     } break;
@@ -53,7 +53,7 @@ f32 Synth_Oscillator::tick(f32 time) {
         f32 amp = -1.f;
         for(u32 n = 1; n <= this->partial_count * 2; n += 2) {
             amp = (amp > 0.f ? -1.f : 1.f) / (n * n);
-            result += amp * sinf(angular_frequency * n * time);
+            result += amp * sinf(angular_frequency * n * time + this->phase_offset * FTAU);
         }
         result *= 8.f / (FPI * FPI); // Normalization to bring the result into the [-1;1] range
     } break;
@@ -69,7 +69,24 @@ f32 Synth_Oscillator::tick(f32 time) {
 /* -------------------------------------------------- Noise -------------------------------------------------- */
 
 f32 Synth_Noise::tick(f32 time) {
-    return this->rand.random_f32(-1.f, 1.f);
+    f32 result;
+
+    switch(this->kind) {
+    case NOISE_White: result = this->rand.random_f32(-1.f, 1.f); break;
+    case NOISE_Pink:  result = this->rand.random_f32_inverse_distribution(); break;
+    }
+
+    result *= this->amplitude;
+
+    return result;
+}
+
+Synth_Noise noise(Synth_Noise_Kind kind, f32 amplitude) {
+    Synth_Noise noise;
+    noise.kind      = kind;
+    noise.amplitude = amplitude;
+    noise.rand      = Random_Generator();
+    return noise;
 }
 
 
@@ -117,6 +134,24 @@ Synth_Envelope_Modulator envelope_modulator(Synthesizer_Module *input, f32 attac
 
 
 
+f32 Synth_Low_Frequency_Modulator::tick(f32 time) {
+    const f32 angular_frequency = this->frequency * FTAU;
+    f32 amplifier = (sinf(angular_frequency * time + this->phase_offset * FTAU) * 0.5f + 0.5f) * (high - low) + low;
+    return amplifier * this->input->tick(time);
+}
+
+Synth_Low_Frequency_Modulator low_frequency_modulator(Synthesizer_Module *input, f32 frequency, f32 low, f32 high, f32 phase_offset) {
+    Synth_Low_Frequency_Modulator modulator;
+    modulator.input        = input;
+    modulator.frequency    = frequency;
+    modulator.low          = low;
+    modulator.high         = high;
+    modulator.phase_offset = phase_offset;
+    return modulator;
+}
+
+
+
 /* --------------------------------------------------- Loop --------------------------------------------------- */
 
 f32 Synth_Loop::tick(f32 time) {
@@ -128,6 +163,21 @@ Synth_Loop loop(Synthesizer_Module *input, f32 time) {
     loop.input = input;
     loop.loop  = time;
     return loop;
+}
+
+
+
+/* --------------------------------------------------- Mixer --------------------------------------------------- */
+
+f32 Synth_Mixer::tick(f32 time) {
+    return this->lhs->tick(time) + this->rhs->tick(time);
+}
+
+Synth_Mixer mix(Synthesizer_Module *lhs, Synthesizer_Module *rhs) {
+    Synth_Mixer mixer;
+    mixer.lhs = lhs;
+    mixer.rhs = rhs;
+    return mixer;
 }
 
 
