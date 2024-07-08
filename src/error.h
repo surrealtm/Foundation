@@ -8,6 +8,7 @@ enum Error_Code {
     /* Default Errors */
     ERROR_Custom_Error_Message,
     ERROR_File_Not_Found,
+    ERROR_File_Too_Small,
     ERROR_Invalid_Version,
 
     /* D3D11 Layer Errors */
@@ -29,6 +30,12 @@ enum Error_Code {
     ERROR_SOCKET_Host_Down,
     ERROR_SOCKET_Host_Unreachable,
     ERROR_SOCKET_Host_Not_Found,
+
+    /* Audio Errors */
+    ERROR_AUDIO_Invalid_Sample_Rate,
+    ERROR_AUDIO_Invalid_Channel_Count,
+    ERROR_AUDIO_Invalid_Bits_Per_Sample,
+    ERROR_AUDIO_Invalid_Wav_File,
     
     ERROR_COUNT,
 };

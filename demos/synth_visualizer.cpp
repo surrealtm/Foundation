@@ -153,10 +153,18 @@ int main() {
     Error_Code error = create_audio_player(&player);
     if(error != Success) printf("Error Initialization Player: %.*s\n", (u32) error_string(error).count, error_string(error).data);
 
-    player.volumes[AUDIO_VOLUME_Master] = .1f;
+    player.volumes[AUDIO_VOLUME_Master] = 1.f;
     
     Audio_Stream *stream = create_audio_stream(&player, &synth, (Audio_Stream_Callback) update_synth, AUDIO_VOLUME_Master, ""_s);
+    pause_audio_stream(stream);
 
+    Audio_Buffer buffer;
+    create_audio_buffer_from_wav_file(&buffer, "data/audio/blep.wav"_s);
+
+    Audio_Source *source = acquire_audio_source(&player, AUDIO_VOLUME_Master);
+    set_audio_source_options(source, true);
+    play_audio_buffer(source, &buffer);
+    
     update_audio_player_with_silence(&player); // Avoid sound artifacts due to the long loading times which would require wayyy too many samples to be created.
 
     while(!window.should_close) {

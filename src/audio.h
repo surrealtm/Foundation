@@ -20,7 +20,7 @@
 #endif
 
 #ifndef AUDIO_UPDATES_PER_SECOND
-# define AUDIO_UPDATES_PER_SECOND    10
+# define AUDIO_UPDATES_PER_SECOND    1 // nocheckin
 # define AUDIO_SAMPLES_PER_UPDATE (AUDIO_SAMPLE_RATE / AUDIO_UPDATES_PER_SECOND)
 #endif
 
@@ -112,9 +112,14 @@ void destroy_audio_buffer(Audio_Buffer *buffer);
 
 Audio_Source *acquire_audio_source(Audio_Player *player, Audio_Volume_Type type);
 void release_audio_source(Audio_Player *player, Audio_Source *source);
+void pause_audio_source(Audio_Source *source);
+void resume_audio_source(Audio_Source *source);
+void set_audio_source_options(Audio_Source *source, b8 looping);
 
 Audio_Stream *create_audio_stream(Audio_Player *player, void *user_pointer, Audio_Stream_Callback callback, Audio_Volume_Type type, string buffer_name);
 void destroy_audio_stream(Audio_Player *player, Audio_Stream *stream);
+void pause_audio_stream(Audio_Stream *stream);
+void resume_audio_stream(Audio_Stream *stream);
 
 void play_audio_buffer(Audio_Player *player, Audio_Buffer *buffer, Audio_Volume_Type type);
 void play_audio_buffer(Audio_Source *source, Audio_Buffer *buffer);

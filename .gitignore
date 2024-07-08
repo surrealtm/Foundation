@@ -39,3 +39,5 @@ Foundation/*
 
 # Emacs
 .emacs.*
+/data/audio/idk.wav
+/data/audio/made_of_words.flac

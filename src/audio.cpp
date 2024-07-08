@@ -190,6 +190,7 @@ void win32_release_audio_buffer(Audio_Player *player, u32 frames_to_output) {
 #endif
 
 
+
 /* ------------------------------------------------- Helpers ------------------------------------------------- */
 
 static
@@ -220,9 +221,11 @@ f32 mix_audio_samples(f32 lhs, f32 rhs_raw, f32 rhs_volume) {
 }
 
 static
-f32 query_audio_buffer(Audio_Buffer *buffer, u64 sample) {
+f32 query_audio_buffer(Audio_Buffer *buffer, u64 frame, u64 channel) {
     f32 result;
 
+    u64 sample = frame * buffer->channels + min(channel, buffer->channels);
+    
     switch(buffer->format) {
     case AUDIO_BUFFER_FORMAT_Pcm16: {
         s16 *ptr = (s16 *) buffer->data;
@@ -260,8 +263,8 @@ void update_audio_stream(Audio_Stream *stream, u32 frames_to_output) {
     // Reset the audio source to continue playing from this buffer.
     stream->frames_played_last_update      = stream->source->frame_offset_in_buffer;
     stream->source->frame_offset_in_buffer = 0;
-    stream->source->state                  = AUDIO_SOURCE_Playing;
     stream->source->playing_buffer         = &stream->buffer;
+    stream->source->state                  = AUDIO_SOURCE_Playing;
 }
 
 
@@ -299,7 +302,9 @@ void update_audio_player(Audio_Player *player) {
     //
     // Update all audio streams.
     //
-    for(Audio_Stream &stream : player->streams) update_audio_stream(&stream, frames_to_output);
+    for(Audio_Stream &stream : player->streams) {
+        if(stream.source->state != AUDIO_SOURCE_Paused) update_audio_stream(&stream, frames_to_output);
+    }
     
     //
     // Fill the platform's sound buffer for this update.
@@ -310,21 +315,26 @@ void update_audio_player(Audio_Player *player) {
         if(source.state == AUDIO_SOURCE_Playing) {
             assert(source.playing_buffer != null, "Playing audio source does not have a buffer attached.");
 
-            u32 source_frames_to_output = min(frames_to_output, (u32) (source.playing_buffer->frame_count - source.frame_offset_in_buffer));
+            u32 source_frames_to_output;
+            if(source.loop) {
+                source_frames_to_output = frames_to_output;
+            } else {
+                source_frames_to_output = min(frames_to_output, (u32) (source.playing_buffer->frame_count - source.frame_offset_in_buffer));
+            }
+
             f32 source_volume = calculate_audio_source_volume(player, &source);
 
             for(u32 i = 0; i < source_frames_to_output; ++i) {
                 for(u8 j = 0; j < AUDIO_CHANNELS; ++j) {
-                    u64 source_buffer_offset = (source.frame_offset_in_buffer + i) * source.playing_buffer->channels + j;
                     u64 output_offset = (u64) i * AUDIO_CHANNELS + j;
                     f32 output_sample = output[output_offset];
-                    f32 source_sample = query_audio_buffer(source.playing_buffer, source_buffer_offset);
+                    f32 source_sample = query_audio_buffer(source.playing_buffer, (source.frame_offset_in_buffer + i) % source.playing_buffer->frame_count, j);
                     output[output_offset] = mix_audio_samples(output_sample, source_sample, source_volume);
                 }                
             }
             
-            source.frame_offset_in_buffer += source_frames_to_output;
-            if(source.frame_offset_in_buffer == source.playing_buffer->frame_count) source.state = AUDIO_SOURCE_Completed;
+            source.frame_offset_in_buffer = (source.frame_offset_in_buffer + source_frames_to_output) % source.playing_buffer->frame_count;
+            if(!source.loop && source.frame_offset_in_buffer == source.playing_buffer->frame_count) source.state = AUDIO_SOURCE_Completed;
         }
 
         if(source.state == AUDIO_SOURCE_Completed && source.remove_on_completion) {
@@ -335,17 +345,6 @@ void update_audio_player(Audio_Player *player) {
             ++it;
             player->sources.remove_node(node_to_remove);            
         } else {        
-            if(source.state == AUDIO_SOURCE_Completed && source.loop) {
-                //
-                // Restart the current audio source.
-                // @Incomplete: Should we not maybe handle this in the above loop while iterating over the
-                // samples? This way, there's a gap whenever the source finishes in an update, because it
-                // has to wait until the next update to actually start playing again...
-                //
-                source.frame_offset_in_buffer = 0;
-                source.state = AUDIO_SOURCE_Playing;
-            }
-
             //
             // Go to the next audio source.
             //
@@ -370,15 +369,170 @@ void update_audio_player_with_silence(Audio_Player *player) {
 
 
 /* ----------------------------------------------- Audio Buffer ----------------------------------------------- */
+//
+// The WAV file header as described in:
+// http://soundfile.sapp.org/doc/WaveFormat/
+// This struct just gets layed on the file content, to parse and ensure validity of the header.
+// This file format describes all values in big endian.
+//
+
+#pragma pack(push, 1)
+struct Wav_File_Subchunk {
+    u8 id[4]; // An ascii string of four characters, identifying the type of chunk
+    u32 size; // The number of bytes of data in this chunk, excluding the id and size members.
+};
+
+struct Wav_File_Header {
+    u8 chunk_id[4]; // Expected to be "RIFF".
+    u32 chunk_size;
+    u8 format[4]; // Expected to be "WAVE".
+    Wav_File_Subchunk subchunk_1; // Expected to be the "fmt " chunk.
+    u16 audio_format;
+    u16 channel_count;
+    u32 sample_rate;
+    u32 byte_rate;
+    u16 block_align;
+    u16 bits_per_sample;
+    Wav_File_Subchunk subchunk_2;
+};
+#pragma pack(pop, 1)
+
+static
+Error_Code ensure_valid_audio_buffer_format(Audio_Buffer *buffer) {
+    Error_Code result;
+    
+    if(buffer->sample_rate != AUDIO_SAMPLE_RATE) {
+        result = ERROR_AUDIO_Invalid_Sample_Rate;
+    } else if(buffer->channels <= 0 || buffer->channels > 2) {
+        result = ERROR_AUDIO_Invalid_Channel_Count;
+    }
+    
+    return result;
+}
+
+static
+u8 *convert_pcm_to_floating_point(s16 *input, u64 input_size_in_bytes, u64 *output_size_in_bytes, Audio_Buffer_Format *format) {
+    s64 sample_count = input_size_in_bytes / sizeof(s16);
+    *output_size_in_bytes = sample_count * sizeof(f32);
+
+    f32 *output = (f32 *) Default_Allocator->allocate(*output_size_in_bytes);
+
+    for(s64 i = 0; i < sample_count; ++i) {
+        output[i] = -((f32) input[i] / (f32) MIN_S16);
+    }
+
+    *format = AUDIO_BUFFER_FORMAT_Float32;
+    
+    return (u8 *) output;
+}
+
+static
+b8 chunk_name_equals(u8 chunk_name[4], const char *expected_name) {
+    return strncmp((char *) chunk_name, expected_name, 4) == 0;
+}
+
+static
+b8 pointer_outside_of_file(string file_content, u8 *pointer, u64 size) {
+    return pointer - file_content.data < 0 || (s64) (pointer - file_content.data + size) > file_content.count;
+}
 
 Error_Code create_audio_buffer_from_wav_memory(Audio_Buffer *buffer, string file_content, string buffer_name) {
-    // @Incomplete
-    return Success;
+    buffer->name = copy_string(Default_Allocator, buffer_name);
+    buffer->__drflac_cleanup = false;
+
+    Wav_File_Header *header = (Wav_File_Header *) file_content.data;
+
+    if(pointer_outside_of_file(file_content, (u8 *) header, sizeof(Wav_File_Header))) {
+        return ERROR_File_Too_Small;
+    }
+    
+    if(!chunk_name_equals(header->chunk_id, "RIFF") || !chunk_name_equals(header->format, "WAVE") || !chunk_name_equals(header->subchunk_1.id, "fmt ")) {
+        return ERROR_AUDIO_Invalid_Wav_File;
+    }
+
+    Error_Code result = Success;
+    
+    if(header->audio_format == 0x1) {
+        //
+        // Default PCM file format. No additional data present, just the data subchunk with the raw samples.
+        //
+        if(!chunk_name_equals(header->subchunk_2.id, "data")) {
+            result = ERROR_AUDIO_Invalid_Wav_File;
+            goto _return;
+        }
+
+        if(header->bits_per_sample != 16) {
+            result = ERROR_AUDIO_Invalid_Bits_Per_Sample;
+            goto _return;
+        }
+
+        buffer->channels    = (u8) header->channel_count;
+        buffer->sample_rate = header->sample_rate;
+        buffer->frame_count = header->subchunk_2.size / (header->bits_per_sample / 8) / header->channel_count;
+        buffer->data        = convert_pcm_to_floating_point((s16 *) (file_content.data + sizeof(Wav_File_Header)), header->subchunk_2.size, &buffer->size_in_bytes, &buffer->format);
+    } else if(header->audio_format == 0x3) {
+        //
+        // Floating point file format. The file has an additional "fact" chunk to describe the used floating point
+        // format, followed by a PEAK chunk containing more information, and then the actual data sub chunk.
+        // I'm currently not sure whether the PEAK chunk is always present or if we also need to handle the
+        // case where subchunk_3 is already the data chunk...
+        //       
+        Wav_File_Subchunk *subchunk_3 = (Wav_File_Subchunk *) (((u8 *) &header->subchunk_2) + header->subchunk_2.size + 8);
+
+        if(pointer_outside_of_file(file_content, (u8 *) subchunk_3, sizeof(Wav_File_Subchunk))) {
+            result = ERROR_File_Too_Small;
+            goto _return;
+        }
+
+        Wav_File_Subchunk *subchunk_4 = (Wav_File_Subchunk *) (((u8 *) subchunk_3) + subchunk_3->size + 8);
+
+        if(pointer_outside_of_file(file_content, (u8 *) subchunk_4, sizeof(Wav_File_Subchunk))) {
+            result = ERROR_File_Too_Small;
+            goto _return;
+        }
+
+        if(!chunk_name_equals(subchunk_3->id, "PEAK") || !chunk_name_equals(subchunk_4->id, "data")) {
+            result = ERROR_AUDIO_Invalid_Wav_File;
+            goto _return;
+        }
+
+        if(header->bits_per_sample != 32) {
+            result = ERROR_AUDIO_Invalid_Bits_Per_Sample;
+            goto _return;
+        }
+
+        u8 *data = (u8 *) Default_Allocator->allocate(subchunk_4->size);
+        memcpy(data, subchunk_4 + 8, subchunk_4->size);
+
+        buffer->format        = AUDIO_BUFFER_FORMAT_Float32;
+        buffer->channels      = (u8) header->channel_count;
+        buffer->sample_rate   = header->sample_rate;
+        buffer->frame_count   = subchunk_4->size / (header->bits_per_sample / 8) / buffer->channels;
+        buffer->data          = data;
+        buffer->size_in_bytes = subchunk_4->size;
+    } else {
+        result = ERROR_AUDIO_Invalid_Wav_File;
+        goto _return;
+    }
+    
+    result = ensure_valid_audio_buffer_format(buffer);
+
+ _return:
+
+    return result;
 }
 
 Error_Code create_audio_buffer_from_wav_file(Audio_Buffer *buffer, string file_path) {
-    // @Incomplete
-    return Success;
+    string file_content = os_read_file(Default_Allocator, file_path);
+    if(!file_content.count) {
+        return ERROR_File_Not_Found;
+    }
+
+    Error_Code result = create_audio_buffer_from_wav_memory(buffer, file_content, file_path);
+
+    os_free_file_content(Default_Allocator, &file_content);
+    
+    return result;
 }
 
 Error_Code create_audio_buffer_from_flac_memory(Audio_Buffer *buffer, string file_content, string buffer_name) {
@@ -436,6 +590,19 @@ void release_audio_source(Audio_Player *player, Audio_Source *source) {
     player->sources.remove_value_pointer(source);
 }
 
+void pause_audio_source(Audio_Source *source) {
+    source->state = AUDIO_SOURCE_Paused;
+}
+
+void resume_audio_source(Audio_Source *source) {
+    if(source->playing_buffer != null) source->state = AUDIO_SOURCE_Playing;
+}
+
+void set_audio_source_options(Audio_Source *source, b8 looping) {
+    source->loop = looping;
+}
+
+
 Audio_Stream *create_audio_stream(Audio_Player *player, void *user_pointer, Audio_Stream_Callback callback, Audio_Volume_Type type, string buffer_name) {
     Audio_Stream *stream = player->streams.push();
     stream->user_pointer = user_pointer;
@@ -450,6 +617,16 @@ void destroy_audio_stream(Audio_Player *player, Audio_Stream *stream) {
     destroy_audio_buffer(&stream->buffer);
     player->streams.remove_value_pointer(stream);
 }
+
+
+void pause_audio_stream(Audio_Stream *stream) {
+    stream->source->state = AUDIO_SOURCE_Paused;
+}
+
+void resume_audio_stream(Audio_Stream *stream) {
+    stream->source->state = AUDIO_SOURCE_Playing;
+}
+
 
 void play_audio_buffer(Audio_Player *player, Audio_Buffer *buffer, Audio_Volume_Type type) {
     Audio_Source *source = acquire_audio_source(player, type);

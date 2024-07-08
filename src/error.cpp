@@ -8,6 +8,7 @@ string error_string_table[] = {
     /* Default Errors */
     "<Unspecified Error>"_s,
     "The file does not exist"_s,
+    "The file is too small"_s,
     "Invalid version"_s,
 
     /* D3D11 Layer Errors */
@@ -29,6 +30,12 @@ string error_string_table[] = {
     "Host Down"_s,
     "Host Unreachable"_s,
     "Host Not Found"_s,
+
+    /* Audio Errors */
+    "Invalid Sample Rate"_s,
+    "Invalid Channel Count"_s,
+    "Invalid Bits Per Sample"_s,
+    "Invalid Wav File"_s,
 };
 
 static_assert(ARRAY_COUNT(error_string_table) == ERROR_COUNT, "The error_string_table has the wrong size.");
