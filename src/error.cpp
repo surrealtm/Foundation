@@ -49,21 +49,24 @@ string error_string(Error_Code code) {
     return error_string_table[code];
 }
 
-void set_custom_error_message(string message) {
+Error_Code set_custom_error_message(string message) {
     internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), message.count);
     copy_cstring(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), (const char *) message.data, internal_custom_error_message_count);
+    return ERROR_Custom_Error_Message;
 }
 
-void set_custom_error_message(const char *message, s64 count) {
+Error_Code set_custom_error_message(const char *message, s64 count) {
     internal_custom_error_message_count = min(ARRAY_COUNT(internal_custom_error_message_buffer), count);
     copy_cstring(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), message, internal_custom_error_message_count);
+    return ERROR_Custom_Error_Message;
 }
 
-void set_custom_error_message(const char *format, ...) {
+Error_Code set_custom_error_message(const char *format, ...) {
     va_list args;
     va_start(args, format);
     internal_custom_error_message_count = vsnprintf(internal_custom_error_message_buffer, ARRAY_COUNT(internal_custom_error_message_buffer), format, args);
     va_end(args);
+    return ERROR_Custom_Error_Message;
 }
 
 string get_custom_error_message() {

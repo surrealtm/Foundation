@@ -41,7 +41,7 @@ enum Error_Code {
 };
 
 string error_string(Error_Code code);
-void set_custom_error_message(string message);
-void set_custom_error_message(const char *message, s64 message_count);
-void set_custom_error_message(const char *format, ...);
+Error_Code set_custom_error_message(string message);
+Error_Code set_custom_error_message(const char *message, s64 message_count);
+Error_Code set_custom_error_message(const char *format, ...);
 string get_custom_error_message();

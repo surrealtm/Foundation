@@ -159,7 +159,7 @@ int main() {
     pause_audio_stream(stream);
 
     Audio_Buffer buffer;
-    create_audio_buffer_from_wav_file(&buffer, "data/audio/blep.wav"_s);
+    create_audio_buffer_from_flac_file(&buffer, "data/audio/made_of_words.flac"_s);
 
     Audio_Source *source = acquire_audio_source(&player, AUDIO_VOLUME_Master);
     set_audio_source_options(source, true);

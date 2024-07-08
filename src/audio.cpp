@@ -1,5 +1,6 @@
 #include "audio.h"
 #include "os_specific.h"
+#include "drflac.h"
 
 #if FOUNDATION_WIN32
 # include <mmdeviceapi.h>
@@ -537,12 +538,32 @@ Error_Code create_audio_buffer_from_wav_file(Audio_Buffer *buffer, string file_p
 
 Error_Code create_audio_buffer_from_flac_memory(Audio_Buffer *buffer, string file_content, string buffer_name) {
     // @Incomplete
+    buffer->name = copy_string(Default_Allocator, buffer_name);
+    buffer->__drflac_cleanup = true;
+
+    buffer->data = (u8 *) drflac_open_memory_and_read_pcm_frames_f32(file_content.data, file_content.count, (unsigned int *) &buffer->channels, (unsigned int *) &buffer->sample_rate, &buffer->frame_count, null);
+
+    if(!buffer->data) {
+        return set_custom_error_message("Failed to read FLAC file.");
+    }
+
+    buffer->format = AUDIO_BUFFER_FORMAT_Float32;
+    buffer->size_in_bytes = buffer->frame_count * buffer->channels * sizeof(f32);
+    
     return Success;
 }
 
 Error_Code create_audio_buffer_from_flac_file(Audio_Buffer *buffer, string file_path) {
-    // @Incomplete
-    return Success;
+    string file_content = os_read_file(Default_Allocator, file_path);
+    if(!file_content.count) {
+        return ERROR_File_Not_Found;
+    }
+
+    Error_Code result = create_audio_buffer_from_flac_memory(buffer, file_content, file_path);
+
+    os_free_file_content(Default_Allocator, &file_content);
+    
+    return result;
 }
 
 void create_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name) {
@@ -558,7 +579,7 @@ void create_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 ch
 
 void destroy_audio_buffer(Audio_Buffer *buffer) {
     if(buffer->__drflac_cleanup) {
-        // @Incomplete
+        drflac_free(buffer->data, null);
     } else {
         Default_Allocator->deallocate(buffer->data);
     }
