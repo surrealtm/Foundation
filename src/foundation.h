@@ -123,6 +123,8 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 #define min(lhs, rhs) ((lhs) < (rhs) ? (lhs) : (rhs))
 #define max(lhs, rhs) ((lhs) > (rhs) ? (lhs) : (rhs))
 
+#define sign(value) ((value) > 0 ? 1 : ((value) < 0 ? -1 : 0))
+
 #define clamp(value, min, max) (((value) < (min)) ? (min) : ((value) > (max) ? (max) : value))
 
 #define BITWISE(T)                                                      \

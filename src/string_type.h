@@ -116,13 +116,13 @@ struct String_Builder_Format {
 	u64 value;
 	u8  digits; // For binary, decimal, hexadecimal: Number of digits to print out in total. For floating point: Number of decimal digit.
 	u8  fractionals; // Only for floating point: Number of fractional digits.
-	b8  sign;
+	b8  _signed;
 	b8  prefix;
 
-	String_Builder_Format(Radix radix, u64 value, u8 digits = MAX_U8, u8 fractionals = MAX_U8, b8 sign = false, b8 prefix = true) :
-		radix(radix), value(value), digits(digits), fractionals(fractionals), sign(sign), prefix(prefix) {};
-	String_Builder_Format(Radix radix, s64 value, u8 digits = MAX_U8, u8 fractionals = MAX_U8, b8 sign = true, b8 prefix = true) :
-		radix(radix), value(value), digits(digits), fractionals(fractionals), sign(sign), prefix(prefix) {};
+	String_Builder_Format(Radix radix, u64 value, u8 digits = MAX_U8, u8 fractionals = MAX_U8, b8 _signed = false, b8 prefix = true) :
+		radix(radix), value(value), digits(digits), fractionals(fractionals), _signed(_signed), prefix(prefix) {};
+	String_Builder_Format(Radix radix, s64 value, u8 digits = MAX_U8, u8 fractionals = MAX_U8, b8 _signed = true, b8 prefix = true) :
+		radix(radix), value(value), digits(digits), fractionals(fractionals), _signed(_signed), prefix(prefix) {};
 };
 
 struct String_Builder {

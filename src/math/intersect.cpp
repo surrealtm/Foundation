@@ -210,11 +210,11 @@ b8 point_inside_triangle(const v2<T> &point, const v2<T> &p0, const v2<T> &p1, c
     //
     // https://stackoverflow.com/questions/2049582/how-to-determine-if-a-point-is-in-a-2d-triangle
     //
-#define sign(p0, p1, p2) ((p0.x - p2.x) * (p1.y - p2.y) - (p1.x - p2.x) * (p0.y - p2.y))
+#define edge_sign(p0, p1, p2) ((p0.x - p2.x) * (p1.y - p2.y) - (p1.x - p2.x) * (p0.y - p2.y))
     
-    T d0 = sign(point, p0, p1);
-    T d1 = sign(point, p1, p2);
-    T d2 = sign(point, p2, p0);
+    T d0 = edge_sign(point, p0, p1);
+    T d1 = edge_sign(point, p1, p2);
+    T d2 = edge_sign(point, p2, p0);
 
 #undef sign
 

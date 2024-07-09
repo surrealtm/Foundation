@@ -1,10 +1,15 @@
 #include "audio.h"
+#include "math/maths.h"
 #include "os_specific.h"
 #include "drflac.h"
 
 #if FOUNDATION_WIN32
 # include <mmdeviceapi.h>
 # include <audioclient.h>
+
+// The order in which the samples are interpreted by the OS
+# define RIGHT_AUDIO_CHANNEL 0
+# define LEFT_AUDIO_CHANNEL  1
 
 struct Audio_Win32_State {
     IMMDevice *device;
@@ -207,16 +212,6 @@ u64 get_size_in_bytes_per_frame(Audio_Buffer_Format format, u8 channels) {
 }
 
 static
-f32 calculate_audio_source_volume(Audio_Mixer *mixer, Audio_Source *source) {
-    if(source->volume_type != AUDIO_VOLUME_Master) {
-        return mixer->volumes[AUDIO_VOLUME_Master] * mixer->volumes[source->volume_type] * source->volume;
-    } else {
-        return mixer->volumes[AUDIO_VOLUME_Master] * source->volume;
-    }
-
-}
-
-static
 f32 mix_audio_samples(f32 lhs, f32 rhs_raw, f32 rhs_volume) {
     return tanhf(lhs + rhs_raw * rhs_volume);
 }
@@ -240,135 +235,6 @@ f32 query_audio_buffer(Audio_Buffer *buffer, u64 frame, u64 channel) {
     }
     
     return result;
-}
-
-static
-void update_audio_stream(Audio_Stream *stream, u32 frames_to_output) {
-    u64 frame_size_in_bytes = get_size_in_bytes_per_frame(stream->buffer.format, stream->buffer.channels);
-
-    // Move all the frames in the buffer that have not yet been played to the front, so that the source
-    // will play them next.
-    u64 still_valid_frames = stream->buffer.frame_count - stream->source->frame_offset_in_buffer;
-    memmove(&stream->buffer.data[0], &stream->buffer.data[still_valid_frames], still_valid_frames * frame_size_in_bytes);
-
-    // Calculate the number of frames to generate this update to fill the audio buffer.
-    u64 requested_frames   = frames_to_output - still_valid_frames;
-    u64 storable_frames    = stream->buffer.size_in_bytes / frame_size_in_bytes;
-    u64 frames_to_generate = min(requested_frames, storable_frames);
-
-    // Generate the new frames and copy them into the audio buffer
-    f32 *frames = stream->callback(stream->user_pointer, frames_to_generate);
-    memcpy(&stream->buffer.data[still_valid_frames], frames, frames_to_generate * frame_size_in_bytes);
-    stream->buffer.frame_count = still_valid_frames + frames_to_generate;
-
-    // Reset the audio source to continue playing from this buffer.
-    stream->frames_played_last_update      = stream->source->frame_offset_in_buffer;
-    stream->source->frame_offset_in_buffer = 0;
-    stream->source->playing_buffer         = &stream->buffer;
-    stream->source->state                  = AUDIO_SOURCE_Playing;
-}
-
-
-
-/* ----------------------------------------------- Audio Mixer ----------------------------------------------- */
-
-Error_Code create_audio_mixer(Audio_Mixer *mixer) {
-    for(s64 i = 0; i < AUDIO_VOLUME_COUNT; ++i)
-        mixer->volumes[i] = 1.f;
-
-#if FOUNDATION_WIN32
-    return win32_create_audio_mixer(mixer);
-#endif
-    
-    return Success;
-}
-
-void destroy_audio_mixer(Audio_Mixer *mixer) {
-#if FOUNDATION_WIN32
-    win32_destroy_audio_mixer(mixer);
-#endif
-}
-
-void update_audio_mixer(Audio_Mixer *mixer) {
-    //
-    // Get the OS's internal sound buffer into which we will update.
-    //
-    u32 frames_to_output;
-    f32 *output;
-
-#if FOUNDATION_WIN32
-    output = win32_acquire_audio_buffer(mixer, &frames_to_output);
-#endif
-
-    //
-    // Update all audio streams.
-    //
-    for(Audio_Stream &stream : mixer->streams) {
-        if(stream.source->state != AUDIO_SOURCE_Paused) update_audio_stream(&stream, frames_to_output);
-    }
-    
-    //
-    // Fill the platform's sound buffer for this update.
-    //
-    for(auto it = mixer->sources.begin(); it != mixer->sources.end(); ) {
-        Audio_Source &source = it.pointer->data;
-        
-        if(source.state == AUDIO_SOURCE_Playing) {
-            assert(source.playing_buffer != null, "Playing audio source does not have a buffer attached.");
-
-            u32 source_frames_to_output;
-            if(source.loop) {
-                source_frames_to_output = frames_to_output;
-            } else {
-                source_frames_to_output = min(frames_to_output, (u32) (source.playing_buffer->frame_count - source.frame_offset_in_buffer));
-            }
-
-            f32 source_volume = calculate_audio_source_volume(mixer, &source);
-
-            for(u32 i = 0; i < source_frames_to_output; ++i) {
-                for(u8 j = 0; j < AUDIO_CHANNELS; ++j) {
-                    u64 output_offset = (u64) i * AUDIO_CHANNELS + j;
-                    f32 output_sample = output[output_offset];
-                    f32 source_sample = query_audio_buffer(source.playing_buffer, (source.frame_offset_in_buffer + i) % source.playing_buffer->frame_count, j);
-                    output[output_offset] = mix_audio_samples(output_sample, source_sample, source_volume);
-                }                
-            }
-
-            if(source.loop) {
-                source.frame_offset_in_buffer = (source.frame_offset_in_buffer + source_frames_to_output) % source.playing_buffer->frame_count;
-            } else {
-                source.frame_offset_in_buffer += source_frames_to_output;
-                if(source.frame_offset_in_buffer == source.playing_buffer->frame_count) source.state = AUDIO_SOURCE_Completed;
-            }
-        }
-
-        if(source.state == AUDIO_SOURCE_Completed && source.remove_on_completion) {
-            //
-            // Remove this source from the linked list.
-            //
-            auto node_to_remove = it.pointer;
-            ++it;
-            mixer->sources.remove_node(node_to_remove);            
-        } else {        
-            //
-            // Go to the next audio source.
-            //
-            ++it;
-        }
-    }
-
-#if FOUNDATION_WIN32
-    win32_release_audio_buffer(mixer, frames_to_output);
-#endif
-}
-
-void update_audio_mixer_with_silence(Audio_Mixer *mixer) {
-    u32 frames_to_output;
-
-#if FOUNDATION_WIN32
-    win32_acquire_audio_buffer(mixer, &frames_to_output);
-    win32_release_audio_buffer(mixer, frames_to_output);
-#endif
 }
 
 
@@ -602,18 +468,89 @@ void destroy_audio_buffer(Audio_Buffer *buffer, Allocator *allocator) {
 
 /* ----------------------------------------------- Audio Source ----------------------------------------------- */
 
-Audio_Source *acquire_audio_source(Audio_Mixer *mixer, Audio_Volume_Type type) {
-    Audio_Source *source         = mixer->sources.push();
-    source->volume_type          = type;
-    source->state                = AUDIO_SOURCE_Paused;
-    source->remove_on_completion = false;
-    source->volume               = 1.f;
-    source->loop                 = false;
+static inline
+f32 normalize_angle(f32 angle) {
+    angle = fmodf(angle, FTAU);
+    if(angle < 0) angle += FTAU;
+    return angle;
+}
+
+static inline
+f32 calculate_source_gain(Audio_Mixer *mixer, Audio_Source *source) {
+    if(source->volume_type != AUDIO_VOLUME_Master) {
+        return mixer->volumes[AUDIO_VOLUME_Master] * mixer->volumes[source->volume_type] * source->volume;
+    } else {
+        return mixer->volumes[AUDIO_VOLUME_Master] * source->volume;
+    }
+
+}
+
+static
+Audio_Arc *find_arc_for_panning(Audio_Listener *listener, f32 panning_angle) {
+    for(Audio_Arc &arc : listener->arcs) {
+        f32 delta = normalize_angle(panning_angle - arc.left_angle);
+        if(delta <= arc.covered_angle) return &arc;
+    }
+
+    return null;
+}
+
+static inline
+f32 calculate_blending_percentage_for_arc(Audio_Arc *arc, f32 panning_angle) {
+    return normalize_angle(panning_angle - arc->left_angle) / arc->covered_angle;
+}
+
+static
+void calculate_source_channel_pans(Audio_Listener *listener, Audio_Source *source, f32 *channels) {
+    f32 dx = source->x - listener->x, dy = source->y - listener->y, dz = source->z - listener->z;
+
+    f32 distance = sqrtf(dx * dx + dy * dy + dz * dz);
+    f32 distance_attenuation = clamp(1.f / (distance - source->falloff_start), 0.f, 1.f);
+
+    f32 px = dx - listener->ux * dx, py = dy - listener->uy * dy, pz = dz - listener->uz * dz; // Project the delta vector onto the horizontal listener plane.
+
+    f32 u = px * listener->fx + py * listener->fy + pz * listener->fz;
+    f32 v = px * listener->rx + py * listener->ry + pz * listener->rz;
+
+    f32 denom = 1.f / sqrtf(u * u + v * v); // Normalize the horizontal direction vector
+    u *= denom;
+    v *= denom;
+
+    f32 panning_angle = atan2f(v, u); // Put the sound angle in the range [0;2PI]
+
+    Audio_Arc *arc = find_arc_for_panning(listener, panning_angle);
+    if(!arc) return; // This should never happen
+
+    f32 beta = calculate_blending_percentage_for_arc(arc, panning_angle);
+    channels[arc->left_channel]  *= sinf(FPI / 2.f * beta);
+    channels[arc->right_channel] *= cosf(FPI / 2.f * beta);
+}
+
+Audio_Source *acquire_audio_source(Audio_Mixer *mixer, Audio_Volume_Type type, b8 spatialized) {
+    Audio_Source *source           = mixer->sources.push();
+    source->state                  = AUDIO_SOURCE_Paused;
+    source->volume_type            = type;
+    source->remove_on_completion   = false;
+    source->playing_buffer         = null;
+    source->frame_offset_in_buffer = 0;
+    source->volume                 = 1.f;
+    source->loop                   = false;
+    source->spatialized            = spatialized;
+    source->x                      = 0;
+    source->y                      = 0;
+    source->z                      = 0;
+    source->falloff_start          = 10.f;
     return source;
 }
 
 void release_audio_source(Audio_Mixer *mixer, Audio_Source *source) {
     mixer->sources.remove_value_pointer(source);
+}
+
+void stop_audio_source(Audio_Source *source) {
+    source->state = AUDIO_SOURCE_Completed;
+    source->playing_buffer = null;
+    source->frame_offset_in_buffer = 0;
 }
 
 void pause_audio_source(Audio_Source *source) {
@@ -624,16 +561,64 @@ void resume_audio_source(Audio_Source *source) {
     if(source->playing_buffer != null) source->state = AUDIO_SOURCE_Playing;
 }
 
-void set_audio_source_options(Audio_Source *source, b8 looping) {
+void set_audio_source_looping(Audio_Source *source, b8 looping) {
     source->loop = looping;
 }
 
+void play_audio_buffer(Audio_Mixer *mixer, Audio_Buffer *buffer, Audio_Volume_Type type, b8 spatialized) {
+    Audio_Source *source = acquire_audio_source(mixer, type, spatialized);
+    source->remove_on_completion = true;
+    play_audio_buffer(source, buffer);
+}
 
-Audio_Stream *create_audio_stream(Audio_Mixer *mixer, void *user_pointer, Audio_Stream_Callback callback, Audio_Volume_Type type, string buffer_name, Allocator *allocator) {
+void play_audio_buffer(Audio_Source *source, Audio_Buffer *buffer) {
+    source->playing_buffer = buffer;
+    source->frame_offset_in_buffer = 0;
+    source->state = AUDIO_SOURCE_Playing;
+}
+
+void set_audio_source_transformation(Audio_Source *source, f32 x, f32 y, f32 z, f32 falloff_start) {
+    source->x = x;
+    source->y = y;
+    source->z = z;
+    source->falloff_start = falloff_start;
+}
+
+
+
+/* ----------------------------------------------- Audio Stream ----------------------------------------------- */
+
+static
+void update_audio_stream(Audio_Stream *stream, u32 frames_to_output) {
+    u64 frame_size_in_bytes = get_size_in_bytes_per_frame(stream->buffer.format, stream->buffer.channels);
+
+    // Move all the frames in the buffer that have not yet been played to the front, so that the source
+    // will play them next.
+    u64 still_valid_frames = stream->buffer.frame_count - stream->source->frame_offset_in_buffer;
+    memmove(&stream->buffer.data[0], &stream->buffer.data[still_valid_frames], still_valid_frames * frame_size_in_bytes);
+
+    // Calculate the number of frames to generate this update to fill the audio buffer.
+    u64 requested_frames   = frames_to_output - still_valid_frames;
+    u64 storable_frames    = stream->buffer.size_in_bytes / frame_size_in_bytes;
+    u64 frames_to_generate = min(requested_frames, storable_frames);
+
+    // Generate the new frames and copy them into the audio buffer
+    f32 *frames = stream->callback(stream->user_pointer, frames_to_generate);
+    memcpy(&stream->buffer.data[still_valid_frames], frames, frames_to_generate * frame_size_in_bytes);
+    stream->buffer.frame_count = still_valid_frames + frames_to_generate;
+
+    // Reset the audio source to continue playing from this buffer.
+    stream->frames_played_last_update      = stream->source->frame_offset_in_buffer;
+    stream->source->frame_offset_in_buffer = 0;
+    stream->source->playing_buffer         = &stream->buffer;
+    stream->source->state                  = AUDIO_SOURCE_Playing;
+}
+
+Audio_Stream *create_audio_stream(Audio_Mixer *mixer, void *user_pointer, Audio_Stream_Callback callback, Audio_Volume_Type type, b8 spatialized, string buffer_name, Allocator *allocator) {
     Audio_Stream *stream = mixer->streams.push();
     stream->user_pointer = user_pointer;
     stream->callback = callback;
-    stream->source = acquire_audio_source(mixer, type);
+    stream->source = acquire_audio_source(mixer, type, spatialized);
     create_audio_buffer(&stream->buffer, AUDIO_BUFFER_FORMAT_Float32, AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_SAMPLES_PER_UPDATE * 4, buffer_name, allocator);
     return stream;
 }
@@ -644,7 +629,6 @@ void destroy_audio_stream(Audio_Mixer *mixer, Audio_Stream *stream, Allocator *a
     mixer->streams.remove_value_pointer(stream);
 }
 
-
 void pause_audio_stream(Audio_Stream *stream) {
     stream->source->state = AUDIO_SOURCE_Paused;
 }
@@ -654,14 +638,158 @@ void resume_audio_stream(Audio_Stream *stream) {
 }
 
 
-void play_audio_buffer(Audio_Mixer *mixer, Audio_Buffer *buffer, Audio_Volume_Type type) {
-    Audio_Source *source = acquire_audio_source(mixer, type);
-    source->remove_on_completion = true;
-    play_audio_buffer(source, buffer);
+
+/* ----------------------------------------------- Audio Mixer ----------------------------------------------- */
+
+static
+void setup_arc(Audio_Listener *listener, s8 arc_index, s8 left_channel, s8 right_channel, f32 left_angle, f32 right_angle) {
+    assert(arc_index >= 0 && arc_index < ARRAY_COUNT(listener->arcs));
+    listener->arcs[arc_index].left_channel  = left_channel;
+    listener->arcs[arc_index].right_channel = right_channel;
+    listener->arcs[arc_index].left_angle    = degrees_to_radians(left_angle);
+    listener->arcs[arc_index].right_angle   = degrees_to_radians(right_angle);
+    listener->arcs[arc_index].covered_angle = normalize_angle(degrees_to_radians(right_angle - left_angle));
 }
 
-void play_audio_buffer(Audio_Source *source, Audio_Buffer *buffer) {
-    source->playing_buffer = buffer;
-    source->frame_offset_in_buffer = 0;
-    source->state = AUDIO_SOURCE_Playing;
+Error_Code create_audio_mixer(Audio_Mixer *mixer) {
+    // Set up the base volumes.
+    for(s64 i = 0; i < AUDIO_VOLUME_COUNT; ++i)
+        mixer->volumes[i] = 1.f;
+
+    // Set up the listener.
+    mixer->listener.x  = 0;
+    mixer->listener.y  = 0;
+    mixer->listener.z  = 0;
+    mixer->listener.fx = 0;
+    mixer->listener.fy = 0;
+    mixer->listener.fz = -1;
+    mixer->listener.ux = 0;
+    mixer->listener.uy = 1;
+    mixer->listener.uz = 0;
+    mixer->listener.rx = 1;
+    mixer->listener.ry = 0;
+    mixer->listener.rz = 0;
+
+#if AUDIO_CHANNELS == 2
+    // One arc covers the front-side of the listening circle, the other arc covers the back-side of the circle.
+    const b8 headphones = true;
+    const f32 angle = headphones ? 90 : 45;    
+    setup_arc(&mixer->listener, 0, LEFT_AUDIO_CHANNEL, RIGHT_AUDIO_CHANNEL, -angle, +angle);
+    setup_arc(&mixer->listener, 1, RIGHT_AUDIO_CHANNEL, LEFT_AUDIO_CHANNEL, +angle, -angle);
+#endif
+    
+#if FOUNDATION_WIN32
+    return win32_create_audio_mixer(mixer);
+#endif
+    
+    return Success;
+}
+
+void destroy_audio_mixer(Audio_Mixer *mixer) {
+#if FOUNDATION_WIN32
+    win32_destroy_audio_mixer(mixer);
+#endif
+}
+
+void update_audio_mixer(Audio_Mixer *mixer) {
+    //
+    // Get the OS's internal sound buffer into which we will update.
+    //
+    u32 frames_to_output;
+    f32 *output;
+
+#if FOUNDATION_WIN32
+    output = win32_acquire_audio_buffer(mixer, &frames_to_output);
+#endif
+
+    //
+    // Update all audio streams.
+    //
+    for(Audio_Stream &stream : mixer->streams) {
+        if(stream.source->state != AUDIO_SOURCE_Paused) update_audio_stream(&stream, frames_to_output);
+    }
+    
+    //
+    // Fill the platform's sound buffer for this update.
+    //
+    for(auto it = mixer->sources.begin(); it != mixer->sources.end(); ) {
+        Audio_Source &source = it.pointer->data;
+        
+        if(source.state == AUDIO_SOURCE_Playing) {
+            assert(source.playing_buffer != null, "Playing audio source does not have a buffer attached.");
+
+            u32 source_frames_to_output;
+            if(source.loop) {
+                source_frames_to_output = frames_to_output;
+            } else {
+                source_frames_to_output = min(frames_to_output, (u32) (source.playing_buffer->frame_count - source.frame_offset_in_buffer));
+            }
+
+            f32 gain = calculate_source_gain(mixer, &source);
+            f32 pan[AUDIO_CHANNELS];
+            for(s64 i = 0; i < AUDIO_CHANNELS; ++i) pan[i] = gain;
+
+            if(source.spatialized && ARRAY_COUNT(mixer->listener.arcs) > 1) {
+                calculate_source_channel_pans(&mixer->listener, &source, pan);
+            }
+           
+            for(u32 i = 0; i < source_frames_to_output; ++i) {
+                for(u8 j = 0; j < AUDIO_CHANNELS; ++j) {
+                    u64 output_offset = (u64) i * AUDIO_CHANNELS + j;
+                    f32 output_sample = output[output_offset];
+                    f32 source_sample = query_audio_buffer(source.playing_buffer, (source.frame_offset_in_buffer + i) % source.playing_buffer->frame_count, j);
+                    output[output_offset] = mix_audio_samples(output_sample, source_sample, pan[j]);
+                }                
+            }
+
+            if(source.loop) {
+                source.frame_offset_in_buffer = (source.frame_offset_in_buffer + source_frames_to_output) % source.playing_buffer->frame_count;
+            } else {
+                source.frame_offset_in_buffer += source_frames_to_output;
+                if(source.frame_offset_in_buffer == source.playing_buffer->frame_count) source.state = AUDIO_SOURCE_Completed;
+            }
+        }
+
+        if(source.state == AUDIO_SOURCE_Completed && source.remove_on_completion) {
+            //
+            // Remove this source from the linked list.
+            //
+            auto node_to_remove = it.pointer;
+            ++it;
+            mixer->sources.remove_node(node_to_remove);            
+        } else {        
+            //
+            // Go to the next audio source.
+            //
+            ++it;
+        }
+    }
+
+#if FOUNDATION_WIN32
+    win32_release_audio_buffer(mixer, frames_to_output);
+#endif
+}
+
+void update_audio_mixer_with_silence(Audio_Mixer *mixer) {
+    u32 frames_to_output;
+
+#if FOUNDATION_WIN32
+    win32_acquire_audio_buffer(mixer, &frames_to_output);
+    win32_release_audio_buffer(mixer, frames_to_output);
+#endif
+}
+
+void update_audio_listener(Audio_Mixer *mixer, f32 x, f32 y, f32 z, f32 fx, f32 fy, f32 fz, f32 ux, f32 uy, f32 uz, f32 rx, f32 ry, f32 rz) {
+    mixer->listener.x  = x;
+    mixer->listener.y  = y;
+    mixer->listener.z  = z;
+    mixer->listener.fx = fx;
+    mixer->listener.fy = fy;
+    mixer->listener.fz = fz;
+    mixer->listener.ux = ux;
+    mixer->listener.uy = uy;
+    mixer->listener.uz = uz;
+    mixer->listener.rx = rx;
+    mixer->listener.ry = ry;
+    mixer->listener.rz = rz;
 }

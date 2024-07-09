@@ -626,7 +626,7 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
         }
     }
 
-    if(format.radix == RADIX_Binary || format.radix == RADIX_Hexadecimal || (format.radix == RADIX_Decimal && !format.sign)) {
+    if(format.radix == RADIX_Binary || format.radix == RADIX_Hexadecimal || (format.radix == RADIX_Decimal && !format._signed)) {
         u64 value = format.value;
         u64 required_digits = this->number_of_required_digits(format.radix, value);
 
@@ -653,7 +653,7 @@ void String_Builder::append_string_builder_format(String_Builder_Format format) 
             value -= digit * power;
             --index;
         }
-    } else if(format.radix == RADIX_Decimal && format.sign) {
+    } else if(format.radix == RADIX_Decimal && format._signed) {
         u64 value = format.value;
         u64 required_digits = this->number_of_required_digits(format.radix, (s64) value);
 
@@ -899,7 +899,7 @@ string mprint(Allocator *allocator, const char *format, ...) {
     string result = allocate_string(allocator, count);
     va_list list1;
     va_start(list1, format);
-    vsnprintf((char *) result.data, result.count, format, list1); // Don't do the terminating null character!
+    vsnprintf((char *) result.data, result.count + 1, format, list1); // Don't do the terminating null character!
     va_end(list1);
 
     return result;
