@@ -246,12 +246,12 @@ void destroy_d3d11() {
 
 static
 void restore_d3d11_fullscreen_state(Window *window) {
-    set_d3d11_fullscreen(window, true);
+    set_d3d11_fullscreen(window, window->active, true);
 }
 
-void create_d3d11_context(Window *window) {
+void create_d3d11_context(Window *window, b8 fullscreen) {
     create_d3d11_device();
-    
+
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
     
     DXGI_SWAP_CHAIN_DESC1 swapchain_description{};
@@ -266,10 +266,10 @@ void create_d3d11_context(Window *window) {
     swapchain_description.Scaling            = DXGI_SCALING_STRETCH;
     swapchain_description.SwapEffect         = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
     swapchain_description.AlphaMode          = DXGI_ALPHA_MODE_UNSPECIFIED;
-    swapchain_description.Flags              = 0;
+    swapchain_description.Flags              = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
     
     D3D11_CALL(dxgi_factory->CreateSwapChainForHwnd(d3d_device, (HWND) window_extract_hwnd(window), &swapchain_description, null, null, &d3d11->swapchain));
-    
+
     d3d11->default_frame_buffer = (Frame_Buffer *) Default_Allocator->allocate(sizeof(Frame_Buffer));
     d3d11->default_frame_buffer->samples          = 1;
     d3d11->default_frame_buffer->color_count      = 1;
@@ -281,6 +281,8 @@ void create_d3d11_context(Window *window) {
     
     D3D11_CALL(d3d11->swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) &d3d11->default_frame_buffer->colors[0].texture));
     D3D11_CALL(d3d_device->CreateRenderTargetView(d3d11->default_frame_buffer->colors[0].texture, 0, &d3d11->default_frame_buffer->colors[0].render_view));    
+    
+    if(fullscreen) set_d3d11_fullscreen(window, true);
 }
 
 void destroy_d3d11_context(Window *window) {
@@ -299,11 +301,16 @@ void swap_d3d11_buffers(Window *window) {
     d3d11->swapchain->Present(1, 0);
 }
 
-void set_d3d11_fullscreen(Window *window, b8 fullscreen) {
+void set_d3d11_fullscreen(Window *window, b8 fullscreen, b8 internal_restoration) {
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
     if(d3d11->swapchain) {
-        d3d11->swapchain->SetFullscreenState(fullscreen, null);
-        window->callback_on_activation = fullscreen ? (Window_Callback) restore_d3d11_fullscreen_state : null;
+        D3D11_CALL(d3d11->swapchain->SetFullscreenState(fullscreen, null));
+        resize_default_frame_buffer(window);
+
+        // This is required so restore the fullscreen state when our window gets activated again.
+        // If the user tabs out of this game, we obviously want to release our fullscreen mode so
+        // that the user can actually use their machine.
+        window->callback_on_activation = fullscreen || internal_restoration ? (Window_Callback) restore_d3d11_fullscreen_state : null;
     }
 }
 
@@ -319,20 +326,22 @@ Frame_Buffer *get_default_frame_buffer(Window *window) {
 void resize_default_frame_buffer(Window *window) {
     Window_D3D11_State *d3d11 = (Window_D3D11_State *) window->graphics_data;
     
-    // Release all outstanding references to the swap chain's buffer, because we cannot
-    // resize the swap chain otherwise.
-    d3d11->default_frame_buffer->colors[0].texture->Release();
-    d3d11->default_frame_buffer->colors[0].render_view->Release();
+    if(d3d11->swapchain) {
+        // Release all outstanding references to the swap chain's buffer, because we cannot
+        // resize the swap chain otherwise.
+        d3d11->default_frame_buffer->colors[0].texture->Release();
+        d3d11->default_frame_buffer->colors[0].render_view->Release();
     
-    // Actually resize the buffer.
-    D3D11_CALL(d3d11->swapchain->ResizeBuffers(2, window->w, window->h, D3D11_BACKBUFFER_COLOR_FORMAT, 0));
+        // Actually resize the buffer.
+        D3D11_CALL(d3d11->swapchain->ResizeBuffers(0, window->w, window->h, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
     
-    // Get the render target view back.
-    D3D11_CALL(d3d11->swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) &d3d11->default_frame_buffer->colors[0].texture));
-    D3D11_CALL(d3d_device->CreateRenderTargetView(d3d11->default_frame_buffer->colors[0].texture, 0, &d3d11->default_frame_buffer->colors[0].render_view));
+        // Get the render target view back.
+        D3D11_CALL(d3d11->swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) &d3d11->default_frame_buffer->colors[0].texture));
+        D3D11_CALL(d3d_device->CreateRenderTargetView(d3d11->default_frame_buffer->colors[0].texture, 0, &d3d11->default_frame_buffer->colors[0].render_view));
     
-    d3d11->default_frame_buffer->colors[0].w = window->w;
-    d3d11->default_frame_buffer->colors[0].h = window->h;
+        d3d11->default_frame_buffer->colors[0].w = window->w;
+        d3d11->default_frame_buffer->colors[0].h = window->h;
+    }
 }
 
 

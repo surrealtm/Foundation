@@ -67,6 +67,8 @@ char *win32_copy_cstring(const char *cstring) {
 /* --------------------------------------------------- Misc --------------------------------------------------- */
 
 void os_message_box(string message) {
+    ShowCursor(true); // Show the cursor in case we have hidden it with the window module.
+    
     char *cstring = to_cstring(Default_Allocator, message);
     defer { free_cstring(Default_Allocator, cstring); };
 

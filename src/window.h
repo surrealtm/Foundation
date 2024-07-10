@@ -156,10 +156,11 @@ struct Window {
     s32 x, y, w, h;
     
     b8 should_close,
-    maximized,
-    focused,
-    resized_this_frame,
-    moved_this_frame;
+        maximized,
+        focused,
+        active,
+        resized_this_frame,
+        moved_this_frame;
     
     s32 mouse_x, mouse_y; // The pixel position of the cursor inside the window.
     s32 mouse_delta_x, mouse_delta_y; // The pixel delta of mouse movement since the previous frame. 
@@ -181,6 +182,7 @@ b8 create_window(Window *window, string title, s32 x = WINDOW_DONT_CARE, s32 y =
 void update_window(Window *window);
 void destroy_window(Window *window);
 void show_window(Window *window);
+void minimize_window(Window *window);
 
 b8 set_window_icon_from_file(Window *window, string file_path);
 b8 set_window_icon_from_resource_name(Window *window, string resource_name);

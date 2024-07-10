@@ -1,6 +1,7 @@
 #pragma once
 
 #include "foundation.h"
+#include "memutils.h"
 
 /*
  * Many APIs in this code base prefer a custom string type over the built-in c-string
@@ -134,7 +135,7 @@ struct String_Builder {
 		s64 count;
 	};
 
-	Allocator *allocator = null;
+	Allocator *allocator = Default_Allocator;
 	Block first;
 	Block *current = null;
 	s64 total_count = 0;
