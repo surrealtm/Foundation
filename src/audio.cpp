@@ -505,7 +505,12 @@ void calculate_source_channel_pans(Audio_Listener *listener, Audio_Source *sourc
     f32 dx = source->x - listener->x, dy = source->y - listener->y, dz = source->z - listener->z;
 
     f32 distance = sqrtf(dx * dx + dy * dy + dz * dz);
-    f32 distance_attenuation = clamp(1.f / (distance - source->falloff_start), 0.f, 1.f);
+    f32 distance_attenuation;
+    if(distance <= source->falloff_start) {
+        distance_attenuation = 1.f;
+    } else {
+        distance_attenuation = source->falloff_nominator / distance;
+    }
 
     f32 px = dx - listener->ux * dx, py = dy - listener->uy * dy, pz = dz - listener->uz * dz; // Project the delta vector onto the horizontal listener plane.
 
@@ -522,13 +527,13 @@ void calculate_source_channel_pans(Audio_Listener *listener, Audio_Source *sourc
     if(!arc) return; // This should never happen
 
     f32 beta = calculate_blending_percentage_for_arc(arc, panning_angle);
-    channels[arc->left_channel]  *= sinf(FPI / 2.f * beta);
-    channels[arc->right_channel] *= cosf(FPI / 2.f * beta);
+    channels[arc->left_channel]  *= sinf(FPI / 2.f * beta) * distance_attenuation;
+    channels[arc->right_channel] *= cosf(FPI / 2.f * beta) * distance_attenuation;
 }
 
 Audio_Source *acquire_audio_source(Audio_Mixer *mixer, Audio_Volume_Type type, b8 spatialized) {
     Audio_Source *source           = mixer->sources.push();
-    source->state                  = AUDIO_SOURCE_Paused;
+    source->state                  = AUDIO_SOURCE_Completed;
     source->volume_type            = type;
     source->remove_on_completion   = false;
     source->playing_buffer         = null;
@@ -540,6 +545,7 @@ Audio_Source *acquire_audio_source(Audio_Mixer *mixer, Audio_Volume_Type type, b
     source->y                      = 0;
     source->z                      = 0;
     source->falloff_start          = 10.f;
+    source->falloff_nominator      = 10.f;
     return source;
 }
 
@@ -577,11 +583,12 @@ void play_audio_buffer(Audio_Source *source, Audio_Buffer *buffer) {
     source->state = AUDIO_SOURCE_Playing;
 }
 
-void set_audio_source_transformation(Audio_Source *source, f32 x, f32 y, f32 z, f32 falloff_start) {
+void set_audio_source_transformation(Audio_Source *source, f32 x, f32 y, f32 z, f32 falloff_start, f32 falloff_nominator) {
     source->x = x;
     source->y = y;
     source->z = z;
     source->falloff_start = falloff_start;
+    source->falloff_nominator = falloff_nominator;
 }
 
 

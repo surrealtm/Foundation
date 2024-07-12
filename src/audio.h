@@ -88,7 +88,13 @@ struct Audio_Source {
     b8 spatialized;
 
     f32 x, y, z;
-    f32 falloff_start; // Spatialized sound is played at full volume until the min radius, and then blent to zero using 1/distance
+
+    // Spatialized sound is played at full volume until the min radius, and then blent to zero using a falloff
+    // curve. The following two parameters control that curve, which is defined as:
+    //    volume := (distance > falloff_start) ? (falloff_nominator / distance) : 1.0;
+    // It often make sense to the the two parameters to the same value.
+    f32 falloff_start; 
+    f32 falloff_nominator;
 };
 
 typedef f32 *(*Audio_Stream_Callback)(void *user_pointer, u64 requested_frames);
@@ -141,7 +147,7 @@ void stop_audio_source(Audio_Source *source);
 void pause_audio_source(Audio_Source *source);
 void resume_audio_source(Audio_Source *source);
 void set_audio_source_looping(Audio_Source *source, b8 looping);
-void set_audio_source_transformation(Audio_Source *source, f32 x, f32 y, f32 z, f32 falloff_start);
+void set_audio_source_transformation(Audio_Source *source, f32 x, f32 y, f32 z, f32 falloff_start, f32 falloff_nominator);
 void play_audio_buffer(Audio_Mixer *mixer, Audio_Buffer *buffer, Audio_Volume_Type type, b8 spatialized);
 void play_audio_buffer(Audio_Source *source, Audio_Buffer *buffer);
 
