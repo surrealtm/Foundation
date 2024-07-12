@@ -64,10 +64,10 @@ template<typename T>
 T qt_dot(qt<T> const &lhs, qt<T> const &rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w; }
 
 template<typename T>
-qt<T> qt_length(qt<T> const &q) { return static_cast<T>(sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w)); }
+T qt_length(qt<T> const &q) { return static_cast<T>(sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w)); }
 
 template<typename T>
-qt<T> qt_length2(qt<T> const &q) { return q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w; }
+T qt_length2(qt<T> const &q) { return q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w; }
 
 template<typename T>
 qt<T> qt_normalize(qt<T> const &q) { T denom = 1 / qt_length(q); return qt<T>(q.x * denom, q.y * denom, q.z * denom, q.w * denom); }
@@ -157,7 +157,7 @@ qt<T> qt_slerp_long(qt<T> const &lhs, qt<T> const &rhs, T t) {
 
 template<typename T>
 qt<T> qt_from_angle_axis(v3<T> const &axis, T angle) {
-    T half_angle_radians = turns_to_radians(angle / 2);
+    T half_angle_radians = (angle / 2) * static_cast<T>(6.283185307179586); // Turns to radians
     T theta = static_cast<T>(sin(half_angle_radians));
     qt<T> result = qt<T>(theta * axis.x, theta * axis.y, theta * axis.z, static_cast<T>(cos(half_angle_radians)));
     return qt_normalize(result);
@@ -180,7 +180,7 @@ qt<T> qt_from_euler_turns(v3<T> const &euler_turns) {
     qt<T> result = qt<T>(sx * cy * cz - cx * sy * sz,
                          cx * sy * cz + sx * cy * sz,
                          cx * cy * sz - sx * sy * cz,
-                         cx * cy * cz - sx * sy * sz);
+                         cx * cy * cz + sx * sy * sz);
 
     return result;
 }

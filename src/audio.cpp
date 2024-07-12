@@ -220,7 +220,7 @@ static
 f32 query_audio_buffer(Audio_Buffer *buffer, u64 frame, u64 channel) {
     f32 result;
 
-    u64 sample = frame * buffer->channels + min(channel, buffer->channels);
+    u64 sample = frame * buffer->channels + min(channel, buffer->channels - 1);
     
     switch(buffer->format) {
     case AUDIO_BUFFER_FORMAT_Pcm16: {
@@ -725,30 +725,33 @@ void update_audio_mixer(Audio_Mixer *mixer) {
                 source_frames_to_output = min(frames_to_output, (u32) (source.playing_buffer->frame_count - source.frame_offset_in_buffer));
             }
 
-            f32 gain = calculate_source_gain(mixer, &source);
-            f32 pan[AUDIO_CHANNELS];
-            for(s64 i = 0; i < AUDIO_CHANNELS; ++i) pan[i] = gain;
+            if(source_frames_to_output > 0) {
+                f32 gain = calculate_source_gain(mixer, &source);
+                f32 pan[AUDIO_CHANNELS];
+                for(s64 i = 0; i < AUDIO_CHANNELS; ++i) pan[i] = gain;
 
-            if(source.spatialized && ARRAY_COUNT(mixer->listener.arcs) > 1) {
-                calculate_source_channel_pans(&mixer->listener, &source, pan);
-            }
+                if(source.spatialized && ARRAY_COUNT(mixer->listener.arcs) > 1) {
+                    calculate_source_channel_pans(&mixer->listener, &source, pan);
+                }
            
-            for(u32 i = 0; i < source_frames_to_output; ++i) {
-                for(u8 j = 0; j < AUDIO_CHANNELS; ++j) {
-                    u64 output_offset = (u64) i * AUDIO_CHANNELS + j;
-                    f32 output_sample = output[output_offset];
-                    f32 source_sample = query_audio_buffer(source.playing_buffer, (source.frame_offset_in_buffer + i) % source.playing_buffer->frame_count, j);
-                    output[output_offset] = mix_audio_samples(output_sample, source_sample, pan[j]);
-                }                
-            }
+                for(u32 i = 0; i < source_frames_to_output; ++i) {
+                    for(u8 j = 0; j < AUDIO_CHANNELS; ++j) {
+                        u64 output_offset = (u64) i * AUDIO_CHANNELS + j;
+                        f32 source_sample = query_audio_buffer(source.playing_buffer, (source.frame_offset_in_buffer + i) % source.playing_buffer->frame_count, j);
+                        output[output_offset] = mix_audio_samples(output[output_offset], source_sample, pan[j]);
+                    }
+                }
 
-            if(source.loop) {
-                source.frame_offset_in_buffer = (source.frame_offset_in_buffer + source_frames_to_output) % source.playing_buffer->frame_count;
-            } else {
-                source.frame_offset_in_buffer += source_frames_to_output;
-                if(source.frame_offset_in_buffer == source.playing_buffer->frame_count) source.state = AUDIO_SOURCE_Completed;
+                if(source.loop) {
+                    source.frame_offset_in_buffer = (source.frame_offset_in_buffer + source_frames_to_output) % source.playing_buffer->frame_count;
+                } else {
+                    source.frame_offset_in_buffer += source_frames_to_output;
+                }
             }
+    
+            if(source.frame_offset_in_buffer == source.playing_buffer->frame_count) source.state = AUDIO_SOURCE_Completed;
         }
+
 
         if(source.state == AUDIO_SOURCE_Completed && source.remove_on_completion) {
             //

@@ -1060,6 +1060,12 @@ void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b, f32 a, 
     if(frame_buffer->has_depth) d3d_context->ClearDepthStencilView(frame_buffer->depth.render_view, D3D11_CLEAR_DEPTH, depth, stencil);
 }
 
+void clear_frame_buffer_depth_stencil(Frame_Buffer *frame_buffer, f32 depth) {
+    u8 stencil = 0;
+
+    if(frame_buffer->has_depth) d3d_context->ClearDepthStencilView(frame_buffer->depth.render_view, D3D11_CLEAR_DEPTH, depth, stencil);
+}
+
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
     foundation_assert(dst->color_count == src->color_count);
     foundation_assert(dst->samples == 1 || src->samples == dst->samples); // We can only either copy the samples into the destination, or resolve them into a single one.
