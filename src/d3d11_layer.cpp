@@ -748,13 +748,16 @@ Compiled_Shader_Output compile_shader_from_file(string file_path) {
     ID3DBlob *error_blob = null, *vertex_blob = null, *pixel_blob = null;
     
     UINT compilation_flags = D3DCOMPILE_ENABLE_STRICTNESS; // No debug here since this is probably baking the shader for shipping.
+
+    char *cstring_name = to_cstring(Default_Allocator, file_path);
+    defer { free_cstring(Default_Allocator, cstring_name); };
     
-    D3DCompile(_string.data, _string.count, null, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", compilation_flags, 0, &vertex_blob, &error_blob);
+    D3DCompile(_string.data, _string.count, cstring_name, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_main", "vs_5_0", compilation_flags, 0, &vertex_blob, &error_blob);
     
     if(!error_blob) {
         // If the vertex shader already failed, then the error blob is already filled out and we would just
         // overwrite these error messages here, which we don't want to do.
-        D3DCompile(_string.data, _string.count, null, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", compilation_flags, 0, &pixel_blob, &error_blob);
+        D3DCompile(_string.data, _string.count, cstring_name, null, D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_main", "ps_5_0", compilation_flags, 0, &pixel_blob, &error_blob);
     }
     
     if(vertex_blob && pixel_blob) {
