@@ -131,6 +131,7 @@ struct Text_Input_Event {
     b8 shift_held;
     b8 control_held;
     b8 menu_held;
+
     union {
         u32 utf32; // Used for character events
         Key_Code control; // Used for control events

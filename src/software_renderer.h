@@ -2,8 +2,7 @@
 
 #include "foundation.h"
 #include "string_type.h"
-
-// @Incomplete: Start using Error Codes here as return values for creating stuff.
+#include "error.h"
 
 struct Window;
 
@@ -48,7 +47,7 @@ void maybe_resize_back_buffer();
 
 /* ------------------------------------------------- Texture ------------------------------------------------- */
 
-void create_texture_from_file(Texture *texture, string file_path);
+Error_Code create_texture_from_file(Texture *texture, string file_path);
 void create_texture_from_memory(Texture *texture, s32 w, s32 h, u8 channels, u8 *buffer); // This makes a copy from the buffer!
 void destroy_texture(Texture *texture);
 

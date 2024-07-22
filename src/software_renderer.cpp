@@ -431,19 +431,27 @@ b8 texture_is_valid_for_draw(Texture *texture) {
     return texture->buffer != 0 && texture->w > 0 && texture->h > 0 && texture->format != COLOR_FORMAT_Unknown;
 }
 
-void create_texture_from_file(Texture *texture, string file_path) {
+Error_Code create_texture_from_file(Texture *texture, string file_path) {
     char *cstring = to_cstring(Default_Allocator, file_path);
     defer { free_cstring(Default_Allocator, cstring); };
 
     int channels;
     texture->buffer = stbi_load(cstring, (int *) &texture->w, (int *) &texture->h, &channels, 0);
 
+    if(texture->buffer == 0) {
+        texture->w = 0;
+        texture->h = 0;
+        return ERROR_File_Not_Found;
+    }
+    
     switch(channels) {
     case 1: texture->format = COLOR_FORMAT_R;    break;
     case 2: texture->format = COLOR_FORMAT_RG;   break;
     case 3: texture->format = COLOR_FORMAT_RGB;  break;
     case 4: texture->format = COLOR_FORMAT_RGBA; break;
     }
+
+    return Success;
 }
 
 void create_texture_from_memory(Texture *texture, s32 w, s32 h, u8 channels, u8 *buffer) {
