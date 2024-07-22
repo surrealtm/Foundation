@@ -7,6 +7,16 @@
 
 struct Window;
 
+enum Color_Format {
+    COLOR_FORMAT_Unknown,
+    COLOR_FORMAT_R,
+    COLOR_FORMAT_RG,
+    COLOR_FORMAT_RGB,
+    COLOR_FORMAT_RGBA,
+    COLOR_FORMAT_BGRA,
+    COLOR_FORMAT_COUNT,
+};
+
 struct Color {
     u8 r, g, b, a;
     
@@ -15,14 +25,14 @@ struct Color {
 };
 
 struct Texture {
+    Color_Format format;
     s32 w, h;
-    u8 channels;
     u8 *buffer;
 };
 
 struct Frame_Buffer {
+    Color_Format format;
     s32 w, h;
-    u8 channels;
     u8 *buffer;
 };
 
@@ -32,6 +42,7 @@ struct Frame_Buffer {
 
 void create_software_renderer(Window *window);
 void destroy_software_renderer();
+void maybe_resize_back_buffer();
 
 
 
@@ -46,9 +57,13 @@ void destroy_texture(Texture *texture);
 /* ----------------------------------------------- Frame Buffer ----------------------------------------------- */
 
 void create_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h, u8 channels);
+void create_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h, Color_Format format);
 void destroy_frame_buffer(Frame_Buffer *frame_buffer);
 void bind_frame_buffer(Frame_Buffer *frame_buffer);
+void unbind_frame_buffer();
+void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);
 void swap_buffers(Frame_Buffer *src);
+void swap_buffers();
 
 
 

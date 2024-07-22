@@ -149,32 +149,32 @@ int main() {
     //
     // Audio output
     //
-    Audio_Player player;
-    Error_Code error = create_audio_player(&player);
-    if(error != Success) printf("Error Initialization Player: %.*s\n", (u32) error_string(error).count, error_string(error).data);
+    Audio_Mixer mixer;
+    Error_Code error = create_audio_mixer(&mixer);
+    if(error != Success) printf("Error Initialization Mixer: %.*s\n", (u32) error_string(error).count, error_string(error).data);
 
-    player.volumes[AUDIO_VOLUME_Master] = 1.f;
+    mixer.volumes[AUDIO_VOLUME_Master] = 1.f;
     
-    Audio_Stream *stream = create_audio_stream(&player, &synth, (Audio_Stream_Callback) update_synth, AUDIO_VOLUME_Master, ""_s);
-    pause_audio_stream(stream);
+    Audio_Stream *stream = create_audio_stream(&mixer, &synth, (Audio_Stream_Callback) update_synth, AUDIO_VOLUME_Master, false, ""_s, Default_Allocator);
+    // pause_audio_stream(stream);
 
     Audio_Buffer buffer;
-    create_audio_buffer_from_flac_file(&buffer, "data/audio/made_of_words.flac"_s);
+    create_audio_buffer_from_flac_file(&buffer, "data/audio/made_of_words.flac"_s, Default_Allocator);
 
-    Audio_Source *source = acquire_audio_source(&player, AUDIO_VOLUME_Master);
-    set_audio_source_options(source, true);
-    play_audio_buffer(source, &buffer);
+    Audio_Source *source = acquire_audio_source(&mixer, AUDIO_VOLUME_Master, false);
+    set_audio_source_looping(source, true);
+    // play_audio_buffer(source, &buffer);
     
-    update_audio_player_with_silence(&player); // Avoid sound artifacts due to the long loading times which would require wayyy too many samples to be created.
+    update_audio_mixer_with_silence(&mixer); // Avoid sound artifacts due to the long loading times which would require wayyy too many samples to be created.
 
     while(!window.should_close) {
         Hardware_Time frame_start = os_get_hardware_time();
         
         update_window(&window);
 
-        // Update the synth and audio player
+        // Update the synth and audio mixer
         {
-            update_audio_player(&player);
+            update_audio_mixer(&mixer);
         }
         
         // Update the histograms
@@ -210,7 +210,7 @@ int main() {
 
     for(s64 i = 0; i < AUDIO_CHANNELS; ++i) destroy_histogram(&histograms[i]);
     
-    destroy_audio_player(&player);
+    destroy_audio_mixer(&mixer);
     destroy_synth(&synth);
     destroy_frame_buffer(&frame_buffer);
     destroy_software_renderer();

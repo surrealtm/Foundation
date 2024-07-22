@@ -53,9 +53,8 @@ struct Draw_Command {
 
 struct Software_Renderer {
     Window *window;
-    u8 *internal_back_buffer;
-    u8 internal_back_buffer_channels;
-    
+
+    Frame_Buffer back_buffer;    
     Frame_Buffer *bound_frame_buffer = null;
     
     b8 command_system_setup = false;
@@ -66,15 +65,58 @@ static thread_local Software_Renderer state;
 
 /* -------------------------------------------------- Helpers -------------------------------------------------- */
 
+enum Channel {
+    CHANNEL_R = 0,
+    CHANNEL_G = 1,
+    CHANNEL_B = 2,
+    CHANNEL_A = 3,
+    CHANNEL_COUNT = 4,
+};
+
+static
+u8 channels_per_pixel[COLOR_FORMAT_COUNT] = {
+    0, // Unknown
+    1, // R
+    2, // RG
+    3, // RGB
+    4, // RGBA
+    4, // BGRA
+};
+
+static
+u8 channel_indices[COLOR_FORMAT_COUNT][CHANNEL_COUNT] = {
+    { 0, 0, 0, 0 }, // Unknown
+    { 0, 0, 0, 0 }, // R
+    { 0, 1, 0, 0 }, // RB
+    { 0, 1, 2, 0 }, // RBG
+    { 0, 1, 2, 3 }, // RBGA
+    { 2, 1, 0, 3 }, // BGRA
+};
+
+static
+Color_Format get_color_format_for_channels(u8 channels) {
+    Color_Format format;
+    
+    switch(channels) {
+    case 1: format = COLOR_FORMAT_R;    break;
+    case 2: format = COLOR_FORMAT_RG;   break;
+    case 3: format = COLOR_FORMAT_RGB;  break;
+    case 4: format = COLOR_FORMAT_RGBA; break;
+    default: format = COLOR_FORMAT_Unknown; break;
+    }
+
+    return format;
+}
+
 static
 u8 *get_pixel_in_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y) {
-    s64 offset = ((s64) y * (s64) frame_buffer->w + x) * frame_buffer->channels;
+    s64 offset = ((s64) y * (s64) frame_buffer->w + x) * channels_per_pixel[frame_buffer->format];
     return &frame_buffer->buffer[offset];
 }
 
 static
 u8 *get_pixel_in_texture(Texture *texture, s32 x, s32 y) {
-    s64 offset = ((s64) y * (s64) texture->w + x) * texture->channels;
+    s64 offset = ((s64) y * (s64) texture->w + x) * channels_per_pixel[texture->format];
     return &texture->buffer[offset];
 }
 
@@ -82,24 +124,45 @@ static
 Color query_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y) {
     if(x < 0 || x >= frame_buffer->w || y < 0 || y >= frame_buffer->h) return Color(255, 255, 255, 255);
 
+    u8 channels = channels_per_pixel[frame_buffer->format];
+
     u8 *pixel = get_pixel_in_frame_buffer(frame_buffer, x, y);
     Color result;
-    result.r = frame_buffer->channels > 0 ? *(pixel + 0) : 255;
-    result.g = frame_buffer->channels > 1 ? *(pixel + 1) : 255;
-    result.b = frame_buffer->channels > 2 ? *(pixel + 2) : 255;
-    result.a = frame_buffer->channels > 3 ? *(pixel + 3) : 255;
+    result.r = channels > 0 ? *(pixel + channel_indices[frame_buffer->format][CHANNEL_R]) : 255;
+    result.g = channels > 1 ? *(pixel + channel_indices[frame_buffer->format][CHANNEL_G]) : 255;
+    result.b = channels > 2 ? *(pixel + channel_indices[frame_buffer->format][CHANNEL_B]) : 255;
+    result.a = channels > 3 ? *(pixel + channel_indices[frame_buffer->format][CHANNEL_A]) : 255;
     return result;
 }
 
 static
 Color query_texture(Texture *texture, v2f uv) {
-    u8 *pixel = get_pixel_in_texture(texture, (s32) (uv.x * texture->w), (s32) (uv.y * texture->h));
+    s32 x = (s32) (uv.x * texture->w), y = (s32) (uv.y * texture->h);
+    
+    if(x < 0 || x >= texture->w || y < 0 || y >= texture->h) return Color(255, 255, 255, 255);
+
+    u8 channels = channels_per_pixel[texture->format];
+
+    u8 *pixel = get_pixel_in_texture(texture, x, y);
     Color result;
-    result.r = texture->channels > 0 ? *(pixel + 0) : 255;
-    result.g = texture->channels > 1 ? *(pixel + 1) : 255;
-    result.b = texture->channels > 2 ? *(pixel + 2) : 255;
-    result.a = texture->channels > 3 ? *(pixel + 3) : 255;
+    result.r = channels > 0 ? *(pixel + channel_indices[texture->format][CHANNEL_R]) : 255;
+    result.g = channels > 1 ? *(pixel + channel_indices[texture->format][CHANNEL_G]) : 255;
+    result.b = channels > 2 ? *(pixel + channel_indices[texture->format][CHANNEL_B]) : 255;
+    result.a = channels > 3 ? *(pixel + channel_indices[texture->format][CHANNEL_A]) : 255;
     return result;
+}
+
+static
+void write_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y, Color color) {
+    if(x < 0 || x >= frame_buffer->w || y < 0 || y >= frame_buffer->h) return;
+
+    u8 channels = channels_per_pixel[frame_buffer->format];
+    
+    u8 *pixel = get_pixel_in_frame_buffer(frame_buffer, x, y);
+    if(channels > 0) *(pixel + channel_indices[frame_buffer->format][CHANNEL_R]) = color.r;
+    if(channels > 1) *(pixel + channel_indices[frame_buffer->format][CHANNEL_G]) = color.g;
+    if(channels > 2) *(pixel + channel_indices[frame_buffer->format][CHANNEL_B]) = color.b;
+    if(channels > 3) *(pixel + channel_indices[frame_buffer->format][CHANNEL_A]) = color.a;
 }
 
 static
@@ -262,23 +325,22 @@ void draw_triangle(Draw_Command *cmd, Draw_Vertex *v0, Draw_Vertex *v1, Draw_Ver
             f32 s, t, u;
             if(!point_inside_triangle(point, v0->position, v1->position, v2->position, &s, &t, &u)) continue;
 
-            Color source_color;
+            Color color;
             
             if(cmd->draw.options & DRAW_OPTION_Textured) {
                 v2f interpolated_uv = interpolate(s, v0->uv, t, v1->uv, u, v2->uv);
-                source_color = query_texture(cmd->draw.texture, interpolated_uv);
+                color = query_texture(cmd->draw.texture, interpolated_uv);
             }
             
             if(cmd->draw.options & DRAW_OPTION_Colored) {
-                source_color = interpolate(s, v0->color, t, v1->color, u, v2->color);
+                color = interpolate(s, v0->color, t, v1->color, u, v2->color);
             }
 
             if(cmd->draw.options & DRAW_OPTION_Blending) {
-                source_color = mix(source_color, query_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y));
+                color = mix(color, query_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y));
             }
-            
-            u8 *output = get_pixel_in_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y);
-            memcpy(output, &source_color, cmd->frame_buffer->channels);
+
+            write_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y, color);
         }
     }
 }
@@ -287,12 +349,17 @@ static
 void execute_draw_command(Draw_Command *cmd) {
     switch(cmd->kind) {
         case DRAW_COMMAND_Clear: {
-            u8 color_array[4] = { cmd->clear.color.r, cmd->clear.color.g, cmd->clear.color.b, cmd->clear.color.a };
+            u8 channels = channels_per_pixel[cmd->frame_buffer->format];
+            u8 color_array[4];
+            color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_R]] = cmd->clear.color.r;
+            color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_G]] = cmd->clear.color.g;
+            color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_B]] = cmd->clear.color.b;
+            color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_A]] = cmd->clear.color.a;
             
             for(s32 y = 0; y < cmd->frame_buffer->h; ++y) {
                 for(s32 x = 0; x < cmd->frame_buffer->w; ++x) {
                     u8 *pixel = get_pixel_in_frame_buffer(cmd->frame_buffer, x, y);
-                    memcpy(pixel, color_array, cmd->frame_buffer->channels);
+                    memcpy(pixel, color_array, channels);
                 }
             }
         } break;
@@ -321,26 +388,38 @@ void flush_draw_commands() {
 
 static
 void create_back_buffer() {
-    state.internal_back_buffer_channels = 4;
-    state.internal_back_buffer = (u8 *) Default_Allocator->allocate(state.window->w * state.window->h * state.internal_back_buffer_channels);   
+    Color_Format format;
+
+#if FOUNDATION_WIN32
+    format = COLOR_FORMAT_BGRA;
+#else
+    format = COLOR_FORMAT_RGBA;
+#endif
+    
+    create_frame_buffer(&state.back_buffer, state.window->w, state.window->h, format);
 }
 
 static
-void maybe_resize_software_renderer() {
-    if(!state.window->resized_this_frame) return;
-
-    Default_Allocator->deallocate(state.internal_back_buffer);
-    create_back_buffer();
+void destroy_back_buffer() {
+    destroy_frame_buffer(&state.back_buffer);
 }
 
 void create_software_renderer(Window *window) {
     state.window = window;
+    state.bound_frame_buffer = &state.back_buffer;
     create_back_buffer();
 }
 
 void destroy_software_renderer() {
-    Default_Allocator->deallocate(state.internal_back_buffer);
-    state.internal_back_buffer = null;
+    destroy_back_buffer();
+    state.window = null;
+}
+
+void maybe_resize_back_buffer() {
+    if(!state.window->resized_this_frame) return;
+
+    destroy_back_buffer();
+    create_back_buffer();
 }
 
 
@@ -349,32 +428,40 @@ void destroy_software_renderer() {
 
 static
 b8 texture_is_valid_for_draw(Texture *texture) {
-    return texture->buffer != 0 && texture->w > 0 && texture->h > 0 && texture->channels > 0;
+    return texture->buffer != 0 && texture->w > 0 && texture->h > 0 && texture->format != COLOR_FORMAT_Unknown;
 }
 
 void create_texture_from_file(Texture *texture, string file_path) {
     char *cstring = to_cstring(Default_Allocator, file_path);
     defer { free_cstring(Default_Allocator, cstring); };
-    
-    texture->buffer = stbi_load(cstring, (int *) &texture->w, (int *) &texture->h, (int *) &texture->channels, 0);
+
+    int channels;
+    texture->buffer = stbi_load(cstring, (int *) &texture->w, (int *) &texture->h, &channels, 0);
+
+    switch(channels) {
+    case 1: texture->format = COLOR_FORMAT_R;    break;
+    case 2: texture->format = COLOR_FORMAT_RG;   break;
+    case 3: texture->format = COLOR_FORMAT_RGB;  break;
+    case 4: texture->format = COLOR_FORMAT_RGBA; break;
+    }
 }
 
 void create_texture_from_memory(Texture *texture, s32 w, s32 h, u8 channels, u8 *buffer) {
     texture->w = w;
     texture->h = h;
-    texture->channels = channels;
+    texture->format = get_color_format_for_channels(channels);
     
-    s64 bytes = (s64) texture->w * (s64) texture->h * (s64) texture->channels;
+    s64 bytes = (s64) texture->w * (s64) texture->h * (s64) channels_per_pixel[texture->format];
     texture->buffer = (u8 *) Default_Allocator->allocate(bytes);
     memcpy(texture->buffer, buffer, bytes);
 }
 
 void destroy_texture(Texture *texture) {
     Default_Allocator->deallocate(texture->buffer); // stbi_load uses the Default_Allocator thanks to the macros in foundation.cpp
-    texture->buffer   = null;
-    texture->w        = 0;
-    texture->h        = 0;
-    texture->channels = 0;
+    texture->buffer = null;
+    texture->w      = 0;
+    texture->h      = 0;
+    texture->format = COLOR_FORMAT_Unknown;
 }
 
 
@@ -382,25 +469,33 @@ void destroy_texture(Texture *texture) {
 /* ----------------------------------------------- Frame Buffer ----------------------------------------------- */
 
 void create_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h, u8 channels) {
-    frame_buffer->w        = w;
-    frame_buffer->h        = h;
-    frame_buffer->channels = channels;
-    frame_buffer->buffer   = (u8 *) Default_Allocator->allocate((s64) frame_buffer->w * (s64) frame_buffer->h * (s64) frame_buffer->channels);
+    create_frame_buffer(frame_buffer, w, h, get_color_format_for_channels(channels));
+}
+
+void create_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h, Color_Format format) {
+    frame_buffer->w      = w;
+    frame_buffer->h      = h;
+    frame_buffer->format = format;
+    frame_buffer->buffer = (u8 *) Default_Allocator->allocate((s64) frame_buffer->w * (s64) frame_buffer->h * (s64) channels_per_pixel[frame_buffer->format]);
 }
 
 void destroy_frame_buffer(Frame_Buffer *frame_buffer) {
     Default_Allocator->deallocate(frame_buffer->buffer);
-    frame_buffer->buffer   = null;
-    frame_buffer->w        = 0;
-    frame_buffer->h        = 0;
-    frame_buffer->channels = 0;
+    frame_buffer->buffer = null;
+    frame_buffer->w      = 0;
+    frame_buffer->h      = 0;
+    frame_buffer->format = COLOR_FORMAT_Unknown;
 }
 
 void bind_frame_buffer(Frame_Buffer *frame_buffer) {
     state.bound_frame_buffer = frame_buffer;
 }
 
-void swap_buffers(Frame_Buffer *src) {
+void unbind_frame_buffer() {
+    state.bound_frame_buffer = &state.back_buffer;
+}
+
+void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
     //
     // Flush all remaining commands
     //
@@ -409,24 +504,32 @@ void swap_buffers(Frame_Buffer *src) {
     //
     // Convert the specificed source buffer into the internal window format (which is BGRA on windows).
     //
-    maybe_resize_software_renderer();
-    s32 w = min(src->w, state.window->w);
-    s32 h = min(src->h, state.window->h);
+    s32 w = min(src->w, dst->w);
+    s32 h = min(src->h, dst->h);
     for(s32 y = 0; y < h; ++y) {
         for(s32 x = 0; x < w; ++x) {
             Color color = query_frame_buffer(src, x, y);
-            s64 offset = (y * w + x) * state.internal_back_buffer_channels;
-            state.internal_back_buffer[offset + 0] = color.b;
-            state.internal_back_buffer[offset + 1] = color.g;
-            state.internal_back_buffer[offset + 2] = color.r;
+            write_frame_buffer(dst, x, y, color);
         }
     }
-    
+}
+
+void swap_buffers(Frame_Buffer *src) {
+    blit_frame_buffer(&state.back_buffer, src);
+    swap_buffers();
+}
+
+void swap_buffers() {
+    //
+    // Flush all remaining commands
+    //
+    flush_draw_commands();
+
     //
     // Actually blit the pixels onto the window.
     //
-    if(state.window->w > 0 && state.window->h > 0 && src->w > 0 && src->h > 0) {
-        blit_pixels_to_window(state.window, state.internal_back_buffer, src->w, src->h, state.internal_back_buffer_channels);
+    if(state.window->w > 0 && state.window->h > 0 && state.back_buffer.w > 0 && state.back_buffer.h > 0) {
+        blit_pixels_to_window(state.window, state.back_buffer.buffer, state.back_buffer.w, state.back_buffer.h, channels_per_pixel[state.back_buffer.format]);
     }
 }
 
