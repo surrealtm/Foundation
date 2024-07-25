@@ -5,6 +5,87 @@
 #include <stdarg.h>
 
 
+UI_Theme UI_Dark_Theme = {
+    {  20,  20,  20, 255 }, // Default
+    { 200, 200, 200, 255 }, // Border
+    {  70,  70,  70, 255 }, // Hovered
+    { 148,  56,  44, 255 }, // Accent
+    { 255, 255, 255, 255 }, // Text
+    { 148,  56,  44, 255 }, // Title bar background
+    { 208,  49,  24, 255 }, // Hovered title bar
+    { 131,  23,  10, 255 }, // Title bar buttons
+    {  50,  50,  50, 220 }, // Background
+    2,             // Border size
+    .7f,           // Rounding
+    UI_Background, // Button style
+    false,         // Unlit border
+};
+
+UI_Theme UI_Light_Theme = {
+    { 255, 255, 255, 255 }, // Default
+    { 100, 100, 100, 255 }, // Border
+    { 200, 200, 200, 255 }, // Hovered
+    { 120, 120, 120, 255 }, // Accent
+    {   0,   0,   0, 255 }, // Text
+    { 220, 220, 220, 255 }, // Title bar background
+    { 255, 255, 255, 255 }, // Hovered title bar
+    { 229, 229, 229, 255 }, // Title bar buttons
+    { 201, 205, 219, 220 }, // Background
+    2,             // Border size
+    .7f,           // Rounding
+    UI_Background, // Button style
+    false,         // Unlit border
+};
+
+UI_Theme UI_Blue_Theme = {
+    {  42,  74, 123, 255 }, // Default
+    { 200, 200, 200, 255 }, // Border
+    {  92, 134, 173, 255 }, // Hovered
+    { 112, 154, 193, 255 }, // Accent
+    { 255, 255, 255, 255 }, // Text
+    {  42,  74, 123, 255 }, // Title bar background
+    {  43, 102, 192, 255 }, // Hovered title bar
+    {  53,  93, 153, 255 }, // Title bar buttons
+    {  38,  46,  63, 220 }, // Background
+    0,             // Border size
+    .7f,           // Rounding
+    UI_Background, // Button style
+    false,         // Unlit border
+};
+
+UI_Theme UI_Watermelon_Theme = {
+    {  90, 145,  49, 255 }, // Default
+    { 110, 160,  60, 255 }, // Border
+    { 115, 191,  62, 255 }, // Hovered
+    { 105, 205,  31, 255 }, // Accent
+    { 255, 255, 255, 255 }, // Text
+    { 131,  23,  10, 255 }, // Title bar background
+    { 206,  40,  22, 255 }, // Hovered title bar
+    { 168,  28,  13, 255 }, // Title bar buttons
+    {  39,  63, 104, 220 }, // Background
+    2,             // Border size
+    .7f,           // Rounding
+    UI_Background | UI_Border, // Button style
+    true,         // Unlit border
+};
+
+UI_Theme UI_Green_Theme = {
+    {  20,  20,  20, 255 }, // Default
+    {  13, 137,   0, 255 }, // Border
+    {  70,  70,  80, 255 }, // Hovered
+    {  17, 180,   0, 255 }, // Accent
+    { 233, 255, 231, 255 }, // Text
+    {  29, 185,  12, 255 }, // Title bar background
+    {  40, 229,  19, 255 }, // Hovered title bar
+    {  35, 209,  10, 255 }, // Title bar buttons
+    {  50,  50,  50, 220 }, // Background
+    1,             // Border size
+    1.f,           // Rounding
+    UI_Background | UI_Border, // Button style
+    true,         // Unlit border
+};
+
+
 
 /* ------------------------------------------- Internal Convenience ------------------------------------------- */
 
@@ -209,7 +290,7 @@ void link_element(UI *ui, UI_Element *element) {
 
 static
 UI_Element *insert_new_element(UI *ui, UI_Hash hash, string label, UI_Flags flags) {
-    assert(ui->element_count < ui->elements_capacity);
+    assert(ui->element_count < ui->element_capacity);
 
     UI_Element *element = &ui->elements[ui->element_count];
     ++ui->element_count;
@@ -304,6 +385,30 @@ UI_Rect calculate_rect_for_element_children(UI *ui, UI_Element *element, UI_Rect
     return rect;
 }
 
+static
+UI_Semantic_Size ui_query_width(UI *ui) {
+    UI_Semantic_Size size = query_ui_stack(&ui->semantic_width_stack);
+
+    if(ui->one_pass_semantic_width) {
+        pop_ui_stack(&ui->semantic_width_stack);
+        ui->one_pass_semantic_width = false;
+    }
+
+    return size;
+}
+
+static
+UI_Semantic_Size ui_query_height(UI *ui) {
+    UI_Semantic_Size size = query_ui_stack(&ui->semantic_height_stack);
+
+    if(ui->one_pass_semantic_height) {
+        pop_ui_stack(&ui->semantic_height_stack);
+        ui->one_pass_semantic_height = false;
+    }
+
+    return size;    
+}
+
 
 
 /* ---------------------------------------------- Debug Printing ---------------------------------------------- */
@@ -390,8 +495,8 @@ void calculate_downwards_dependent_screen_size_for_element_recursively(UI_Elemen
     UI_Vector2 sum_of_children = { 0, 0 };
 
     for(auto *child = element->first_child; child != null; child = child->next) {
-        assert(element->semantic_width.tag != UI_SEMANTIC_SIZE_Sum_Of_Children || child->semantic_width.tag != UI-SEMANTIC_SIZE_Percentage_Of_Parent, "Detected a circular dependency in the UI semantic widths.");
-        assert(element->semantic_height.tag != UI_SEMANTIC_SIZE_Sum_Of_Children || child->semantic_height.tag != UI-SEMANTIC_SIZE_Percentage_Of_Parent, "Detected a circular dependency in the UI semantic heights.");
+        assert(element->semantic_width.tag != UI_SEMANTIC_SIZE_Sum_Of_Children || child->semantic_width.tag != UI_SEMANTIC_SIZE_Percentage_Of_Parent, "Detected a circular dependency in the UI semantic widths.");
+        assert(element->semantic_height.tag != UI_SEMANTIC_SIZE_Sum_Of_Children || child->semantic_height.tag != UI_SEMANTIC_SIZE_Percentage_Of_Parent, "Detected a circular dependency in the UI semantic heights.");
 
         calculate_downwards_dependent_screen_size_for_element_recursively(element);
 
@@ -431,7 +536,7 @@ void solve_screen_size_violations_recursively(UI_Element *parent) {
     // strictness value being set.
     //
 
-    UI_Vector2 children_screen_size = { 0, 0 };
+    UI_Vector2 children_screen_size  = { 0, 0 };
     UI_Vector2 children_fixup_budget = { 0, 0 };
 
     for(auto *child = parent->first_child; child != null; child = child->next) {
@@ -468,7 +573,7 @@ void solve_screen_size_violations_recursively(UI_Element *parent) {
     case UI_VIOLATION_RESOLUTION_Cap_At_Parent_Size: {
         for(auto *child = parent->first_child; child != null; child = child->next) {
             if((child->flags & UI_Floating) == 0) {
-                child->screen_size.x = floorf(min(parent->screen_size.x, child->screen_size.y));
+                child->screen_size.x = floorf(min(parent->screen_size.x, child->screen_size.x));
             } else {
                 child->screen_size.x = floorf(child->screen_size.x);
             }
@@ -494,7 +599,7 @@ void solve_screen_size_violations_recursively(UI_Element *parent) {
                 if((child->flags & UI_Floating) == 0) {
                     f32 child_fixup_budget = ((1.f - child->semantic_width.strictness) * child->screen_size.x);
                     f32 child_fixup_size   = min(child_fixup_budget * (screen_size_violation.x / children_fixup_budget.x), child_fixup_budget);
-                    child->screen_size.x   -= child_fixup_size;
+                    child->screen_size.x  -= child_fixup_size;
 
                     subpixel += child->screen_size.x - floorf(child->screen_size.x);
                     child->screen_size.x = floorf(child->screen_size.x) + floorf(subpixel + 0.05f); // Avoid this weird glitch where subpixel does not quite reach 1.0 due to numerical imprecision.
@@ -534,7 +639,7 @@ void solve_screen_size_violations_recursively(UI_Element *parent) {
                 if((child->flags & UI_Floating) == 0) {
                     f32 child_fixup_budget = ((1 - child->semantic_height.strictness) * child->screen_size.y);
                     f32 child_fixup_size   = min(child_fixup_budget * (screen_size_violation.y / children_fixup_budget.y), child_fixup_budget);
-                    child->screen_size.y   -= child_fixup_size;
+                    child->screen_size.y  -= child_fixup_size;
 
                     subpixel += child->screen_size.y - floorf(child->screen_size.y);
                     child->screen_size.y = floorf(child->screen_size.y) + floorf(subpixel + 0.05f);
@@ -724,7 +829,7 @@ void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rec
         if(mouse_over_element) {
             // Scroll the content along the axis if the mouse wheel is turned.
             if(element->layout_direction == UI_DIRECTION_Horizontal && element->screen_size.x < element->view_scroll_screen_size.x) {
-                element->view_scroll_screen_offset.x = clamp(element->view_scroll_screen_offset.x - ui->window->mouse_wheel_turns * 32, 0, element->view_scroll_screen_size.x - element.screen_size.x);
+                element->view_scroll_screen_offset.x = clamp(element->view_scroll_screen_offset.x - ui->window->mouse_wheel_turns * 32, 0, element->view_scroll_screen_size.x - element->screen_size.x);
             } else if(element->layout_direction == UI_DIRECTION_Vertical && element->screen_size.y < element->view_scroll_screen_size.y) {
                 element->view_scroll_screen_offset.y = clamp(element->view_scroll_screen_offset.y - ui->window->mouse_wheel_turns * 32, 0, element->view_scroll_screen_size.y - element->screen_size.y);
             }
@@ -892,8 +997,8 @@ void draw_text_input(UI *ui, Text_Input *text_input, UI_Vector2 screen_position,
         // Since the background color for the selected part of the input is different, we need to
         // split the text rendering into three parts and advance the cursor accordingly.
         ui->callbacks.draw_text(ui->callbacks.user_pointer, text_until_selection, screen_position, text_color, background_color);
-        ui->callbacks.draw_text(ui->callbacks.user_pointer, selection_text, { screen_position.x + selection_offset.x, screen_position.y }, text_color, selection_color);
-        ui->callbacks.draw_text(ui->callbacks.user_pointer, text_after_selection, { screen_position.x + selection_offset.x + selection_width, screen_position.y }, text_color, background_color);
+        ui->callbacks.draw_text(ui->callbacks.user_pointer, selection_text, { screen_position.x + selection_offset, screen_position.y }, text_color, selection_color);
+        ui->callbacks.draw_text(ui->callbacks.user_pointer, text_after_selection, { screen_position.x + selection_offset + selection_width, screen_position.y }, text_color, background_color);
     } else {
         // Render the actual input text with the default background color.
         ui->callbacks.draw_text(ui->callbacks.user_pointer, text, screen_position, text_color, background_color);
@@ -1044,29 +1149,163 @@ void draw_element_recursively(UI *ui, UI_Element *element, UI_Rect parent_rect) 
 
 
 
-/* ------------------------------------------------ Basic API ------------------------------------------------ */
+/* ------------------------------------------------ Setup API ------------------------------------------------ */
 
-UI_Semantic_Size ui_query_width(UI *ui) {
-    UI_Semantic_Size size = query_ui_stack(&ui->semantic_width_stack);
+void create_ui(UI *ui, UI_Callbacks callbacks, UI_Theme theme, Window *window, Font *font) {
+    ui->callbacks    = callbacks;
+    ui->theme        = theme;
+    ui->window       = window;
+    ui->font         = font;
 
-    if(ui->one_pass_semantic_width) {
-        pop_ui_stack(&ui->semantic_width_stack);
-        ui->one_pass_semantic_width = false;
-    }
+    ui->arena.create(1 * ONE_MEGABYTE);
+    ui->allocator = ui->arena.allocator();
+    
+    ui->text_input_pool.allocator = Default_Allocator; // We reset the UI memory arena every frame at a fixed position, so we cannot use it for dynamic allocation of this list.
+    ui->elements         = (UI_Element *) ui->allocator.allocate(UI_ELEMENT_CAPACITY * sizeof(UI_Element));
+    ui->element_capacity = UI_ELEMENT_CAPACITY;
+    ui->element_count    = 0;
+    ui->arena_frame_mark = ui->arena.mark();
+    
+    ui->root = { };
 
-    return size;
+    ui->active_text_input     = null;
+    ui->hovered_last_frame    = false;
+    ui->hovered_element_found = false;
+    ui->deactivated           = false;
+    ui->font_changed          = false;
 }
 
-UI_Semantic_Size ui_query_height(UI *ui) {
-    UI_Semantic_Size size = query_ui_stack(&ui->semantic_height_stack);
-
-    if(ui->one_pass_semantic_height) {
-        pop_ui_stack(&ui->semantic_height_stack);
-        ui->one_pass_semantic_height = false;
+void destroy_ui(UI *ui) {
+    for(u64 i = 0; i < ui->element_count; ++i) {
+        if(ui->elements[i].custom_state) Default_Allocator->deallocate(ui->elements[i].custom_state);
     }
 
-    return size;    
+    ui->text_input_pool.clear();
+    ui->allocator.deallocate(ui->elements);
+    ui->arena.destroy();
 }
+
+void change_ui_font(UI *ui, Font *font) {
+    ui->font = font;
+    ui->font_changed = true;
+}
+
+void begin_ui_frame(UI *ui, UI_Vector2 default_size) {
+    // Prepare the input status
+    ui->hovered_element_found = false;
+    ui->root.screen_position = { 0, 0 };
+    ui->root.screen_size = { (f32) ui->window->w, (f32) ui->window->h };
+
+    // Prepare the UI stacks.
+    clear_ui_stack(&ui->parent_stack);
+    clear_ui_stack(&ui->semantic_width_stack);
+    clear_ui_stack(&ui->semantic_height_stack);
+    
+    // Set up the default styling for this frame
+    ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, default_size.x, 0.6f);
+    ui_push_height(ui, UI_SEMANTIC_SIZE_Pixels, default_size.y, 0.6f);
+    
+    ui->one_pass_semantic_width  = false;
+    ui->one_pass_semantic_height = false;
+    
+    // Set up the root element as the first implicit element for this frame, so that there is always
+    // something in the UI element tree for linkage.
+    reset_element(ui, &ui->root);
+    ui->root.signals = UI_SIGNAL_None;
+    ui->last_element = &ui->root;
+    ui_push_parent(ui, UI_DIRECTION_Horizontal);
+}
+
+void draw_ui_frame(UI *ui) {
+    // Do the actual layout algorithm now that the frame is complete.
+    layout_ui(ui, ui->window->frame_time);
+
+    // Render all elements in the tree (reverse, for better depth testing) order.
+    UI_Rect root_rect = { ui->root.screen_position.x, ui->root.screen_position.y, ui->root.screen_position.x + ui->root.screen_size.x, ui->root.screen_position.y + ui->root.screen_size.y };
+    draw_element_recursively(ui, &ui->root, root_rect);
+
+    // Reset the scissors which have been set by the individual elements for easier integration into user code.
+    ui->callbacks.clear_scissors(ui->callbacks.user_pointer);
+
+    // Remove all spacers that the UI is not supposed to cache (since they do not have any state). Also remove
+    // elements that were not used in the last frame to free up space.
+    for(u64 i = 0; i < ui->element_count; ) {
+        auto &element = ui->elements[i];
+
+        if(element.hash == UI_NULL_HASH || !element.used_this_frame) {
+            // Remove from the element array
+            if(element.text_input) {
+                if(ui->active_text_input == element.text_input) ui->active_text_input = null;
+                ui->text_input_pool.remove_value_pointer(element.text_input);
+            }
+
+            if(element.custom_state) {
+                Default_Allocator->deallocate(element.custom_state);
+            }
+
+            memcpy(&ui->elements[i], &ui->elements[i + 1], (ui->element_count - i - 1) * sizeof(UI_Element));
+            --ui->element_count;
+        } else {
+            element.used_this_frame = false; // Prepare for the next frame
+            ++i;
+        }
+    }
+
+    // Reset the UI status for the next frame.
+    ui->font_changed = false;
+    ui->arena.release_from_mark(ui->arena_frame_mark);
+}
+
+
+
+/* ------------------------------------------------ Layout API ------------------------------------------------ */
+
+void ui_push_width(UI *ui, UI_Semantic_Size_Tag tag, f32 value, f32 strictness) {
+    push_ui_stack(&ui->semantic_width_stack, { tag, value, strictness });    
+}
+
+void ui_push_height(UI *ui, UI_Semantic_Size_Tag tag, f32 value, f32 strictness) {
+    push_ui_stack(&ui->semantic_height_stack, { tag, value, strictness });
+}
+
+void ui_set_width(UI *ui, UI_Semantic_Size_Tag tag, f32 value, f32 strictness) {
+    push_ui_stack(&ui->semantic_width_stack, { tag, value, strictness });    
+    ui->one_pass_semantic_width = true;
+}
+
+void ui_set_height(UI *ui, UI_Semantic_Size_Tag tag, f32 value, f32 strictness) {
+    push_ui_stack(&ui->semantic_height_stack, { tag, value, strictness });    
+    ui->one_pass_semantic_height = true;
+}
+
+void ui_pop_width(UI *ui) {
+    pop_ui_stack(&ui->semantic_width_stack);
+}
+
+void ui_pop_height(UI *ui) {
+    pop_ui_stack(&ui->semantic_height_stack);
+}
+
+void ui_push_parent(UI *ui, UI_Direction layout_direction) {
+    push_ui_stack(&ui->parent_stack, ui->last_element);
+    ui->last_element->layout_direction = layout_direction;
+}
+
+void ui_pop_parent(UI *ui) {
+    ui->last_element = pop_ui_stack(&ui->parent_stack);
+}
+
+void ui_horizontal_layout(UI *ui) {
+    ui->last_element->layout_direction = UI_DIRECTION_Horizontal;
+}
+
+void ui_vertical_layout(UI *ui) {
+    ui->last_element->layout_direction = UI_DIRECTION_Vertical;
+}
+
+
+
+/* ---------------------------------------------- Basic Widgets ---------------------------------------------- */
 
 UI_Element *ui_element(UI *ui, string label, UI_Flags flags) {
     UI_Element *element      = insert_element_with_hash(ui, ui_hash(ui, label), label, flags);
@@ -1077,4 +1316,3 @@ UI_Element *ui_element(UI *ui, string label, UI_Flags flags) {
     element->active_color    = ui->theme.accent_color;
     return element;
 }
-

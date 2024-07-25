@@ -133,7 +133,7 @@ u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap
     }
 
     assert(atlas->cursor_x + glyph->bitmap_width <= atlas->w);
-
+    
     // Copy the bitmap data from the internal freetype buffer into the glyph texture
     for(s16 y = 0; y < glyph->bitmap_height; ++y) {
         for(s16 x = 0; x < glyph->bitmap_width; ++x) {
@@ -149,9 +149,9 @@ u8 add_glyph_to_font_atlas(Font *font, Font_Glyph *glyph, u8 *bitmap, s64 bitmap
                 atlas->bitmap[destination_offset + i] = bitmap[source_offset + i];
             }
 
-            // Set the remaining channels to zero.
+            // Set the remaining channels to 255.
             for(u8 i = (u8) bitmap_channels; i < atlas->channels; ++i) {
-                atlas->bitmap[destination_offset + i] = 0;
+                atlas->bitmap[destination_offset + i] = 255;
             }
         }
     }
@@ -307,20 +307,30 @@ Error_Code create_font_from_memory(Font *font, string _data, s16 size, Font_Filt
     font->line_height  =  freetype_unit_to_vertical_pixels(face, face->height);
     font->ascender     =  freetype_unit_to_vertical_pixels(face, face->ascender);
     font->descender    = -freetype_unit_to_vertical_pixels(face, face->descender); // This is always a negative value in freetype by convention, but I think it better to be a positive one...
-    font->glyph_height = font->ascender + font->descender;
+    font->glyph_height =  font->ascender + font->descender;
 
     Font_Creation_Helper creation_helper;
     creation_helper.face          = face;
     creation_helper.line_height   = font->line_height;
     creation_helper.apply_kerning = FT_HAS_KERNING(face);
 
-    if(filter != FONT_FILTER_Mono) {
-        FT_Library_SetLcdFilter(library, FT_LCD_FILTER_DEFAULT);
-        creation_helper.render_options = FT_RENDER_MODE_LCD;
-        creation_helper.atlas_channels = (filter == FONT_FILTER_Lcd_With_Alpha) ? 4 : 3;
-    } else {
+    switch(filter) {
+    case FONT_FILTER_Mono:
         creation_helper.render_options = FT_RENDER_MODE_NORMAL;
         creation_helper.atlas_channels = 1;
+        break;
+
+    case FONT_FILTER_Lcd:
+        FT_Library_SetLcdFilter(library, FT_LCD_FILTER_DEFAULT);
+        creation_helper.render_options = FT_RENDER_MODE_LCD;
+        creation_helper.atlas_channels = 3;    
+        break;
+        
+    case FONT_FILTER_Lcd_With_Alpha:
+        FT_Library_SetLcdFilter(library, FT_LCD_FILTER_DEFAULT);
+        creation_helper.render_options = FT_RENDER_MODE_LCD;
+        creation_helper.atlas_channels = 4;
+        break;
     }
 
     load_glyph_set(font, glyphs_to_load, &creation_helper);
@@ -447,7 +457,7 @@ Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment 
     return text_mesh;
 }
 
-void free_text_mesh(Text_Mesh *text_mesh, Allocator *allocator) {
+void deallocate_text_mesh(Text_Mesh *text_mesh, Allocator *allocator) {
     allocator->deallocate(text_mesh->vertices);
     allocator->deallocate(text_mesh->uvs);
     allocator->deallocate(text_mesh->atlasses);

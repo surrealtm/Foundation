@@ -3,6 +3,7 @@
 #include "math/v2.h"
 #include "math/v4.h"
 #include "window.h"
+#include "font.h"
 
 #include "Dependencies/stb_image.h"
 
@@ -76,6 +77,7 @@ enum Channel {
 static
 u8 channels_per_pixel[COLOR_FORMAT_COUNT] = {
     0, // Unknown
+    1, // A
     1, // R
     2, // RG
     3, // RGB
@@ -86,6 +88,7 @@ u8 channels_per_pixel[COLOR_FORMAT_COUNT] = {
 static
 u8 channel_indices[COLOR_FORMAT_COUNT][CHANNEL_COUNT] = {
     { 0, 0, 0, 0 }, // Unknown
+    { 0, 0, 0, 0 }, // A
     { 0, 0, 0, 0 }, // R
     { 0, 1, 0, 0 }, // RB
     { 0, 1, 2, 0 }, // RBG
@@ -98,10 +101,10 @@ Color_Format get_color_format_for_channels(u8 channels) {
     Color_Format format;
     
     switch(channels) {
-    case 1: format = COLOR_FORMAT_R;    break;
-    case 2: format = COLOR_FORMAT_RG;   break;
-    case 3: format = COLOR_FORMAT_RGB;  break;
-    case 4: format = COLOR_FORMAT_RGBA; break;
+    case 1:  format = COLOR_FORMAT_R;       break;
+    case 2:  format = COLOR_FORMAT_RG;      break;
+    case 3:  format = COLOR_FORMAT_RGB;     break;
+    case 4:  format = COLOR_FORMAT_RGBA;    break;
     default: format = COLOR_FORMAT_Unknown; break;
     }
 
@@ -121,35 +124,44 @@ u8 *get_pixel_in_texture(Texture *texture, s32 x, s32 y) {
 }
 
 static
+Color query_pixel(u8 *pixel, Color_Format format) {
+    Color result;
+
+    u8 channels = channels_per_pixel[format];
+
+    if(format == COLOR_FORMAT_A) {
+        result.r = result.g = result.b = 255;
+        result.a = *pixel;
+    } else {
+        result.r = channels > 0 ? *(pixel + channel_indices[format][CHANNEL_R]) : 255;
+        result.g = channels > 1 ? *(pixel + channel_indices[format][CHANNEL_G]) : 255;
+        result.b = channels > 2 ? *(pixel + channel_indices[format][CHANNEL_B]) : 255;
+        result.a = channels > 3 ? *(pixel + channel_indices[format][CHANNEL_A]) : 255;
+    }
+
+    return result;
+}
+
+static
 Color query_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y) {
     if(x < 0 || x >= frame_buffer->w || y < 0 || y >= frame_buffer->h) return Color(255, 255, 255, 255);
 
     u8 channels = channels_per_pixel[frame_buffer->format];
 
     u8 *pixel = get_pixel_in_frame_buffer(frame_buffer, x, y);
-    Color result;
-    result.r = channels > 0 ? *(pixel + channel_indices[frame_buffer->format][CHANNEL_R]) : 255;
-    result.g = channels > 1 ? *(pixel + channel_indices[frame_buffer->format][CHANNEL_G]) : 255;
-    result.b = channels > 2 ? *(pixel + channel_indices[frame_buffer->format][CHANNEL_B]) : 255;
-    result.a = channels > 3 ? *(pixel + channel_indices[frame_buffer->format][CHANNEL_A]) : 255;
-    return result;
+    
+    return query_pixel(pixel, frame_buffer->format);
 }
 
 static
 Color query_texture(Texture *texture, v2f uv) {
-    s32 x = (s32) (uv.x * texture->w), y = (s32) (uv.y * texture->h);
+    s32 x = (s32) roundf(uv.x * texture->w), y = (s32) roundf(uv.y * texture->h);
     
     if(x < 0 || x >= texture->w || y < 0 || y >= texture->h) return Color(255, 255, 255, 255);
 
-    u8 channels = channels_per_pixel[texture->format];
-
     u8 *pixel = get_pixel_in_texture(texture, x, y);
-    Color result;
-    result.r = channels > 0 ? *(pixel + channel_indices[texture->format][CHANNEL_R]) : 255;
-    result.g = channels > 1 ? *(pixel + channel_indices[texture->format][CHANNEL_G]) : 255;
-    result.b = channels > 2 ? *(pixel + channel_indices[texture->format][CHANNEL_B]) : 255;
-    result.a = channels > 3 ? *(pixel + channel_indices[texture->format][CHANNEL_A]) : 255;
-    return result;
+
+    return query_pixel(pixel, texture->format);
 }
 
 static
@@ -280,6 +292,16 @@ Color mix(Color src, Color dst) { // src is the color of the currently rendererd
     return mix(src, dst, src_alpha, one_minus_src_alpha);
 }
 
+static
+Color multiply(Color lhs, Color rhs) {
+    Color result;
+    result.r = (u8) (((f32) lhs.r / 255.f) * ((f32) rhs.r / 255.f) * 255.f);
+    result.g = (u8) (((f32) lhs.g / 255.f) * ((f32) rhs.g / 255.f) * 255.f);
+    result.b = (u8) (((f32) lhs.b / 255.f) * ((f32) rhs.b / 255.f) * 255.f);
+    result.a = (u8) (((f32) lhs.a / 255.f) * ((f32) rhs.a / 255.f) * 255.f);
+    return result;
+}
+
 
 
 /* ------------------------------------------------ Draw Command ------------------------------------------------ */
@@ -325,22 +347,26 @@ void draw_triangle(Draw_Command *cmd, Draw_Vertex *v0, Draw_Vertex *v1, Draw_Ver
             f32 s, t, u;
             if(!point_inside_triangle(point, v0->position, v1->position, v2->position, &s, &t, &u)) continue;
 
-            Color color;
+            v2i texel = v2i((s32) roundf(x), (s32) roundf(y));
+
+            Color color = { 255, 255, 255, 255 };
             
             if(cmd->draw.options & DRAW_OPTION_Textured) {
                 v2f interpolated_uv = interpolate(s, v0->uv, t, v1->uv, u, v2->uv);
-                color = query_texture(cmd->draw.texture, interpolated_uv);
+                Color texture_color = query_texture(cmd->draw.texture, interpolated_uv);
+                color = texture_color;
             }
             
             if(cmd->draw.options & DRAW_OPTION_Colored) {
-                color = interpolate(s, v0->color, t, v1->color, u, v2->color);
+                Color vertex_color = interpolate(s, v0->color, t, v1->color, u, v2->color);
+                color = multiply(vertex_color, color);
             }
 
             if(cmd->draw.options & DRAW_OPTION_Blending) {
-                color = mix(color, query_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y));
+                color = mix(color, query_frame_buffer(cmd->frame_buffer, texel.x, texel.y));
             }
 
-            write_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y, color);
+            write_frame_buffer(cmd->frame_buffer, texel.x, texel.y, color);
         }
     }
 }
@@ -454,10 +480,14 @@ Error_Code create_texture_from_file(Texture *texture, string file_path) {
     return Success;
 }
 
-void create_texture_from_memory(Texture *texture, s32 w, s32 h, u8 channels, u8 *buffer) {
+void create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels) {
+    create_texture_from_memory(texture, buffer, w, h, get_color_format_for_channels(channels));
+}
+
+void create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, Color_Format format) {
     texture->w = w;
     texture->h = h;
-    texture->format = get_color_format_for_channels(channels);
+    texture->format = format;
     
     s64 bytes = (s64) texture->w * (s64) texture->h * (s64) channels_per_pixel[texture->format];
     texture->buffer = (u8 *) Default_Allocator->allocate(bytes);
@@ -594,4 +624,69 @@ void draw_outlined_quad(s32 x0, s32 y0, s32 x1, s32 y1, s32 thickness, Color col
     draw_quad(x1 - thickness, y0, x1, y1 - thickness, color);
     draw_quad(x0 + thickness, y1 - thickness, x1, y1, color);
     draw_quad(x0, y0 + thickness, x0 + thickness, y1, color);
+}
+
+
+
+/* ----------------------------------------------- Font Helpers ----------------------------------------------- */
+
+Error_Code create_software_font_from_file(Software_Font *software_font, string file_path, s16 size, Glyph_Set glyphs_to_load) {
+    software_font->underlying = Default_Allocator->New<Font>();
+    Error_Code error_code = create_font_from_file(software_font->underlying, file_path, size, FONT_FILTER_Mono, glyphs_to_load);
+    
+    if(error_code == Success) {
+        for(Font_Atlas *atlas = software_font->underlying->atlas; atlas != null; atlas = atlas->next) {
+            Texture *texture = Default_Allocator->New<Texture>();
+
+            assert(atlas->channels == 1 || atlas->channels == 4);
+            Color_Format color_format = atlas->channels == 1 ? COLOR_FORMAT_A : COLOR_FORMAT_RGBA;
+            create_texture_from_memory(texture, atlas->bitmap, atlas->w, atlas->h, color_format);
+            atlas->user_handle = texture;
+        }
+    }
+    
+    return error_code;
+}
+
+void destroy_software_font(Software_Font *software_font) {
+    for(Font_Atlas *atlas = software_font->underlying->atlas; atlas != null; atlas = atlas->next) {
+        Texture *texture = (Texture *) atlas->user_handle;
+        destroy_texture(texture);
+        Default_Allocator->deallocate(texture);
+    }
+    
+    destroy_font(software_font->underlying);
+    Default_Allocator->deallocate(software_font->underlying);
+}
+
+void draw_text(Software_Font *software_font, string text, s32 x, s32 y, Text_Alignment alignment, Color color) {
+    auto mesh = build_text_mesh(software_font->underlying, text, x, y, alignment, Default_Allocator);
+
+    for(s64 i = 0; i < mesh.glyph_count; ++i) {
+        Texture *texture = (Texture *) mesh.atlasses[i]->user_handle;
+
+        Draw_Command *command = make_triangle_draw_command(6);
+        command->draw.vertices[0].position = v2f(mesh.vertices[i * 12 + 0], mesh.vertices[i * 12 + 1]);
+        command->draw.vertices[0].color = color;
+        command->draw.vertices[0].uv = v2f(mesh.uvs[i * 12 + 0], mesh.uvs[i * 12 + 1]);
+        command->draw.vertices[1].position = v2f(mesh.vertices[i * 12 + 2], mesh.vertices[i * 12 + 3]);
+        command->draw.vertices[1].color = color;
+        command->draw.vertices[1].uv = v2f(mesh.uvs[i * 12 + 2], mesh.uvs[i * 12 + 3]);
+        command->draw.vertices[2].position = v2f(mesh.vertices[i * 12 + 4], mesh.vertices[i * 12 + 5]);
+        command->draw.vertices[2].color = color;
+        command->draw.vertices[2].uv = v2f(mesh.uvs[i * 12 + 4], mesh.uvs[i * 12 + 5]);
+        command->draw.vertices[3].position = v2f(mesh.vertices[i * 12 + 6], mesh.vertices[i * 12 + 7]);
+        command->draw.vertices[3].color = color;
+        command->draw.vertices[3].uv = v2f(mesh.uvs[i * 12 + 6], mesh.uvs[i * 12 + 7]);
+        command->draw.vertices[4].position = v2f(mesh.vertices[i * 12 + 8], mesh.vertices[i * 12 + 9]);
+        command->draw.vertices[4].color = color;
+        command->draw.vertices[4].uv = v2f(mesh.uvs[i * 12 + 8], mesh.uvs[i * 12 + 9]);
+        command->draw.vertices[5].position = v2f(mesh.vertices[i * 12 + 10], mesh.vertices[i * 12 + 11]);
+        command->draw.vertices[5].color = color;
+        command->draw.vertices[5].uv = v2f(mesh.uvs[i * 12 + 10], mesh.uvs[i * 12 + 11]);
+        command->draw.texture = texture;
+        command->draw.options = texture_is_valid_for_draw(texture) ? (DRAW_OPTION_Colored | DRAW_OPTION_Textured | DRAW_OPTION_Blending) : DRAW_OPTION_Nothing;
+    }
+    
+    deallocate_text_mesh(&mesh, Default_Allocator);
 }

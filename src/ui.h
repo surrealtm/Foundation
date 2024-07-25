@@ -7,6 +7,7 @@
 
 #define UI_TEXT_INPUT_EVENT_CAPACITY 16
 #define UI_STACK_CAPACITY 16
+#define UI_ELEMENT_CAPACITY 1024
 
 struct UI_Element;
 struct Font;
@@ -28,13 +29,13 @@ typedef u64 UI_Hash;
 
 typedef void(*UI_Draw_Text_Callback)(void *, string, UI_Vector2, UI_Color, UI_Color); // user_pointer, text, position, foreground_color, background_color
 typedef void(*UI_Draw_Quad_Callback)(void *, UI_Vector2, UI_Vector2, f32, UI_Color); // user_pointer, top_left, bottom_right, rounding, color
-typedef void(*UI_Set_Scissors_Callback)(void *, UI_Rect); // user_pointer, visible_rect
+typedef void(*UI_Set_Scissors_Callback)(void *, UI_Rect); // user_pointer, rect
 typedef void(*UI_Clear_Scissors_Callback)(void *); // user_pointer
 typedef void(*UI_Custom_Draw_Callback)(void *, UI_Element *, void *); // user_pointer, element, element_custom_draw_data
 
 #define UI_NULL_HASH ((UI_Hash) 0)
-#define UI_DEBUG_PRINT true
-#define UI_DEBUG_DRAW  true
+#define UI_DEBUG_PRINT false
+#define UI_DEBUG_DRAW  false
 
 #define UI_COLOR_TRANSITION_TIME .1f // Time in seconds it takes for a color transition to complete.
 #define UI_SIZE_TRANSITION_TIME  (UI_COLOR_TRANSITION_TIME * 4) // Time in seconds it takes for a size transition to complete
@@ -226,13 +227,14 @@ struct UI {
     /* Memory Managment */
     Memory_Arena arena;
     Allocator allocator;
-
+    u64 arena_frame_mark; // The position after which to wipe the arena every frame.
+    
     /* Callbacks */
     UI_Callbacks callbacks;
 
     /* Tree structure */
     UI_Element *elements;
-    u64 elements_allocated; // The size of the elements array
+    u64 element_capacity; // The size of the elements array
     u64 element_count; // The number of active UI elements in the array.
     UI_Element *last_element; // This is used for inserting UI elements.
     UI_Stack<UI_Element*> parent_stack;
@@ -263,9 +265,39 @@ struct UI {
 };
 
 
+extern UI_Theme UI_Dark_Theme;
+extern UI_Theme UI_Light_Theme;
+extern UI_Theme UI_Blue_Theme;
+extern UI_Theme UI_Watermelon_Theme;
+extern UI_Theme UI_Green_Theme;
 
-/* ------------------------------------------------ Basic API ------------------------------------------------ */
 
-UI_Semantic_Size ui_query_width(UI *ui);
-UI_Semantic_Size ui_query_height(UI *ui);
+
+/* ------------------------------------------------ Setup API ------------------------------------------------ */
+
+void create_ui(UI *ui, UI_Callbacks callbacks, UI_Theme theme, Window *window, Font *font);
+void destroy_ui(UI *ui);
+void change_ui_font(UI *ui, Font *font);
+void begin_ui_frame(UI *ui, UI_Vector2 default_size);
+void draw_ui_frame(UI *ui);
+
+
+
+/* ------------------------------------------------ Layout API ------------------------------------------------ */
+
+void ui_push_width(UI *ui, UI_Semantic_Size_Tag tag, f32 value, f32 strictness);
+void ui_push_height(UI *ui, UI_Semantic_Size_Tag tag, f32 value, f32 strictness);
+void ui_set_width(UI *ui, UI_Semantic_Size_Tag tag, f32 value, f32 strictness);
+void ui_set_height(UI *ui, UI_Semantic_Size_Tag tag, f32 value, f32 strictness);
+void ui_pop_width(UI *ui);
+void ui_pop_height(UI *ui);
+void ui_push_parent(UI *ui, UI_Direction layout_direction);
+void ui_pop_parent(UI *ui);
+void ui_horizontal_layout(UI *ui);
+void ui_vertical_layout(UI *ui);
+
+
+
+/* ---------------------------------------------- Basic Widgets ---------------------------------------------- */
+
 UI_Element *ui_element(UI *ui, string label, UI_Flags flags);
