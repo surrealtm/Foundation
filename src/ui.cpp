@@ -1,1 +1,1080 @@
 #include "ui.h"
+#include "window.h"
+#include "font.h"
+
+#include <stdarg.h>
+
+
+
+/* ------------------------------------------- Internal Convenience ------------------------------------------- */
+
+template<typename T>
+static inline
+void push_ui_stack(UI_Stack<T> *stack, T element) {
+    assert(stack->count < UI_STACK_CAPACITY);
+    stack->elements[stack->count] = element;
+    ++stack->count;
+}
+
+template<typename T>
+static inline
+T query_ui_stack(UI_Stack<T> *stack) {
+    assert(stack->count > 0);
+    return stack->elements[stack->count - 1];
+}
+
+template<typename T>
+static inline
+T pop_ui_stack(UI_Stack<T> *stack) {
+    assert(stack->count > 0);
+    --stack->count;
+    return stack->elements[stack->count];
+}
+
+template<typename T>
+static inline
+void clear_ui_stack(UI_Stack<T> *stack) {
+    stack->count = 0;
+}
+
+static
+UI_Hash ui_hash(UI *ui, string label) {
+    UI_Hash seed = UI_NULL_HASH;
+    u32 parent_index = ui->parent_stack.count;
+
+    while(seed == UI_NULL_HASH && parent_index > 0) {
+        seed = ui->parent_stack.elements[parent_index - 1]->hash;
+        --parent_index;
+    }
+
+    UI_Hash prime  = 1099511628211;
+    UI_Hash offset = 14695981039346656037;
+
+    UI_Hash hash = offset + seed;
+
+    for(s64 i = 0; i < label.count; ++i) {
+        hash ^= label[i];
+        hash *= prime;
+    }
+
+    return hash;
+}
+
+static inline
+string ui_copy_string(UI *ui, string input) {
+    return copy_string(&ui->allocator, input);
+}
+
+static inline
+string ui_concat_strings(UI *ui, string lhs, string rhs) {
+    return concatenate_strings(&ui->allocator, lhs, rhs);
+}
+
+static inline
+string ui_format_string(UI *ui, string format, ...) {
+    va_list args;
+    va_start(args, format);
+    string result = mprint(&ui->allocator, format, args);
+    va_end(args);
+    return result;
+}
+
+static inline
+UI_Color ui_mix_colors(UI_Color lhs, UI_Color rhs, f32 t) {
+    f32 one_minus_t = 1.0f - t;
+
+    UI_Color result;
+    result.r = (u8) (((f32) lhs.r * one_minus_t) + ((f32) rhs.r * one_minus_t));
+    result.g = (u8) (((f32) lhs.g * one_minus_t) + ((f32) rhs.g * one_minus_t));
+    result.b = (u8) (((f32) lhs.b * one_minus_t) + ((f32) rhs.b * one_minus_t));
+    result.a = (u8) (((f32) lhs.a * one_minus_t) + ((f32) rhs.a * one_minus_t));
+    return result;
+}
+
+static inline
+UI_Color ui_multiply_color(UI_Color color, f32 t) {
+    UI_Color result;
+    result.r = (u8) ((f32) color.r * t);
+    result.g = (u8) ((f32) color.g * t);
+    result.b = (u8) ((f32) color.b * t);
+    result.a = color.a;
+    return result;
+}
+
+static inline
+f32 ui_size_animation_factor(f32 t) {
+    return sinf(t * 10.0f) * (1.0f - t) * 0.25f;
+}
+
+static inline
+b8 ui_mouse_over_rect(UI *ui, UI_Rect rect) {
+    if(!ui->window->mouse_active_this_frame || ui->deactivated) return false;
+
+    return ui->window->mouse_x >= rect.x0 && ui->window->mouse_x <= rect.x1 &&
+        ui->window->mouse_y >= rect.y0 && ui->window->mouse_y <= rect.y1;
+}
+
+static inline
+string ui_semantic_size_tag_to_string(UI_Semantic_Size_Tag tag) {
+    string result;
+
+    switch(tag) {
+    case UI_SEMANTIC_SIZE_Pixels:                        result = "Pixels"_s; break;
+    case UI_SEMANTIC_SIZE_Label_Size:                    result = "Label Size"_s; break;
+    case UI_SEMANTIC_SIZE_Percentage_Of_Parent:          result = "Percentage_Of_Parent"_s; break;
+    case UI_SEMANTIC_SIZE_Sum_Of_Children:               result = "Sum_Of_Children"_s; break;
+    case UI_SEMANTIC_SIZE_Percentage_Of_Other_Dimension: result = "Percentage_Of_Other_Dimension"_s; break;
+    default: result = "Unknown"_s; break;
+    }
+    
+    return result;
+}
+
+static inline
+string ui_direction_to_string(UI_Direction direction) {
+    string result;
+
+    switch(direction) {
+    case UI_DIRECTION_Vertical:   result = "Vertical"_s; break;
+    case UI_DIRECTION_Horizontal: result = "Horizontal"_s; break;
+    default: result = "Unknown"_s; break;
+    }
+
+    return result;
+}
+
+static inline
+void opposite_layout_direction(UI *ui) {
+    // We (should) always have a parent, since the UI will always push the root element
+    // as the first parent in a frame. If there is no more parent, the user of this module
+    // has used it incorrectly and query_ui_stack will crash.
+    UI_Element *parent = query_ui_stack(&ui->parent_stack);
+    UI_Direction direction = parent->layout_direction;
+
+    if(direction == UI_DIRECTION_Horizontal) {
+        ui_vertical_layout(ui);
+    } else {
+        ui_horizontal_layout(ui);
+    }
+}
+
+// Some elements (mostly labels) want to have the same background color as their parent for visual reasons.
+// The background color for a label must match the color the label is rendered on to avoid artifacts.
+// For this reason, get the smallest parent that actually renders a background, and query the color of that
+// background.
+static inline
+UI_Color get_default_color_recursively(UI_Element *element) {
+    UI_Element *parent = element->parent;
+
+    while(parent->parent && !(parent->flags & UI_Background)) parent = parent->parent;
+
+    return parent->default_color;
+}
+
+static
+void reset_element(UI *ui, UI_Element *element) {
+    element->next               = null;
+    element->prev               = null;
+    element->first_child        = null;
+    element->last_child         = null;
+    element->parent             = null;
+    element->created_this_frame = false;
+    element->used_this_frame    = true;
+
+    if(ui->font_changed) {
+        element->label_size.x = (f32) get_string_width_in_pixels(ui->font, element->label);
+        element->label_size.y = (f32) ui->font->glyph_height;
+    }
+}
+
+static
+void link_element(UI *ui, UI_Element *element) {
+    if(element->flags & UI_Detach_From_Parent) {
+        element->parent = &ui->root;
+    } else {
+        element->parent = query_ui_stack(&ui->parent_stack);
+    }
+
+    if(!element->parent->first_child) {
+        element->parent->first_child = element;
+        element->parent->last_child  = element;
+    } else if(element->parent->last_child) {
+        element->parent->last_child->next = element;
+        element->prev = element->parent->last_child;
+    }
+
+    element->parent->last_child = element;
+    ui->last_element = element;
+}
+
+static
+UI_Element *insert_new_element(UI *ui, UI_Hash hash, string label, UI_Flags flags) {
+    assert(ui->element_count < ui->elements_capacity);
+
+    UI_Element *element = &ui->elements[ui->element_count];
+    ++ui->element_count;
+
+    *element                    = UI_Element();
+    element->flags              = flags;
+    element->hash               = hash;
+    element->label              = ui_copy_string(ui, label);
+    element->label_size.x       = (f32) get_string_width_in_pixels(ui->font, element->label);
+    element->label_size.y       = (f32) ui->font->glyph_height;
+    element->created_this_frame = true;
+    element->used_this_frame    = true;
+
+    link_element(ui, element);
+
+    return element;
+}
+
+static
+UI_Element *insert_element_with_hash(UI *ui, UI_Hash hash, string label, UI_Flags flags) {
+    // Check if this element already existed during the last frame, and also make sure that no element with that
+    // exact hash has already been created during this frame to prevent any hash collisions.
+    for(u64 i = 0; i < ui->element_count; ++i) {
+        UI_Element *element = &ui->elements[i];
+        if(element->hash == hash) {
+            assert(element->used_this_frame == false, "UI Element has collision.");
+            element->label = ui_copy_string(ui, label);
+            element->flags = flags;
+            reset_element(ui, element);
+            link_element(ui, element);
+            return element;
+        }
+    }
+
+    // If that element was not part of the UI last frame (or it is a non-stateful element), create a new one with
+    // the given data and insert that into the tree structure.
+    return insert_new_element(ui, hash, label, flags);
+}
+
+static
+void set_element_drag(UI *ui, UI_Element *element) {
+    // It can happen that the element has a bigger size in a dimension than the parent, e.g. if this
+    // is a scrollbar knob moving on the scrollbar background (which is made smaller for more visual
+    // clarity when dragging...)
+    // In that case, we want to restrict the movement on that axis.
+
+    if(element->parent->screen_size.x >= element->screen_size.x) {
+        element->drag_vector.x = clamp((ui->window->mouse_x - element->parent->screen_position.x - element->drag_offset.x) / (element->parent->screen_size.x - element->screen_size.x), 0, 1);
+    } else {
+        element->drag_vector.x = ((element->screen_size.x - element->parent->screen_size.x) / 2) / element->screen_size.x;
+    }
+
+    if(element->parent->screen_size.y >= element->screen_size.y) {
+        element->drag_vector.y = clamp((ui->window->mouse_y - element->parent->screen_position.y - element->drag_offset.y) / (element->parent->screen_size.y - element->screen_size.y), 0, 1);
+    } else {
+        element->drag_vector.y = ((element->screen_size.y - element->parent->screen_size.y) / 2) / element->screen_size.y;
+    }
+}
+
+static
+void set_element_parent_tree_to_hovered(UI_Element *element) {
+    while(element) {
+        element->signals |= UI_SIGNAL_Subtree_Hovered;
+        element = element->parent;
+    }
+}
+
+static
+UI_Rect calculate_rect_for_element_children(UI *ui, UI_Element *element, UI_Rect parent_rect) {
+    UI_Rect rect;
+
+    if(element->flags & UI_Extrude_Children) {
+        if(element->parent && (element->parent->flags & UI_View_Scroll_Children)) {
+            rect = parent_rect;
+        } else {
+            rect = { 0, 0, ui->root.screen_size.x, ui->root.screen_size.y };
+        }
+    } else {
+        rect = { max(element->screen_position.x, parent_rect.x0),
+                 max(element->screen_position.y, parent_rect.y0),
+                 max(element->screen_position.x + element->screen_size.x - 1, parent_rect.x1),
+                 max(element->screen_position.y + element->screen_size.y - 1, parent_rect.y1) };
+    }
+
+    if(element->flags & UI_Border) {
+        rect.x0 += ui->theme.border_size;
+        rect.y0 += ui->theme.border_size;
+        rect.x1 -= ui->theme.border_size;
+        rect.y1 -= ui->theme.border_size;
+    }
+    
+    return rect;
+}
+
+
+
+/* ---------------------------------------------- Debug Printing ---------------------------------------------- */
+
+static
+s64 get_debug_print_indentation_level(UI_Element *element) {
+    s64 indentation = 0;
+
+    while(element) {
+        indentation += 2;
+        element = element->parent;
+    }
+
+    return indentation;
+}
+
+static
+void debug_print_element(UI_Element *element) {
+    s64 indentation = get_debug_print_indentation_level(element);
+    for(s64 i = 0; i < indentation; ++i) printf(" ");
+
+    string width_string = ui_semantic_size_tag_to_string(element->semantic_width.tag);
+    string height_string = ui_semantic_size_tag_to_string(element->semantic_height.tag);
+    string direction_string = ui_direction_to_string(element->layout_direction);
+    
+    printf("Element %" PRIu64 " ('%.*s'): %f,%f : %fx%f | Width: %.*s, %f, %f | Height: %.*s, %f, %f | Layout Direction: %.*s\n", element->hash, (u32) element->label.count, element->label.data, element->screen_position.x, element->screen_position.y, element->screen_size.x, element->screen_size.y, (u32) width_string.count, width_string.data, element->semantic_width.value, element->semantic_width.strictness, (u32) height_string.count, height_string.data, element->semantic_height.value, element->semantic_height.strictness, (u32) direction_string.count, direction_string.data);
+}
+
+
+
+/* --------------------------------------------- Layout Algorithm --------------------------------------------- */
+
+static
+UI_Violation_Resolution get_ui_violation_resolution_rule(f32 total_size, f32 available_size, b8 parent_layout_in_this_direction, UI_Flags parent_flags) {
+    UI_Violation_Resolution resolution;
+
+    if(parent_layout_in_this_direction && total_size > available_size && !((parent_flags & UI_Extrude_Children) || (parent_flags & UI_View_Scroll_Children))) {
+        resolution = UI_VIOLATION_RESOLUTION_Squish;
+    } else if(!(parent_flags & UI_Extrude_Children) || !parent_layout_in_this_direction) {
+        resolution = UI_VIOLATION_RESOLUTION_Cap_At_Parent_Size;
+    } else {
+        resolution = UI_VIOLATION_RESOLUTION_Align_To_Pixels;
+    }
+    
+    return resolution;
+}
+
+static
+void calculate_standalone_screen_size_for_element_recursively(UI_Element *element) {
+    if(element->semantic_width.tag == UI_SEMANTIC_SIZE_Pixels) {
+        element->screen_size.x = element->semantic_width.value;
+    } else if(element->semantic_width.tag == UI_SEMANTIC_SIZE_Label_Size) {
+        element->screen_size.x = element->label_size.x + element->semantic_width.value;
+    }
+
+    if(element->semantic_height.tag == UI_SEMANTIC_SIZE_Pixels) {
+        element->screen_size.y = element->semantic_height.value;
+    } else if(element->semantic_height.tag == UI_SEMANTIC_SIZE_Label_Size) {
+        element->screen_size.y = element->label_size.y + element->semantic_height.value;
+    }
+
+    for(auto *child = element->first_child; child != null; child = child->next) {
+        calculate_standalone_screen_size_for_element_recursively(child);
+    }
+}
+
+static
+void calculate_upwards_dependent_screen_size_for_element_recursively(UI_Element *element) {
+    if(element->semantic_width.tag == UI_SEMANTIC_SIZE_Percentage_Of_Parent) {
+        element->screen_size.x = element->semantic_width.value * element->parent->screen_size.x;
+    }
+
+    if(element->semantic_height.tag == UI_SEMANTIC_SIZE_Percentage_Of_Parent) {
+        element->screen_size.y = element->semantic_height.value * element->parent->screen_size.y;
+    }
+
+    for(auto *child = element->first_child; child != null; child = child->next) {
+        calculate_upwards_dependent_screen_size_for_element_recursively(child);
+    }    
+}
+
+static
+void calculate_downwards_dependent_screen_size_for_element_recursively(UI_Element *element) {
+    UI_Vector2 sum_of_children = { 0, 0 };
+
+    for(auto *child = element->first_child; child != null; child = child->next) {
+        assert(element->semantic_width.tag != UI_SEMANTIC_SIZE_Sum_Of_Children || child->semantic_width.tag != UI-SEMANTIC_SIZE_Percentage_Of_Parent, "Detected a circular dependency in the UI semantic widths.");
+        assert(element->semantic_height.tag != UI_SEMANTIC_SIZE_Sum_Of_Children || child->semantic_height.tag != UI-SEMANTIC_SIZE_Percentage_Of_Parent, "Detected a circular dependency in the UI semantic heights.");
+
+        calculate_downwards_dependent_screen_size_for_element_recursively(element);
+
+        if(element->layout_direction == UI_DIRECTION_Horizontal) {
+            sum_of_children.x += child->screen_size.x;
+            sum_of_children.y  = max(child->screen_size.y, sum_of_children.y);
+        } else if(element->layout_direction == UI_DIRECTION_Vertical) {
+            sum_of_children.x  = max(child->screen_size.x, sum_of_children.x);
+            sum_of_children.y += child->screen_size.y;
+        }
+    }
+
+    if(element->semantic_width.tag == UI_SEMANTIC_SIZE_Sum_Of_Children) {
+        element->screen_size.x = sum_of_children.x + element->semantic_width.value;
+    } 
+
+    if(element->semantic_height.tag == UI_SEMANTIC_SIZE_Sum_Of_Children) {
+        element->screen_size.y = sum_of_children.y + element->semantic_height.value;
+    } 
+    
+    if(element->semantic_width.tag == UI_SEMANTIC_SIZE_Percentage_Of_Other_Dimension) {
+        assert(element->semantic_height.tag != UI_SEMANTIC_SIZE_Percentage_Of_Other_Dimension, "Detected a bidirectional dependency in the UI semantic width.");
+        element->screen_size.x = element->screen_size.y * element->semantic_width.value;
+    }
+
+    if(element->semantic_height.tag == UI_SEMANTIC_SIZE_Percentage_Of_Other_Dimension) {
+        assert(element->semantic_width.tag != UI_SEMANTIC_SIZE_Percentage_Of_Other_Dimension, "Detected a bidirectional dependency in the UI semantic width.");
+        element->screen_size.y = element->screen_size.x * element->semantic_height.value;
+    }
+}
+
+static
+void solve_screen_size_violations_recursively(UI_Element *parent) {
+    //
+    // First up, calculate the actual size the children take on, since that must be shrinked to fit the available
+    // screen space. Also keep track of how much space in total the children are willing to give up due to their
+    // strictness value being set.
+    //
+
+    UI_Vector2 children_screen_size = { 0, 0 };
+    UI_Vector2 children_fixup_budget = { 0, 0 };
+
+    for(auto *child = parent->first_child; child != null; child = child->next) {
+        if((child->flags & UI_Floating) == 0) {
+            // Floating elements are ignored in screen size violations, as these are laid out independently
+            // from the rest of the elements
+            if(parent->layout_direction == UI_DIRECTION_Horizontal) {
+                children_screen_size.x  += child->screen_size.x;
+                children_screen_size.y   = max(child->screen_size.y, children_screen_size.y);
+                children_fixup_budget.x += (1 - child->semantic_width.strictness) * child->screen_size.x;
+            } else if(parent->layout_direction == UI_DIRECTION_Vertical) {
+                children_screen_size.x   = max(child->screen_size.x, children_screen_size.x);
+                children_screen_size.y  += child->screen_size.y;
+                children_fixup_budget.y += (1 - child->semantic_height.strictness) * child->screen_size.y;
+            }
+        }
+    }
+
+    UI_Vector2 screen_size_violation = { children_screen_size.x - parent->screen_size.x, children_screen_size.y - parent->screen_size.y };
+
+    //
+    // Solve horizontal violations.
+    //
+
+    UI_Violation_Resolution horizontal_resolution = get_ui_violation_resolution_rule(children_screen_size.x, parent->screen_size.x, parent->layout_direction == UI_DIRECTION_Horizontal, parent->flags);
+
+    switch(horizontal_resolution) {
+    case UI_VIOLATION_RESOLUTION_Align_To_Pixels: {
+        for(auto *child = parent->first_child; child != null; child = child->next) {
+            child->screen_size.x = floorf(child->screen_size.x);
+        }
+    } break;
+
+    case UI_VIOLATION_RESOLUTION_Cap_At_Parent_Size: {
+        for(auto *child = parent->first_child; child != null; child = child->next) {
+            if((child->flags & UI_Floating) == 0) {
+                child->screen_size.x = floorf(min(parent->screen_size.x, child->screen_size.y));
+            } else {
+                child->screen_size.x = floorf(child->screen_size.x);
+            }
+        }        
+    } break;
+
+    case UI_VIOLATION_RESOLUTION_Squish: {
+        //
+        //    :UISubpixelTracking
+        // When children were assigned fractional sizes during the layout algorithm, then we always round
+        // that value down to an integer number of pixels for better visuals. That may however mean that
+        // we "lose" some pixels by rounding down too often. Therefore, we keep track of the "lost" pixels
+        // in this variable, and give them back to the next element once we have a full pixel.
+        // Example: Say we have 101 of parent space, and two children with 50% parent screen space each.
+        // Both children would be assigned 50.5 pixels, which does not work on a screen, so we round them
+        // both down to 50, but now they only occupy 100 of the 101 pixels of the parent. Therefore, the
+        // second child gets this "lost" pixel added, so we are back to 50 + 51 = 101 pixels.
+        //
+        f32 subpixel = 0;
+
+        if(children_fixup_budget.x > 0.0f) {
+            for(auto *child = parent->first_child; child != null; child = child->next) {
+                if((child->flags & UI_Floating) == 0) {
+                    f32 child_fixup_budget = ((1.f - child->semantic_width.strictness) * child->screen_size.x);
+                    f32 child_fixup_size   = min(child_fixup_budget * (screen_size_violation.x / children_fixup_budget.x), child_fixup_budget);
+                    child->screen_size.x   -= child_fixup_size;
+
+                    subpixel += child->screen_size.x - floorf(child->screen_size.x);
+                    child->screen_size.x = floorf(child->screen_size.x) + floorf(subpixel + 0.05f); // Avoid this weird glitch where subpixel does not quite reach 1.0 due to numerical imprecision.
+                    subpixel -= floorf(subpixel + 0.05f);
+                } else {
+                    child->screen_size.x = floorf(child->screen_size.x);
+                }
+            }
+        }
+    } break;
+    }
+
+    //
+    // Solve vertical violations.
+    //
+
+    UI_Violation_Resolution vertical_resolution = get_ui_violation_resolution_rule(children_screen_size.y, parent->screen_size.y, parent->layout_direction == UI_DIRECTION_Vertical, parent->flags);
+
+    switch(vertical_resolution) {
+    case UI_VIOLATION_RESOLUTION_Align_To_Pixels: {
+        for(auto *child = parent->first_child; child != null; child = child->next) {
+            child->screen_size.y = floorf(child->screen_size.y);
+        }
+    } break;
+        
+    case UI_VIOLATION_RESOLUTION_Cap_At_Parent_Size: {
+        for(auto *child = parent->first_child; child != null; child = child->next) {
+            child->screen_size.y = floorf(min(parent->screen_size.y, child->screen_size.y));
+        }
+    } break;
+        
+    case UI_VIOLATION_RESOLUTION_Squish: {
+        f32 subpixel = 0; // :UISubpixelTracking
+
+        if(children_fixup_budget.y > 0.0f) {
+            for(auto *child = parent->first_child; child != null; child = child->next) {
+                if((child->flags & UI_Floating) == 0) {
+                    f32 child_fixup_budget = ((1 - child->semantic_height.strictness) * child->screen_size.y);
+                    f32 child_fixup_size   = min(child_fixup_budget * (screen_size_violation.y / children_fixup_budget.y), child_fixup_budget);
+                    child->screen_size.y   -= child_fixup_size;
+
+                    subpixel += child->screen_size.y - floorf(child->screen_size.y);
+                    child->screen_size.y = floorf(child->screen_size.y) + floorf(subpixel + 0.05f);
+                    subpixel -= floorf(subpixel + 0.05f);
+                } else {
+                    child->screen_size.y = floorf(child->screen_size.y);
+                }
+            }
+        }
+    } break;
+    }
+
+    //
+    // Recursively resolve screen size violations for the children of this element
+    //
+    {
+        for(auto *child = parent->first_child; child != null; child = child->next) {
+            if(child->first_child) solve_screen_size_violations_recursively(child);
+        }
+    }
+}
+
+static
+void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rect parent_rect, UI_Vector2 *cursor, f32 frame_time) {
+    //
+    // Position this element.
+    //
+    if(element->signals & UI_SIGNAL_Dragged && ui->window->mouse_active_this_frame) {
+        // If the element is currently being dragged, update the dragging offset. This should be done before
+        // the actual element is positioned to avoid any latency in the dragging.
+        set_element_drag(ui, element);
+    }
+
+    if(element->flags & UI_Floating) {
+        // Floating and draggable elements are offset from the cursor position by their drag vector from the last
+        // frame.
+        // Every draggable element needs to be floating, but non-draggable elements may have a custom drag vector
+        // (e.g. to be positioned under the mouse cursor).
+
+        if(element->flags & UI_Draggable) {
+            // See set_ui_elemnt_drag.
+            if(element->parent->screen_size.x < element->screen_size.x) {
+                element->drag_vector.x = ((element->screen_size.x - element->parent->screen_size.x) / 2) / element->screen_size.x;
+            }
+
+            if(element->parent->screen_size.y < element->screen_size.y) {
+                element->drag_vector.y = ((element->screen_size.y - element->parent->screen_size.y) / 2) / element->screen_size.y;
+            }
+        }
+
+        UI_Vector2 available_parent_size = element->parent->screen_size;
+
+        if(!(element->flags & UI_Drag_On_Screen_Space)) {
+            available_parent_size.x -= element->screen_size.x;
+            available_parent_size.y -= element->screen_size.y;
+        }
+
+        element->screen_position.x = element->parent->screen_position.x + roundf(element->drag_vector.x * available_parent_size.x);
+        element->screen_position.y = element->parent->screen_position.y + roundf(element->drag_vector.y * available_parent_size.y);
+    } else {
+        // Non-floating elements are just set to the current cursor position
+        element->screen_position = *cursor;
+
+        // Potentially center the element in its parent's space in the non-layout direction if that was requested.
+        if((element->parent->flags & UI_Center_Children) && element->parent->layout_direction == UI_DIRECTION_Horizontal) {
+            element->screen_position.y = element->parent->screen_position.y + roundf((element->parent->screen_size.y - element->screen_size.y) / 2);
+        } else if((element->parent->flags & UI_Center_Children) && element->parent->layout_direction == UI_DIRECTION_Vertical) {
+            element->screen_position.x = element->parent->screen_position.x + roundf((element->parent->screen_size.x - element->screen_size.x) / 2);
+        }
+
+        // Increase the cursor position.
+        if(element->parent->layout_direction == UI_DIRECTION_Horizontal) {
+            cursor->x += element->screen_size.x;
+        } else if(element->parent->layout_direction == UI_DIRECTION_Vertical) {
+            cursor->y += element->screen_size.y;
+        }
+    }
+
+    // Reset the volatile signals before the children are updated, since the children may set the Subtree_Hovered
+    // flag already.
+    b8 hovered_last_frame = !!(element->signals & UI_SIGNAL_Hovered);
+    element->signals = (element->signals & UI_SIGNAL_Active) | (element->signals & UI_SIGNAL_Dragged);
+
+    //
+    // Debug print this element.
+    //
+#if UI_DEBUG_PRINT
+    debug_print_element(element);
+#endif
+
+
+    //
+    // Recursively position and update all children of this widget.
+    // This order ensures that interaction works in the same way as rendering, where children will receive
+    // interaction before their parents, and they are drawn on top of their parents.
+    // It is only "necessary" in cases where both the parents and their children are interactable, which
+    // rarely happens (e.g. the close button in the window header).
+    //
+    UI_Vector2 child_cursor = element->screen_position;
+    UI_Rect child_rect = calculate_rect_for_element_children(ui, element, parent_rect);
+
+    //
+    // If the children of this element should be extruded (outside of the parent element), then set the cursor
+    // to be just outside of this element for the first child.
+    // If the semantic size in the layout direction is the sum of its children, apply the appropriate padding.
+    //
+    if(element->layout_direction == UI_DIRECTION_Horizontal) {
+        if(element->flags & UI_Extrude_Children)     child_cursor.x += element->screen_size.x;
+        if(element->flags & UI_View_Scroll_Children) child_cursor.x += element->view_scroll_screen_offset.x;
+    } else if(element->layout_direction == UI_DIRECTION_Vertical) {
+        if(element->flags & UI_Extrude_Children)     child_cursor.y += element->screen_size.y;
+        if(element->flags & UI_View_Scroll_Children) child_cursor.y += element->view_scroll_screen_offset.y;
+    }
+
+    //
+    // If a semantic size depends on the sum of the children, the value of that size is a border around the
+    // children, which should be applied here.
+    //
+    if(element->semantic_width.tag == UI_SEMANTIC_SIZE_Sum_Of_Children)   child_cursor.x += roundf(element->semantic_width.value / 2);
+    if(element->semantic_height.tag == UI_SEMANTIC_SIZE_Sum_Of_Children)  child_cursor.y += roundf(element->semantic_height.value / 2);
+
+    // Reset the accumulated screen size for this frame so that the children can re-calculate it.
+    if(element->flags & UI_View_Scroll_Children) element->view_scroll_screen_size = { 0, 0 };
+
+    // Actually position and update the children.
+    for(auto *child = element->first_child; child != null; child = child->next) {
+        position_and_update_element_recursively(ui, child, child_rect, &child_cursor, frame_time);
+    }
+
+
+    //
+    // Handle interactions for this element.
+    //
+
+    // Check for mouse hover over this element
+    UI_Rect element_rect = { element->screen_position.x, element->screen_position.y, element->screen_position.x + element->screen_size.x - 1, element->screen_position.y + element->screen_size.y - 1 };
+    b8 mouse_over_element = ui_mouse_over_rect(ui, element_rect) && ui_mouse_over_rect(ui, parent_rect);
+    
+    b8 element_hovered = mouse_over_element && !ui->hovered_element_found && ((!(ui->window->buttons[BUTTON_Left] & BUTTON_Down) && !(ui->window->buttons[BUTTON_Left] & BUTTON_Released)) || ui->window->buttons[BUTTON_Left] & BUTTON_Pressed || element->signals & UI_SIGNAL_Dragged || hovered_last_frame); // For a clickable element to be considered, a few criteria have to be met. First up, no element can already be hovered during this frame, Secondly, the mouse actually has to be on top of the element. Thirdly, the mouse cannot be dragged upon this element (except if this element is already being dragged...)
+    
+    if(!ui->hovered_element_found && mouse_over_element) set_element_parent_tree_to_hovered(element->parent); // If the mouse is over this element, then the parent tree is considered to be hovered visually, whether or not this element actually cares about being hovered right now. This prevents weird glitches where small gaps between buttons on a window background make that window not be hovered.
+    
+    if(element_hovered && element->flags & UI_Clickable) {
+        // Trigger the animation to display the 'hovered' status.
+        element->signals |= UI_SIGNAL_Hovered;
+        ui->hovered_element_found = true;    
+    } else if(element_hovered && !(element->flags & UI_Clickable)) {
+        // If this element is not actually clickable but it is currently being hovered, then we have
+        // found our hovered element. We do this after all children have been updated, so as to not
+        // take away input from our children. This prevents these glitches where hovering over the
+        // border of a window still activates elements under the window.
+        ui->hovered_element_found = true;
+    }
+    
+    if(element->flags & UI_Clickable && element->signals & UI_SIGNAL_Hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Pressed) {
+        // If the element is currently hovered and the left button was released, this element is
+        // considered clicked
+        element->signals |= UI_SIGNAL_Clicked;
+    }
+
+    if(element->flags & UI_Activatable) {
+        if(element->signals & UI_SIGNAL_Clicked) {
+            // Toggle the active flag if the widget has been clicked
+            element->signals ^= UI_SIGNAL_Active;
+        }
+        
+        if(element->flags & UI_Deactivate_Automatically_On_Click && ui->window->buttons[BUTTON_Left] & BUTTON_Released && !(element->signals & UI_SIGNAL_Clicked)) {
+            // If the left button has been released somewhere not on this element, deactivate it
+            element->signals &= ~UI_SIGNAL_Active;
+        }
+    }
+    
+    if(element->flags & UI_Draggable) {
+        if(element->signals & UI_SIGNAL_Hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Pressed) {
+            // Enter the dragging state for this element if it has been clicked
+            element->signals |= UI_SIGNAL_Dragged;
+            element->drag_offset = { ui->window->mouse_x - element->screen_position.x, ui->window->mouse_y - element->screen_position.y };
+        }
+        
+        if(!(ui->window->buttons[BUTTON_Left] & BUTTON_Down)) {
+            // Exit the dragging state if the left mouse button is not held down
+            element->signals &= ~UI_SIGNAL_Dragged;
+        }
+    }
+    
+    if(element->flags & UI_View_Scroll_Children) {
+        if(mouse_over_element) {
+            // Scroll the content along the axis if the mouse wheel is turned.
+            if(element->layout_direction == UI_DIRECTION_Horizontal && element->screen_size.x < element->view_scroll_screen_size.x) {
+                element->view_scroll_screen_offset.x = clamp(element->view_scroll_screen_offset.x - ui->window->mouse_wheel_turns * 32, 0, element->view_scroll_screen_size.x - element.screen_size.x);
+            } else if(element->layout_direction == UI_DIRECTION_Vertical && element->screen_size.y < element->view_scroll_screen_size.y) {
+                element->view_scroll_screen_offset.y = clamp(element->view_scroll_screen_offset.y - ui->window->mouse_wheel_turns * 32, 0, element->view_scroll_screen_size.y - element->screen_size.y);
+            }
+        } else {
+            // Ensure that the view scroll offset in pixels is actually valid, in case the size
+            // of the scrollable content or this element's screen size changed.
+            if(element->layout_direction == UI_DIRECTION_Horizontal) {
+                if(element->screen_size.x < element->view_scroll_screen_size.x) {
+                    element->view_scroll_screen_offset.x = clamp(element->view_scroll_screen_offset.x, 0, element->view_scroll_screen_size.x - element->screen_size.x);
+                } else {
+                    element->view_scroll_screen_offset.x = 0;
+                }
+            } else {
+                if(element->screen_size.y < element->view_scroll_screen_size.y) {
+                    element->view_scroll_screen_offset.y = clamp(element->view_scroll_screen_offset.y, 0, element->view_scroll_screen_size.y - element->screen_size.y);
+                } else {
+                    element->view_scroll_screen_offset.y = 0;  
+                }
+            }
+        }
+    }
+    
+    // If the parent is a View Scroll, then increase the parent's view_scroll_screen_size. This acts
+    // similar to the Sum_Of_Children semantic size tag.
+    if(element->parent->flags & UI_View_Scroll_Children) {
+        if(element->parent->layout_direction == UI_DIRECTION_Horizontal) element->parent->view_scroll_screen_size.x += element->screen_size.x;
+        if(element->parent->layout_direction == UI_DIRECTION_Vertical)   element->parent->view_scroll_screen_size.y += element->screen_size.y;
+    }
+
+
+    //    
+    // If this element has a draggable child (and the appropriate flag is set), position that draggable
+    // element under the cursor.
+    //
+
+    if(element->flags & UI_Snap_Draggable_Children_On_Click && element_hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Pressed) {
+        for(auto *child = element->first_child; child != null; child = child->next) {
+            if(child->flags & UI_Draggable) {
+                // Snap the center of the child element to the cursor
+                child->drag_offset.x = child->screen_size.x * 0.5f;
+                child->drag_offset.y = child->screen_size.y * 0.5f;
+                
+                child->signals |= UI_SIGNAL_Hovered | UI_SIGNAL_Clicked | UI_SIGNAL_Dragged;
+                child->hover_t = 1;
+                
+                set_element_drag(ui, child);
+            }
+        }
+    }    
+    
+    
+    //
+    // Update the different transition animations.
+    //
+
+    if(element->signals & UI_SIGNAL_Hovered || element->signals & UI_SIGNAL_Dragged) {
+        element->hover_t = min(element->hover_t + frame_time * UI_COLOR_TRANSITION_SPEED, 1.f);
+    } else {
+        element->hover_t = max(element->hover_t - frame_time * UI_COLOR_TRANSITION_SPEED, 0.f);
+    }
+    
+    if(element->signals & UI_SIGNAL_Active) {
+        element->active_t = min(element->active_t + frame_time * UI_COLOR_TRANSITION_SPEED, 1.f);
+    } else {
+        element->active_t = max(element->active_t - frame_time * UI_COLOR_TRANSITION_SPEED, 0.f);
+    }
+    
+    if((element->flags & UI_Animate_Size_On_Activation && element->signals & UI_SIGNAL_Clicked) ||
+        (element->flags & UI_Animate_Size_On_Hover && element->signals & UI_SIGNAL_Hovered && !hovered_last_frame)) {
+        element->size_t = 1;
+    }
+    
+    element->size_t = max(element->size_t - frame_time * UI_SIZE_TRANSITION_SPEED, 0.f);
+}
+
+static
+void layout_ui(UI *ui, f32 frame_time) {
+    // Make sure the user of this module did not forget some ui_pop... call somewhere, because that
+    // will lead to issues sooner or later...
+    assert(ui->semantic_width_stack.count == 1, "UI Semantic Width Stack is not empty, invalid use.");
+    assert(ui->semantic_height_stack.count == 1, "UI Semantic Height Stack is not empty, invalid use.");
+    assert(ui->parent_stack.count == 1, "UI Parent Stack is not empty, invalid use.");
+        
+#if UI_DEBUG_PRINT
+    string layout_direction_string = ui_direction_to_string(ui->root.layout_direction);
+    printf("============ UI FRAME ============\n");
+    printf("  Screen Size: %f, %f | Layout: %.*s\n", ui->root.screen_size.x, ui->root.screen_size.y, (u32) layout_direction_string.count, layout_direction_string.data);
+#endif
+
+    // Calculate standalone sizes
+    for(auto *element = ui->root.first_child; element != null; element = element->next) {
+        calculate_standalone_screen_size_for_element_recursively(element);
+    }
+    
+    // Calculate upwards dependent sizes
+    for(auto *element = ui->root.first_child; element != null; element = element->next) {
+        calculate_upwards_dependent_screen_size_for_element_recursively(element);
+    }
+    
+    // Calculate downwards dependent sizes
+    for(auto *element = ui->root.first_child; element != null; element = element->next) {
+        calculate_downwards_dependent_screen_size_for_element_recursively(element);
+    }
+    
+    // Resolve all screen size violations.
+    solve_screen_size_violations_recursively(&ui->root);
+
+    // Position and update all elements.
+    UI_Vector2 cursor = { };
+    UI_Rect screen_rect = { 0, 0, ui->root.screen_size.x - 1, ui->root.screen_size.y - 1 };
+    for(auto *element = ui->root.first_child; element != null; element = element->next) {
+        position_and_update_element_recursively(ui, element, screen_rect, &cursor, frame_time);
+    }
+
+    // If there is currently an active text input, update that with the text input information
+    // supplied by the user.
+    if(ui->active_text_input) {
+        update_text_input(ui->active_text_input, ui->window, ui->font);
+    }
+
+    // If any ui element has been hovered during this frame, store that result in the UI structure.
+    // We cannot use the root element's signals for this, as that will be cleared out during the
+    // next frame.
+    ui->hovered_last_frame = ui->root.signals & UI_SIGNAL_Subtree_Hovered;
+
+#if UI_DEBUG_PRINT
+    printf("============ UI FRAME ============\n");
+#endif
+}
+
+
+
+/* ------------------------------------------------- Drawing ------------------------------------------------- */
+
+static
+void draw_text_input(UI *ui, Text_Input *text_input, UI_Vector2 screen_position, UI_Color background_color) {
+    // Query the complete text to render
+    string text = text_input_string_view(text_input);
+    
+    // Query the text until the cursor for rendering alignment
+    string text_until_cursor = text_input_string_view_until_cursor(text_input);
+    f32 width_until_cursor   = (f32) get_string_width_in_pixels(ui->font, text_until_cursor);
+    
+    UI_Color text_color = ui->theme.text_color;
+    if(ui->deactivated) text_color.a /= UI_DEACTIVE_ALPHA_DENOMINATOR;
+    
+    if(text_input->selection_active) {
+        // There is currently an active selection. Render the selection background with a specific color
+        // under the location where the selected text will be rendered later.
+        UI_Color selection_color = { 73, 149, 236, 255 };
+        if(ui->deactivated) selection_color.a /= UI_DEACTIVE_ALPHA_DENOMINATOR;
+        
+        string text_until_selection = text_input_string_view_until_selection(text_input);
+        string selection_text       = text_input_selected_string_view(text_input);
+        string text_after_selection = text_input_string_view_after_selection(text_input);
+        
+        f32 selection_offset = (f32) get_string_width_in_pixels(ui->font, text_until_selection);
+        f32 selection_width  = (f32) get_string_width_in_pixels(ui->font, selection_text);
+
+        // Draw the actual selection background.        
+        UI_Vector2 selection_top_left = { screen_position.x + selection_offset, screen_position.y - ui->font->ascender };
+        UI_Vector2 selection_bottom_right = { screen_position.x + selection_offset + selection_width, screen_position.y + ui->font->descender };
+        ui->callbacks.draw_quad(ui->callbacks.user_pointer, selection_top_left, selection_bottom_right, 0, selection_color);
+        
+        // Since the background color for the selected part of the input is different, we need to
+        // split the text rendering into three parts and advance the cursor accordingly.
+        ui->callbacks.draw_text(ui->callbacks.user_pointer, text_until_selection, screen_position, text_color, background_color);
+        ui->callbacks.draw_text(ui->callbacks.user_pointer, selection_text, { screen_position.x + selection_offset.x, screen_position.y }, text_color, selection_color);
+        ui->callbacks.draw_text(ui->callbacks.user_pointer, text_after_selection, { screen_position.x + selection_offset.x + selection_width, screen_position.y }, text_color, background_color);
+    } else {
+        // Render the actual input text with the default background color.
+        ui->callbacks.draw_text(ui->callbacks.user_pointer, text, screen_position, text_color, background_color);
+    }
+    
+    if(text_input->active_this_frame) {
+        // Calculate the cursor size
+        UI_Vector2 cursor_size = { (f32) get_character_width_in_pixels(ui->font, 'M'), (f32) ui->font->line_height };
+        if(text_input->cursor != text_input->count) cursor_size.x = 2;
+        
+        // Render the cursor.
+        UI_Vector2 cursor_top_left = { screen_position.x + text_input->cursor_x, screen_position.y - ui->font->ascender };
+        UI_Vector2 cursor_bottom_right = { cursor_top_left.x + cursor_size.x, cursor_top_left.y + cursor_size.y };
+        
+        UI_Color cursor_color = { ui->theme.text_color.r, ui->theme.text_color.g, ui->theme.text_color.b, (u8) (text_input->cursor_alpha_zero_to_one * 255) };
+        if(ui->deactivated) cursor_color.a /= UI_DEACTIVE_ALPHA_DENOMINATOR;
+        ui->callbacks.draw_quad(ui->callbacks.user_pointer, cursor_top_left, cursor_bottom_right, 0, cursor_color);        
+    } else if(text.count == 0 && text_input->tool_tip.count) {
+        // Render the tool tip if the text input is not active, and no text is currently in the buffer
+        ui->callbacks.draw_text(ui->callbacks.user_pointer, text_input->tool_tip, screen_position, ui_multiply_color(text_color, 0.5f), background_color);
+    }
+}
+
+static
+void draw_element_recursively(UI *ui, UI_Element *element, UI_Rect parent_rect) {
+    //
+    // Animate the visual size of this element on specific transitions if that was requested.
+    //
+    UI_Vector2 drawn_top_left     = element->screen_position;
+    UI_Vector2 drawn_bottom_right = { element->screen_position.x + element->screen_size.x, element->screen_position.y + element->screen_size.y };
+    
+    if(element->flags & UI_Animate_Size_On_Activation || element->flags & UI_Animate_Size_On_Hover) {
+        f32 factor = ui_size_animation_factor(element->size_t);
+        drawn_top_left.x     -= element->screen_size.x * factor * 0.5f;
+        drawn_top_left.y     -= element->screen_size.y * factor * 0.5f;
+        drawn_bottom_right.x += element->screen_size.x * factor * 0.5f;
+        drawn_bottom_right.y += element->screen_size.y * factor * 0.5f;
+    }
+    
+    UI_Vector2 drawn_size = { drawn_bottom_right.x - drawn_top_left.x, drawn_bottom_right.y - drawn_top_left.y };
+    
+    //
+    // Overlap the parent's and the element's rectangle to find out what part of the element should
+    // actually be drawn. This is in sync with what position_and_update_element_recursively does.
+    // It enables us to only partly render ui elements that are almost out of view in a scrollable
+    // area.
+    //
+    UI_Rect element_rect = { drawn_top_left.x, drawn_top_left.y, drawn_bottom_right.x, drawn_bottom_right.y };
+    UI_Rect visible_rect = { max(parent_rect.x0, element_rect.x0), max(parent_rect.y0, element_rect.y0), min(parent_rect.x1, element_rect.x1), min(parent_rect.y1, element_rect.y1) };
+    
+    b8 visible_rect_is_not_empty = visible_rect.x1 >= visible_rect.x0 && visible_rect.y1 >= visible_rect.y0;
+    b8 visible_rect_is_on_screen = (visible_rect.x0 < ui->root.screen_size.x && visible_rect.y0 < ui->root.screen_size.y) && (visible_rect.x1 >= 0 && visible_rect.y1 >= 0);
+    
+    //
+    // Make sure the element is at least partially visible. It might not be if it is part of a
+    // scroll view, or if it is part of a window that is moved off-screen.
+    //
+    if(visible_rect_is_not_empty && visible_rect_is_on_screen) {
+        // Set the scissors.
+        ui->callbacks.set_scissors(ui->callbacks.user_pointer, visible_rect);
+        
+        // Figure out the animated colors.
+        f32 t = clamp(element->hover_t - element->active_t * 0.5f, 0, 1);
+        UI_Color active_color = ui_mix_colors(element->default_color, element->active_color, element->active_t);
+        UI_Color final_color = ui_mix_colors(active_color, element->hovered_color, t);
+        if(ui->deactivated) final_color.a /= UI_DEACTIVE_ALPHA_DENOMINATOR;
+        
+        //
+        // Render this element according to the calculated screen layout and set flags.
+        //
+        
+        if(element->flags & UI_Background) {
+            f32 pixel_rounding = min(drawn_size.x, drawn_size.y) * element->rounding / 2;
+            ui->callbacks.draw_quad(ui->callbacks.user_pointer, drawn_top_left, drawn_bottom_right, pixel_rounding, final_color);
+        }
+        
+        if(element->flags & UI_Border && ui->theme.border_size > 0) {
+            // Draw the border using 4 separate quads.
+            UI_Color lit_border_color = ui->theme.border_color;
+            if(ui->deactivated) lit_border_color.a /= UI_DEACTIVE_ALPHA_DENOMINATOR;
+            
+            UI_Color unlit_border_color = lit_border_color;
+            if(ui->theme.lit_border) {
+                unlit_border_color.r = (u8) ((f32) unlit_border_color.r * 0.85f);
+                unlit_border_color.g = (u8) ((f32) unlit_border_color.g * 0.85f);
+                unlit_border_color.b = (u8) ((f32) unlit_border_color.b * 0.85f);
+            }
+     
+            ui->callbacks.draw_quad(ui->callbacks.user_pointer, { drawn_top_left.x, drawn_top_left.y }, { drawn_top_left.x + ui->theme.border_size, drawn_bottom_right.y }, 0, unlit_border_color); // Left border
+            ui->callbacks.draw_quad(ui->callbacks.user_pointer, { drawn_top_left.x, drawn_bottom_right.y - ui->theme.border_size }, { drawn_bottom_right.x, drawn_bottom_right.y }, 0, unlit_border_color); // Bottom border
+            ui->callbacks.draw_quad(ui->callbacks.user_pointer, { drawn_bottom_right.x - ui->theme.border_size, drawn_top_left.y }, { drawn_bottom_right.x, drawn_top_left.y }, 0, unlit_border_color); // Right border
+            ui->callbacks.draw_quad(ui->callbacks.user_pointer, { drawn_top_left.x, drawn_top_left.y }, { drawn_bottom_right.x, drawn_top_left.y + ui->theme.border_size }, 0, unlit_border_color); // Top border
+        }
+        
+        if(element->flags & UI_Label && element->label.count) {
+            // Render the label
+            UI_Vector2 label_position;
+
+            if(element->flags & UI_Center_Label) {
+                f32 centered_baseline = floorf(drawn_size.y / 2 + (ui->font->ascender + ui->font->descender) / 2);
+                label_position.x = drawn_top_left.x + roundf((drawn_size.x - element->label_size.x) / 2);
+                label_position.y = drawn_top_left.y + min(drawn_size.y, centered_baseline);
+            } else {
+                f32 low_baseline = floorf(drawn_size.y - 2 - ui->font->line_height + ui->font->ascender);
+                label_position.x = drawn_top_left.x;
+                label_position.y = drawn_top_left.y + min(drawn_size.y, low_baseline);
+            }
+            
+            UI_Color text_color = ui->theme.text_color;
+            if(ui->deactivated) text_color.a /= UI_DEACTIVE_ALPHA_DENOMINATOR;
+            
+            ui->callbacks.draw_text(ui->callbacks.user_pointer, element->label, label_position, text_color, final_color);
+        }
+        
+        if(element->flags & UI_Text_Input) {
+            // Render the text input
+            f32 low_baseline = floorf(drawn_size.y - 2 - ui->font->line_height + ui->font->ascender);
+            UI_Vector2 text_input_position = { drawn_top_left.x + 5, drawn_top_left.y + min(drawn_size.y, low_baseline) };
+            draw_text_input(ui, element->text_input, text_input_position, final_color);
+        }
+        
+        if(element->flags & UI_Custom_Drawing_Procedure) {
+            element->custom_draw(ui->callbacks.user_pointer, element, element->custom_state);
+        }
+    }
+
+#if UI_DEBUG_DRAW
+    // Debug draw the screen space of this element with a color encoded by the hash value of this
+    // element to visually show the element layout on screen
+    UI_Color hash_color = { (u8) (element->hash >> 24), (u8) (element->hash >> 16), (u8) (element->hash >> 8), 255 };
+    ui->callbacks.draw_quad(ui->callbacks.user_pointer, drawn_top_left, drawn_bottom_right, 0, hash_color);
+#endif
+
+    //
+    // Recursively render the children of this element in reverse order, so that the elements that
+    // received input first are rendered last (on top of everything else).
+    // Similar to how wehandled input, we pass along the parent_rect struct, to figure out the visible
+    // part of what should be rendered.
+    // This is mainly required for the View_Scroll_Children flag to ignore everything that is outside
+    // of the view region.
+    //
+    UI_Rect child_rect = calculate_rect_for_element_children(ui, element, parent_rect);
+
+    for(auto *child = element->last_child; child != null; child = child->prev) {
+        draw_element_recursively(ui, child, child_rect);
+    }
+}
+
+
+
+/* ------------------------------------------------ Basic API ------------------------------------------------ */
+
+UI_Semantic_Size ui_query_width(UI *ui) {
+    UI_Semantic_Size size = query_ui_stack(&ui->semantic_width_stack);
+
+    if(ui->one_pass_semantic_width) {
+        pop_ui_stack(&ui->semantic_width_stack);
+        ui->one_pass_semantic_width = false;
+    }
+
+    return size;
+}
+
+UI_Semantic_Size ui_query_height(UI *ui) {
+    UI_Semantic_Size size = query_ui_stack(&ui->semantic_height_stack);
+
+    if(ui->one_pass_semantic_height) {
+        pop_ui_stack(&ui->semantic_height_stack);
+        ui->one_pass_semantic_height = false;
+    }
+
+    return size;    
+}
+
+UI_Element *ui_element(UI *ui, string label, UI_Flags flags) {
+    UI_Element *element      = insert_element_with_hash(ui, ui_hash(ui, label), label, flags);
+    element->semantic_width  = ui_query_width(ui);
+    element->semantic_height = ui_query_height(ui);
+    element->default_color   = ui->theme.default_color;
+    element->hovered_color   = ui->theme.hovered_color;
+    element->active_color    = ui->theme.accent_color;
+    return element;
+}
+

@@ -3,12 +3,14 @@
 #include "foundation.h"
 #include "string_type.h"
 #include "memutils.h"
-#include "window.h" // For Text_Input_Event
 #include "text_input.h"
 
-#define MAX_UI_TEXT_INPUT_EVENTS 16
+#define UI_TEXT_INPUT_EVENT_CAPACITY 16
+#define UI_STACK_CAPACITY 16
 
 struct UI_Element;
+struct Font;
+struct Window;
 
 struct UI_Vector2 {
     f32 x, y;
@@ -26,15 +28,13 @@ typedef u64 UI_Hash;
 
 typedef void(*UI_Draw_Text_Callback)(void *, string, UI_Vector2, UI_Color, UI_Color); // user_pointer, text, position, foreground_color, background_color
 typedef void(*UI_Draw_Quad_Callback)(void *, UI_Vector2, UI_Vector2, f32, UI_Color); // user_pointer, top_left, bottom_right, rounding, color
-typedef void(*UI_Set_Scissors_Callback)(void *, UI_Vector2, UI_Vector2); // user_pointer, top_left, bottom_right
+typedef void(*UI_Set_Scissors_Callback)(void *, UI_Rect); // user_pointer, visible_rect
 typedef void(*UI_Clear_Scissors_Callback)(void *); // user_pointer
-typedef UI_Vector2(*UI_Query_Label_Size_Callback)(void *, string); // user_pointer, text -> size_in_pixels
-typedef UI_Vector2(*UI_Query_Character_Size_Callback)(void *, u8); // user_pointer, charcter -> size_in_pixels
 typedef void(*UI_Custom_Draw_Callback)(void *, UI_Element *, void *); // user_pointer, element, element_custom_draw_data
 
 #define UI_NULL_HASH ((UI_Hash) 0)
-#define UI_DEBUG_PRINT false
-#define UI_DEBUG_DRAW  false
+#define UI_DEBUG_PRINT true
+#define UI_DEBUG_DRAW  true
 
 #define UI_COLOR_TRANSITION_TIME .1f // Time in seconds it takes for a color transition to complete.
 #define UI_SIZE_TRANSITION_TIME  (UI_COLOR_TRANSITION_TIME * 4) // Time in seconds it takes for a size transition to complete
@@ -98,6 +98,8 @@ enum UI_Flags {
     UI_Custom_Drawing_Procedure = 1 << 18, // This UI element requires user-level drawing mechanisms, so call the callback pointer when drawing the element.
 };
 
+BITWISE(UI_Flags);
+
 enum UI_Signals {
     UI_SIGNAL_None            = 0,
     UI_SIGNAL_Hovered         = 1 << 0,
@@ -106,6 +108,8 @@ enum UI_Signals {
     UI_SIGNAL_Active          = 1 << 3,
     UI_SIGNAL_Dragged         = 1 << 4,
 };
+
+BITWISE(UI_Signals);
 
 enum UI_Alignment {
     UI_ALIGN_Left,
@@ -127,9 +131,9 @@ enum UI_Semantic_Size_Tag {
 };
 
 enum UI_Violation_Resolution {
-    UI_VOILATION_RESOLUTION_Align_To_Pixels,
-    UI_VOILATION_RESOLUTION_Cap_At_Parent_Size,
-    UI_VOILATION_RESOLUTION_Squish,    
+    UI_VIOLATION_RESOLUTION_Align_To_Pixels,
+    UI_VIOLATION_RESOLUTION_Cap_At_Parent_Size,
+    UI_VIOLATION_RESOLUTION_Squish,    
 };
 
 struct UI_Theme {
@@ -210,37 +214,24 @@ struct UI_Callbacks {
     UI_Draw_Quad_Callback draw_quad;
     UI_Set_Scissors_Callback set_scissors;
     UI_Clear_Scissors_Callback clear_scissors;
-    UI_Query_Label_Size_Callback query_label_size;
-    UI_Query_Character_Size_Callback query_character_size_callback;
 };
 
-struct UI_Font_Metrics {
-    s32 line_height;
-    s32 ascender;
-    s32 descender;
-};
-
-struct UI_Input {
-    UI_Vector2 mouse_position;
-    b8 left_button_pressed;
-    b8 left_button_held;
-    b8 left_button_released;
-    f32 mouse_wheel_turns;
-    b8 mouse_active; // Mimics the mouse_active_this_frame flag of the Window. If false, mouse input should be completely ignored as the mouse is outside the window region.
-
-    Text_Input_Event text_input_events[MAX_UI_TEXT_INPUT_EVENTS];
-    u32 text_input_event_count;
+template<typename T>
+struct UI_Stack {
+    T elements[UI_STACK_CAPACITY];
+    u32 count;
 };
 
 struct UI {
-    /* Meta data & Memory Managment */
+    /* Memory Managment */
     Memory_Arena arena;
+    Allocator allocator;
+
+    /* Callbacks */
     UI_Callbacks callbacks;
-    UI_Font_Metrics font_metrics;
-    b8 font_metrics_changed; // The builder code may want to change the font size dynamically, in which case we need to update all cached label sizes of existing elements.
 
     /* Tree structure */
-    UI_Element elements[];
+    UI_Element *elements;
     u64 elements_allocated; // The size of the elements array
     u64 element_count; // The number of active UI elements in the array.
     UI_Element *last_element; // This is used for inserting UI elements.
@@ -264,8 +255,17 @@ struct UI {
     b8 hovered_element_found;
 
     /* Input data provided by the user application */
-    UI_Vector2 screen_size;
-    UI_Input input;
+    Window *window;
+    Font   *font;
     UI_Theme theme;
     b8 deactivated; // The user application may deactivate the entire UI system, in which case no interaction happens and the UI is drawn with a faded alpha value.
+    b8 font_changed; // The builder code may want to change the font size dynamically, in which case we need to update all cached label sizes of existing elements.
 };
+
+
+
+/* ------------------------------------------------ Basic API ------------------------------------------------ */
+
+UI_Semantic_Size ui_query_width(UI *ui);
+UI_Semantic_Size ui_query_height(UI *ui);
+UI_Element *ui_element(UI *ui, string label, UI_Flags flags);

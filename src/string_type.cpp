@@ -904,3 +904,15 @@ string mprint(Allocator *allocator, const char *format, ...) {
 
     return result;
 }
+
+string mprint(Allocator *allocator, string format, ...) {
+    char *cstring_format = to_cstring(allocator, format);
+    
+    va_list args;
+    va_start(args, format);
+    string result = mprint(allocator, cstring_format, args);
+    va_end(args);
+
+    free_cstring(allocator, cstring_format);
+    return result;
+}

@@ -170,3 +170,4 @@ struct String_Builder {
 };
 
 string mprint(Allocator *allocator, const char *format, ...);
+string mprint(Allocator *allocator, string format, ...);

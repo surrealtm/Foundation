@@ -183,8 +183,8 @@ void maybe_start_or_end_selection(Text_Input *input, Text_Input_Event *event) {
 
 
 void create_text_input(Text_Input *input, Text_Input_Mode mode) {
-    input->mode   = mode;
-    input->active = false;
+    input->mode              = mode;
+    input->active_this_frame = false;
     clear_text_input(input);
 }
 
@@ -197,7 +197,7 @@ b8 update_text_input(Text_Input *input, Window *window, Font *font) {
     //
     // Handle the text input events from the window.
     //
-    if(input->active) {
+    if(input->active_this_frame) {
         for(s64 i = 0; i < window->text_input_event_count; ++i) {
             Text_Input_Event *event = &window->text_input_events[i];
 
@@ -372,7 +372,7 @@ void clear_text_input(Text_Input *input) {
 }
 
 void toggle_text_input_activeness(Text_Input *input, b8 active) {
-    input->active = active;
+    input->active_this_frame = active;
     input->time_of_last_input = os_get_hardware_time();
 }
 
@@ -403,4 +403,16 @@ string text_input_selected_string_view(Text_Input *input) {
     } else {
         return string_view(&input->buffer[input->selection_pivot], input->cursor - input->selection_pivot);
     }
+}
+
+string text_input_string_view_until_cursor(Text_Input *input) {
+    return string_view(input->buffer, input->cursor);
+}
+
+string text_input_string_view_until_selection(Text_Input *input) {
+    return string_view(input->buffer, min(input->cursor, input->selection_pivot));
+}
+
+string text_input_string_view_after_selection(Text_Input *input) {
+    return string_view(&input->buffer[max(input->cursor, input->selection_pivot)], input->count);
 }

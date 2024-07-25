@@ -19,7 +19,6 @@ struct Text_Input {
     // Internal state.
     //
     Text_Input_Mode mode;
-    b8 active;
     u8 buffer[TEXT_INPUT_BUFFER_SIZE];
     s64 count;
     s64 cursor;
@@ -28,9 +27,11 @@ struct Text_Input {
     //
     // Immediate mode exposed data.
     //
+    b8 active_this_frame;
     b8 entered_this_frame;
     b8 tabbed_this_frame;
     b8 selection_active;    
+    string tool_tip; // This string can be rendered if the buffer is empty and the text input is not set.
 
     //
     // Rendering data.
@@ -53,3 +54,6 @@ void insert_text_input_string(Text_Input *input, string string); // Inserts at t
 void remove_text_input_range(Text_Input *input, s64 first_to_remove, s64 last_to_remove);
 string text_input_string_view(Text_Input *input);
 string text_input_selected_string_view(Text_Input *input);
+string text_input_string_view_until_cursor(Text_Input *input);
+string text_input_string_view_until_selection(Text_Input *input);
+string text_input_string_view_after_selection(Text_Input *input);
