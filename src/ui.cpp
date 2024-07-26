@@ -165,10 +165,10 @@ UI_Color ui_mix_colors(UI_Color lhs, UI_Color rhs, f32 t) {
     f32 one_minus_t = 1.0f - t;
 
     UI_Color result;
-    result.r = (u8) (((f32) lhs.r * one_minus_t) + ((f32) rhs.r * one_minus_t));
-    result.g = (u8) (((f32) lhs.g * one_minus_t) + ((f32) rhs.g * one_minus_t));
-    result.b = (u8) (((f32) lhs.b * one_minus_t) + ((f32) rhs.b * one_minus_t));
-    result.a = (u8) (((f32) lhs.a * one_minus_t) + ((f32) rhs.a * one_minus_t));
+    result.r = (u8) (((f32) lhs.r * one_minus_t) + ((f32) rhs.r * t));
+    result.g = (u8) (((f32) lhs.g * one_minus_t) + ((f32) rhs.g * t));
+    result.b = (u8) (((f32) lhs.b * one_minus_t) + ((f32) rhs.b * t));
+    result.a = (u8) (((f32) lhs.a * one_minus_t) + ((f32) rhs.a * t));
     return result;
 }
 
@@ -991,7 +991,7 @@ void draw_text_input(UI *ui, Text_Input *text_input, UI_Vector2 screen_position,
 
         // Draw the actual selection background.        
         UI_Vector2 selection_top_left = { screen_position.x + selection_offset, screen_position.y - ui->font->ascender };
-        UI_Vector2 selection_bottom_right = { screen_position.x + selection_offset + selection_width, screen_position.y + ui->font->descender };
+        UI_Vector2 selection_bottom_right = { screen_position.x + selection_offset + selection_width, screen_position.y - ui->font->descender };
         ui->callbacks.draw_quad(ui->callbacks.user_pointer, selection_top_left, selection_bottom_right, 0, selection_color);
         
         // Since the background color for the selected part of the input is different, we need to
@@ -1098,7 +1098,7 @@ void draw_element_recursively(UI *ui, UI_Element *element, UI_Rect parent_rect) 
             UI_Vector2 label_position;
 
             if(element->flags & UI_Center_Label) {
-                f32 centered_baseline = floorf(drawn_size.y / 2 + (ui->font->ascender + ui->font->descender) / 2);
+                f32 centered_baseline = floorf(drawn_size.y / 2 + (ui->font->ascender - ui->font->descender) / 2);
                 label_position.x = drawn_top_left.x + roundf((drawn_size.x - element->label_size.x) / 2);
                 label_position.y = drawn_top_left.y + min(drawn_size.y, centered_baseline);
             } else {

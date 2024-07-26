@@ -34,6 +34,7 @@ struct Draw_Vertex {
 
 struct Draw_Command {
     Draw_Command_Kind kind;
+    Draw_AABB scissors;    
     
     Frame_Buffer *frame_buffer;
     
@@ -57,6 +58,8 @@ struct Software_Renderer {
 
     Frame_Buffer back_buffer;    
     Frame_Buffer *bound_frame_buffer = null;
+
+    Draw_AABB bound_scissors;
     
     b8 command_system_setup = false;
     Resizable_Array<Draw_Command> commands;
@@ -186,7 +189,7 @@ void include_vertex_in_aabb(Draw_AABB *aabb, Draw_Vertex *vertex) {
 }
 
 static
-Draw_AABB calculate_aabb_for_vertices(Frame_Buffer *frame_buffer, Draw_Vertex *v0, Draw_Vertex *v1, Draw_Vertex *v2) {
+Draw_AABB calculate_aabb_for_vertices(Draw_Vertex *v0, Draw_Vertex *v1, Draw_Vertex *v2) {
     Draw_AABB aabb;
 
     aabb.min = v2f(MAX_F32, MAX_F32);
@@ -195,14 +198,20 @@ Draw_AABB calculate_aabb_for_vertices(Frame_Buffer *frame_buffer, Draw_Vertex *v
     include_vertex_in_aabb(&aabb, v0);
     include_vertex_in_aabb(&aabb, v1);
     include_vertex_in_aabb(&aabb, v2);
-
-    // Don't bother trying to render pixels outside of the frame buffer's area.
-    aabb.min.x = max(aabb.min.x, 0);
-    aabb.min.y = max(aabb.min.y, 0);
-    aabb.max.x = min(aabb.max.x, (f32) frame_buffer->w - 1);
-    aabb.max.y = min(aabb.max.y, (f32) frame_buffer->h - 1);
     
     return aabb;
+}
+
+static
+Draw_AABB intersect_aabb(Draw_AABB lhs, s32 width, s32 height) {
+    return { v2f(max(lhs.min.x, (f32) 0),     max(lhs.min.y, (f32) 0)),
+             v2f(min(lhs.max.x, (f32) width - 1), min(lhs.max.y, (f32) height - 1)) };
+}
+
+static
+Draw_AABB intersect_aabb(Draw_AABB lhs, Draw_AABB rhs) {
+    return { v2f(max(lhs.min.x, rhs.min.x), max(lhs.min.y, rhs.min.y)),
+             v2f(min(lhs.max.x, rhs.max.x), min(lhs.max.y, rhs.max.y)) };    
 }
 
 static
@@ -314,8 +323,9 @@ Draw_Command *make_draw_command(Draw_Command_Kind kind) {
     }
     
     Draw_Command *command = state.commands.push();
-    command->kind = kind;
+    command->kind         = kind;
     command->frame_buffer = state.bound_frame_buffer;
+    command->scissors     = state.bound_scissors;
     return command;
 }
 
@@ -338,7 +348,9 @@ void destroy_draw_command(Draw_Command *command) {
 
 static
 void draw_triangle(Draw_Command *cmd, Draw_Vertex *v0, Draw_Vertex *v1, Draw_Vertex *v2) {
-    Draw_AABB aabb = calculate_aabb_for_vertices(cmd->frame_buffer, v0, v1, v2);
+    Draw_AABB vertex_aabb = calculate_aabb_for_vertices(v0, v1, v2);
+    Draw_AABB scissored_aabb = intersect_aabb(vertex_aabb, cmd->scissors);
+    Draw_AABB aabb = intersect_aabb(scissored_aabb, cmd->frame_buffer->w, cmd->frame_buffer->h);
     
     for(f32 y = aabb.min.y; y <= aabb.max.y; ++y) {
         for(f32 x = aabb.min.x; x <= aabb.max.x; ++x) {
@@ -382,9 +394,11 @@ void execute_draw_command(Draw_Command *cmd) {
             color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_B]] = cmd->clear.color.b;
             color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_A]] = cmd->clear.color.a;
             
-            for(s32 y = 0; y < cmd->frame_buffer->h; ++y) {
-                for(s32 x = 0; x < cmd->frame_buffer->w; ++x) {
-                    u8 *pixel = get_pixel_in_frame_buffer(cmd->frame_buffer, x, y);
+            Draw_AABB aabb = intersect_aabb(cmd->scissors, cmd->frame_buffer->w, cmd->frame_buffer->h);
+            
+            for(f32 y = aabb.min.y; y <= aabb.max.y; y += 1) {
+                for(f32 x = aabb.min.x; x <= aabb.max.x; x += 1) {
+                    u8 *pixel = get_pixel_in_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y);
                     memcpy(pixel, color_array, channels);
                 }
             }
@@ -433,6 +447,7 @@ void destroy_back_buffer() {
 void create_software_renderer(Window *window) {
     state.window = window;
     state.bound_frame_buffer = &state.back_buffer;
+    state.bound_scissors     = { v2f(0, 0), v2f((f32) window->w, (f32) window->h) };
     create_back_buffer();
 }
 
@@ -585,6 +600,14 @@ Draw_Command *make_quad_command(s32 x0, s32 y0, s32 x1, s32 y1) {
     command->draw.vertices[4].position = v2f((f32) x0, (f32) y1);
     command->draw.vertices[5].position = v2f((f32) x1, (f32) y1);
     return command;
+}
+
+void set_scissors(s32 x0, s32 y0, s32 x1, s32 y1) {
+    state.bound_scissors = { v2f((f32) x0, (f32) y0), v2f((f32) x1, (f32) y1) };
+}
+
+void clear_scissors() {
+    state.bound_scissors = { v2f(0, 0), v2f((f32) state.window->w, (f32) state.window->h) };
 }
 
 void clear_frame(Color color) {
