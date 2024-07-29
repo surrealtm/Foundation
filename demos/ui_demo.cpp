@@ -10,6 +10,9 @@ struct Demo {
     UI ui;
 };
 
+static b8 DARK_THEME;
+static b8 WINDOW_OPEN;
+
 static
 void draw_ui_text(void *user_pointer, string text, UI_Vector2 position, UI_Color foreground, UI_Color background) {
     Demo *demo = (Demo *) user_pointer;
@@ -32,9 +35,71 @@ void clear_ui_scissors(void *demo) {
 }
 
 static
-void demo_window(Demo *demo) {
-    ui_element(&demo->ui, "Hello"_s,     UI_Background | UI_Label | UI_Clickable | UI_Center_Label);
-    ui_element(&demo->ui, "Click Me!"_s, UI_Background | UI_Label | UI_Clickable | UI_Center_Label);
+void demo_window(UI *ui) {
+    UI_Vector2 position = { 1, 0 };
+    UI_Window_State state = ui_push_window(ui, "Window"_s, UI_WINDOW_Draggable | UI_WINDOW_Collapsable | UI_WINDOW_Closeable, &position);
+
+    if(state != UI_WINDOW_Collapsed) {    
+        ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 256, 1);
+        ui_label(ui, false, "This is a window!"_s);
+        ui_toggle_button(ui, "Toggle Me"_s);
+        ui_check_box(ui, "Dark Theme"_s, &DARK_THEME);
+        ui_slider(ui, "Slide Me"_s, 0, 1);
+        ui_text_input(ui, "Input Me"_s, TEXT_INPUT_Everything);
+        
+        ui_spacer(ui);
+        
+        if(ui_push_collapsable(ui, "Data"_s, true)) {
+            ui_text_input(ui, "Some Value"_s, TEXT_INPUT_Floating_Point);
+            ui_text_input(ui, "Some Text"_s, TEXT_INPUT_Everything);
+        }
+        ui_pop_collapsable(ui);
+    
+        if(ui_push_collapsable(ui, "Options"_s, false)) {
+            ui_check_box(ui, "Hidden Toggle"_s, &DARK_THEME);
+            ui_slider(ui, "Hidden Slider"_s, -1, 1);
+            ui_button(ui, "Hidden Button"_s);
+        }
+        ui_pop_collapsable(ui);
+
+        ui_divider(ui, true);
+        
+        ui_set_height(ui, UI_SEMANTIC_SIZE_Pixels, 150, 1);
+        ui_push_scroll_view(ui, "ScrollContent"_s, UI_DIRECTION_Vertical);
+        for(s32 i = 0; i < 4; ++i) {
+            if(ui_button(ui, UI_FORMAT_STRING(ui, "Content: %d", i))) printf("Content Button: %d\n", i);
+        }
+        ui_pop_scroll_view(ui);
+        ui_pop_width(ui);
+    }
+    ui_pop_window(ui);
+    
+    if(state == UI_WINDOW_Closed) {
+        WINDOW_OPEN = false;
+    }
+}
+
+static
+void demo_ui(UI *ui) {
+    if(ui_button(ui, "Hello!"_s)) printf("Hello!\n");
+    
+    ui_toggle_button_with_pointer(ui, "Window?"_s, &WINDOW_OPEN);
+
+    if(ui_push_dropdown(ui, "Hover me!"_s)) {
+        if(ui_button(ui, "Dropped Button"_s)) printf("Dropped button\n");
+        
+        if(ui_push_dropdown(ui, "Dropped Dropdown"_s)) {
+            if(ui_button(ui, "Twice dropped button"_s)) printf("Twice dropped button\n");
+            if(ui_button(ui, "Thrice dropped button"_s)) printf("Thrice dropped button\n");
+        }
+        ui_pop_dropdown(ui);
+    }
+    ui_pop_dropdown(ui);
+
+    ui_text_input(ui, "Enter something..."_s, TEXT_INPUT_Everything);
+    ui_text_input(ui, "Enter a number..."_s,  TEXT_INPUT_Floating_Point);
+
+    if(WINDOW_OPEN) demo_window(ui);
 }
 
 int main() {
@@ -55,11 +120,11 @@ int main() {
         frame_start = os_get_hardware_time();
         update_window(&demo.window);
         maybe_resize_back_buffer();
-        begin_ui_frame(&demo.ui, { 128, 20 });
+        begin_ui_frame(&demo.ui, { 128, 25 });
 
         // Update the UI
         {
-            demo_window(&demo);
+            demo_ui(&demo.ui);
         }
 
         // Draw the UI

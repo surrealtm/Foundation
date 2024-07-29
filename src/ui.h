@@ -44,6 +44,7 @@ typedef void(*UI_Custom_Draw_Callback)(void *, UI_Element *, void *); // user_po
 #define UI_SIZE_TRANSITION_SPEED  (1.f / UI_SIZE_TRANSITION_TIME) // Speed at which a size transition animates to fulfill the transition time
 #define UI_DEACTIVE_ALPHA_DENOMINATOR 3 // The alpha value of all colors is divided by this value whenever the UI is in deactivated mode.
 
+#define UI_FORMAT_STRING(ui, format, ...) mprint(&ui->allocator, format, __VA_ARGS__)
 
 enum UI_Window_Flags {
     UI_WINDOW_Default         = 0x0,
@@ -52,6 +53,8 @@ enum UI_Window_Flags {
     UI_WINDOW_Draggable       = 0x4,
     UI_WINDOW_Center_Children = 0x8,
 };
+
+BITWISE(UI_Window_Flags);
 
 enum UI_Window_State {
     UI_WINDOW_Closed    = 0x0,
@@ -90,7 +93,7 @@ enum UI_Flags {
     /* Misc Flags */
     UI_Snap_Draggable_Children_On_Click  = 1 << 13, // When an element has a draggable child, snap that child to the cursor when the left button gets pressed
     UI_Deactivate_Automatically_On_Click = 1 << 14, // When an element is active and the mouse button is pressed somewhere else on the screen, deactivate it
-    UI_Drag_On_Screen_Space              = 1 << 15, // The drag position of an element is usually normalized to (0,1) to work screen-resolution independent. Sometimes however that behaviour is unwanted though, e.g. when wanting to position the element under the mouse cursor.
+    UI_Drag_On_Screen_Space              = 1 << 15, // The element is prevented from being partially dragged off the screen
 
     /* Animation Flags */
     UI_Animate_Size_On_Activation = 1 << 16,
@@ -193,7 +196,7 @@ struct UI_Element {
     f32 hover_t;
     f32 size_t;
     UI_Vector2 drag_offset;
-    UI_Vector2 drag_vector;
+    UI_Vector2 float_vector;
     UI_Vector2 view_scroll_screen_offset;
     UI_Vector2 view_scroll_screen_size;
     Text_Input *text_input;
@@ -325,7 +328,7 @@ b8 ui_toggle_button(UI *ui, string label);
 b8 ui_toggle_button_with_pointer(UI *ui, string label, b8 *active);
 b8 ui_check_box(UI *ui, string label, b8 *active);
 void ui_draggable_element(UI *ui, string label);
-void ui_slider(UI *ui, string label, f32 *value, f32 min, f32 max);
+void ui_slider(UI *ui, string label, f32 min, f32 max, f32 *value = null);
 UI_Text_Input_Data ui_text_input(UI *ui, string label, Text_Input_Mode mode);
 b8 ui_text_input_with_string(UI *ui, string label, string *data, Allocator *data_allocator);
 b8 ui_text_input_with_pointer(UI *ui, string label, f32 *data);
@@ -341,7 +344,7 @@ void ui_push_fixed_container(UI *ui, UI_Direction direction);
 void ui_pop_container(UI *ui);
 b8 ui_push_collapsable(UI *ui, string name, b8 open_by_default);
 void ui_pop_collapsable(UI *ui);
-void ui_push_dropdown(UI *ui, string label);
+b8 ui_push_dropdown(UI *ui, string label);
 void ui_pop_dropdown(UI *ui);
 void ui_push_tooltip(UI *ui, UI_Vector2 screen_space_position);
 void ui_pop_tooltip(UI *ui);

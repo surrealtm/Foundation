@@ -414,5 +414,6 @@ string text_input_string_view_until_selection(Text_Input *input) {
 }
 
 string text_input_string_view_after_selection(Text_Input *input) {
-    return string_view(&input->buffer[max(input->cursor, input->selection_pivot)], input->count);
+    s64 start = max(input->cursor, input->selection_pivot);
+    return string_view(&input->buffer[start], input->count - start);
 }

@@ -225,18 +225,17 @@ string ui_direction_to_string(UI_Direction direction) {
 }
 
 static inline
-void opposite_layout_direction(UI *ui) {
+UI_Direction get_opposite_layout_direction(UI_Direction direction) {
+    return direction == UI_DIRECTION_Horizontal ? UI_DIRECTION_Vertical : UI_DIRECTION_Horizontal;
+}
+
+static inline
+UI_Direction get_opposite_layout_direction(UI *ui) {
     // We (should) always have a parent, since the UI will always push the root element
     // as the first parent in a frame. If there is no more parent, the user of this module
     // has used it incorrectly and query_ui_stack will crash.
     UI_Element *parent = query_ui_stack(&ui->parent_stack);
-    UI_Direction direction = parent->layout_direction;
-
-    if(direction == UI_DIRECTION_Horizontal) {
-        ui_vertical_layout(ui);
-    } else {
-        ui_horizontal_layout(ui);
-    }
+    return get_opposite_layout_direction(parent->layout_direction);
 }
 
 // Some elements (mostly labels) want to have the same background color as their parent for visual reasons.
@@ -338,15 +337,15 @@ void set_element_drag(UI *ui, UI_Element *element) {
     // In that case, we want to restrict the movement on that axis.
 
     if(element->parent->screen_size.x >= element->screen_size.x) {
-        element->drag_vector.x = clamp((ui->window->mouse_x - element->parent->screen_position.x - element->drag_offset.x) / (element->parent->screen_size.x - element->screen_size.x), 0, 1);
+        element->float_vector.x = clamp((ui->window->mouse_x - element->parent->screen_position.x - element->drag_offset.x) / (element->parent->screen_size.x - element->screen_size.x), 0, 1);
     } else {
-        element->drag_vector.x = ((element->screen_size.x - element->parent->screen_size.x) / 2) / element->screen_size.x;
+        element->float_vector.x = ((element->screen_size.x - element->parent->screen_size.x) / 2) / element->screen_size.x;
     }
 
     if(element->parent->screen_size.y >= element->screen_size.y) {
-        element->drag_vector.y = clamp((ui->window->mouse_y - element->parent->screen_position.y - element->drag_offset.y) / (element->parent->screen_size.y - element->screen_size.y), 0, 1);
+        element->float_vector.y = clamp((ui->window->mouse_y - element->parent->screen_position.y - element->drag_offset.y) / (element->parent->screen_size.y - element->screen_size.y), 0, 1);
     } else {
-        element->drag_vector.y = ((element->screen_size.y - element->parent->screen_size.y) / 2) / element->screen_size.y;
+        element->float_vector.y = ((element->screen_size.y - element->parent->screen_size.y) / 2) / element->screen_size.y;
     }
 }
 
@@ -371,8 +370,8 @@ UI_Rect calculate_rect_for_element_children(UI *ui, UI_Element *element, UI_Rect
     } else {
         rect = { max(element->screen_position.x, parent_rect.x0),
                  max(element->screen_position.y, parent_rect.y0),
-                 max(element->screen_position.x + element->screen_size.x - 1, parent_rect.x1),
-                 max(element->screen_position.y + element->screen_size.y - 1, parent_rect.y1) };
+                 min(element->screen_position.x + element->screen_size.x - 1, parent_rect.x1),
+                 min(element->screen_position.y + element->screen_size.y - 1, parent_rect.y1) };
     }
 
     if(element->flags & UI_Border) {
@@ -498,7 +497,7 @@ void calculate_downwards_dependent_screen_size_for_element_recursively(UI_Elemen
         assert(element->semantic_width.tag != UI_SEMANTIC_SIZE_Sum_Of_Children || child->semantic_width.tag != UI_SEMANTIC_SIZE_Percentage_Of_Parent, "Detected a circular dependency in the UI semantic widths.");
         assert(element->semantic_height.tag != UI_SEMANTIC_SIZE_Sum_Of_Children || child->semantic_height.tag != UI_SEMANTIC_SIZE_Percentage_Of_Parent, "Detected a circular dependency in the UI semantic heights.");
 
-        calculate_downwards_dependent_screen_size_for_element_recursively(element);
+        calculate_downwards_dependent_screen_size_for_element_recursively(child);
 
         if(element->layout_direction == UI_DIRECTION_Horizontal) {
             sum_of_children.x += child->screen_size.x;
@@ -678,15 +677,14 @@ void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rec
         // frame.
         // Every draggable element needs to be floating, but non-draggable elements may have a custom drag vector
         // (e.g. to be positioned under the mouse cursor).
-
         if(element->flags & UI_Draggable) {
             // See set_ui_elemnt_drag.
             if(element->parent->screen_size.x < element->screen_size.x) {
-                element->drag_vector.x = ((element->screen_size.x - element->parent->screen_size.x) / 2) / element->screen_size.x;
+                element->float_vector.x = ((element->screen_size.x - element->parent->screen_size.x) / 2) / element->screen_size.x;
             }
 
             if(element->parent->screen_size.y < element->screen_size.y) {
-                element->drag_vector.y = ((element->screen_size.y - element->parent->screen_size.y) / 2) / element->screen_size.y;
+                element->float_vector.y = ((element->screen_size.y - element->parent->screen_size.y) / 2) / element->screen_size.y;
             }
         }
 
@@ -697,8 +695,8 @@ void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rec
             available_parent_size.y -= element->screen_size.y;
         }
 
-        element->screen_position.x = element->parent->screen_position.x + roundf(element->drag_vector.x * available_parent_size.x);
-        element->screen_position.y = element->parent->screen_position.y + roundf(element->drag_vector.y * available_parent_size.y);
+        element->screen_position.x = element->parent->screen_position.x + roundf(element->float_vector.x * available_parent_size.x);
+        element->screen_position.y = element->parent->screen_position.y + roundf(element->float_vector.y * available_parent_size.y);
     } else {
         // Non-floating elements are just set to the current cursor position
         element->screen_position = *cursor;
@@ -794,7 +792,7 @@ void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rec
         ui->hovered_element_found = true;
     }
     
-    if(element->flags & UI_Clickable && element->signals & UI_SIGNAL_Hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Pressed) {
+    if(element->flags & UI_Clickable && element->signals & UI_SIGNAL_Hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Released) {
         // If the element is currently hovered and the left button was released, this element is
         // considered clicked
         element->signals |= UI_SIGNAL_Clicked;
@@ -991,7 +989,7 @@ void draw_text_input(UI *ui, Text_Input *text_input, UI_Vector2 screen_position,
 
         // Draw the actual selection background.        
         UI_Vector2 selection_top_left = { screen_position.x + selection_offset, screen_position.y - ui->font->ascender };
-        UI_Vector2 selection_bottom_right = { screen_position.x + selection_offset + selection_width, screen_position.y - ui->font->descender };
+        UI_Vector2 selection_bottom_right = { screen_position.x + selection_offset + selection_width, screen_position.y + ui->font->descender };
         ui->callbacks.draw_quad(ui->callbacks.user_pointer, selection_top_left, selection_bottom_right, 0, selection_color);
         
         // Since the background color for the selected part of the input is different, we need to
@@ -1089,7 +1087,7 @@ void draw_element_recursively(UI *ui, UI_Element *element, UI_Rect parent_rect) 
      
             ui->callbacks.draw_quad(ui->callbacks.user_pointer, { drawn_top_left.x, drawn_top_left.y }, { drawn_top_left.x + ui->theme.border_size, drawn_bottom_right.y }, 0, unlit_border_color); // Left border
             ui->callbacks.draw_quad(ui->callbacks.user_pointer, { drawn_top_left.x, drawn_bottom_right.y - ui->theme.border_size }, { drawn_bottom_right.x, drawn_bottom_right.y }, 0, unlit_border_color); // Bottom border
-            ui->callbacks.draw_quad(ui->callbacks.user_pointer, { drawn_bottom_right.x - ui->theme.border_size, drawn_top_left.y }, { drawn_bottom_right.x, drawn_top_left.y }, 0, unlit_border_color); // Right border
+            ui->callbacks.draw_quad(ui->callbacks.user_pointer, { drawn_bottom_right.x - ui->theme.border_size, drawn_top_left.y }, { drawn_bottom_right.x, drawn_bottom_right.y }, 0, unlit_border_color); // Right border
             ui->callbacks.draw_quad(ui->callbacks.user_pointer, { drawn_top_left.x, drawn_top_left.y }, { drawn_bottom_right.x, drawn_top_left.y + ui->theme.border_size }, 0, unlit_border_color); // Top border
         }
         
@@ -1308,7 +1306,7 @@ void ui_vertical_layout(UI *ui) {
 /* ---------------------------------------------- Basic Widgets ---------------------------------------------- */
 
 UI_Element *ui_element(UI *ui, UI_Hash hash, string label, UI_Flags flags) {
-    UI_Element *element      = insert_element_with_hash(ui, hash, label, flags);
+    UI_Element *element      = hash != UI_NULL_HASH ? insert_element_with_hash(ui, hash, label, flags) : insert_new_element(ui, UI_NULL_HASH, label, flags);
     element->semantic_width  = ui_query_width(ui);
     element->semantic_height = ui_query_height(ui);
     element->default_color   = ui->theme.default_color;
@@ -1325,6 +1323,12 @@ void ui_spacer(UI *ui) {
     ui_element(ui, UI_NULL_HASH, ""_s, UI_Spacer);
 }
 
+void ui_spacer(UI *ui, UI_Semantic_Size_Tag width_tag, f32 width_value, f32 width_strictness, UI_Semantic_Size_Tag height_tag, f32 height_value, f32 height_strictness) {
+    UI_Element *element      = ui_element(ui, UI_NULL_HASH, ""_s, UI_Spacer);
+    element->semantic_width  = { width_tag, width_value, width_strictness };
+    element->semantic_height = { height_tag, height_value, height_strictness };
+}
+
 void ui_divider(UI *ui, b8 visual) {
     UI_Element *parent = query_ui_stack(&ui->parent_stack);
     UI_Direction parent_direction = parent->layout_direction;
@@ -1336,6 +1340,7 @@ void ui_divider(UI *ui, b8 visual) {
             
             UI_Element *element     = ui_element(ui, UI_NULL_HASH, ""_s, UI_Background);
             element->semantic_width = { UI_SEMANTIC_SIZE_Pixels, 2, 1 };
+            element->default_color  = ui->theme.text_color;
             
             ui_spacer(ui);
             ui_pop_width(ui);                    
@@ -1345,6 +1350,7 @@ void ui_divider(UI *ui, b8 visual) {
             
             UI_Element *element      = ui_element(ui, UI_NULL_HASH, ""_s, UI_Background);
             element->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 2, 1 };
+            element->default_color   = ui->theme.text_color;
             
             ui_spacer(ui);
             ui_pop_height(ui);
@@ -1386,7 +1392,7 @@ b8 ui_toggle_button(UI *ui, string label) {
     return element->signals & UI_SIGNAL_Active;
 }
 
-b8 ui_toggle_button_with_pointer(UI *ui, string label, u8 *active) {
+b8 ui_toggle_button_with_pointer(UI *ui, string label, b8 *active) {
     UI_Element *element = ui_element(ui, label, ui->theme.button_style | UI_Label | UI_Center_Label | UI_Clickable | UI_Activatable);
     
     if(element->signals & UI_SIGNAL_Clicked) {
@@ -1454,7 +1460,7 @@ void ui_draggable_element(UI *ui, string label) {
     ui_element(ui, label, ui->theme.button_style | UI_Label | UI_Center_Label | UI_Clickable | UI_Floating | UI_Draggable);
 }
 
-void ui_slider(UI *ui, string label, f32 *value, f32 min, f32 max) {
+void ui_slider(UI *ui, string label, f32 min, f32 max, f32 *value) {
     // The background is just a non-interactable button
     ui_element(ui, label, UI_Center_Children);
     ui_push_parent(ui, UI_DIRECTION_Horizontal);
@@ -1483,11 +1489,13 @@ void ui_slider(UI *ui, string label, f32 *value, f32 min, f32 max) {
     slider_button->default_color   = ui->theme.accent_color;
     slider_button->rounding        = ui->theme.rounding;
     
-    if(slider_button->signals & UI_SIGNAL_Dragged) {
-        *value = (slider_button->drag_vector.x * (max - min) + min);
-    } else {
-        slider_button->drag_vector.x = clamp((*value - min) / (max - min), 0, 1);
-    }    
+    if(value != null) {
+        if(slider_button->signals & UI_SIGNAL_Dragged) {
+            *value = (slider_button->float_vector.x * (max - min) + min);
+        } else {
+            slider_button->float_vector.x = clamp((*value - min) / (max - min), 0, 1);
+        }    
+    }
     
     // Make a visible bar in the area on which to drag
     UI_Element *slider_bar      = ui_element(ui, ui_concat_strings(ui, label, "_sliderbar"_s), UI_Background);
@@ -1585,4 +1593,296 @@ UI_Custom_Widget_Data ui_custom_widget(UI *ui, string label, UI_Custom_Update_Ca
     data.custom_state = element->custom_state;
     data.created_this_frame = element->created_this_frame;    
     return data;
+}
+
+
+
+/* --------------------------------------------- Advanced Widgets --------------------------------------------- */
+
+UI_Window_State ui_push_window(UI *ui, string label, UI_Window_Flags window_flags, UI_Vector2 *position) {
+    UI_Flags title_bar_flags = UI_Background | UI_Label | UI_Clickable | UI_Floating | UI_Center_Label | UI_Extrude_Children | UI_Detach_From_Parent;
+    
+    if(window_flags & UI_WINDOW_Draggable) title_bar_flags |= UI_Draggable;
+    
+    UI_Element *title_bar_container      = ui_element(ui, label, title_bar_flags);
+    title_bar_container->semantic_width  = { UI_SEMANTIC_SIZE_Sum_Of_Children, 0, 1 };
+    title_bar_container->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 32, 1 };
+    title_bar_container->default_color   = ui->theme.window_title_bar_color;
+    
+    if(window_flags & UI_WINDOW_Draggable) {
+        title_bar_container->hovered_color = ui->theme.hovered_window_title_bar_color;
+    } else {
+        title_bar_container->hovered_color = ui->theme.window_title_bar_color;
+    }
+    
+    ui_push_parent(ui, UI_DIRECTION_Vertical);
+    
+    UI_Window_State window_state = UI_WINDOW_Open;
+    
+    if(window_flags & UI_WINDOW_Collapsable) {
+        UI_Element *collapse_button      = ui_element(ui, "_"_s, UI_Background | UI_Label | UI_Clickable | UI_Activatable | UI_Floating | UI_Center_Label);
+        collapse_button->semantic_width  = { UI_SEMANTIC_SIZE_Pixels, 24, 1 };
+        collapse_button->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 24, 1 };
+        collapse_button->default_color   = ui->theme.window_title_bar_button_color;
+        collapse_button->hovered_color   = ui->theme.hovered_window_title_bar_color;
+        
+        if(window_flags & UI_WINDOW_Closeable) {
+            collapse_button->float_vector = { (title_bar_container->screen_size.x - 34.0f) / title_bar_container->screen_size.x, 16.0f / title_bar_container->screen_size.y };
+        } else {
+            collapse_button->float_vector = { (title_bar_container->screen_size.x - 5.0f) / title_bar_container->screen_size.x, 20.0f / title_bar_container->screen_size.y };
+        }
+
+        if(collapse_button->signals & UI_SIGNAL_Active) {
+            // When collapsing a window, we no longer generate the children elements, therefore the
+            // usual Sum_Of_Children semantic size would make the window header extremely samll.
+            // Therefore, we just forever retain the current screen size of the window title bar.
+            window_state = UI_WINDOW_Collapsed;
+            title_bar_container->semantic_width = { UI_SEMANTIC_SIZE_Pixels, title_bar_container->screen_size.x, 0 };
+        }
+    }
+
+    if(window_flags & UI_WINDOW_Closeable) {
+        UI_Element *close_button      = ui_element(ui, "x"_s, UI_Background | UI_Label | UI_Clickable | UI_Floating | UI_Center_Label);
+        close_button->semantic_width  = { UI_SEMANTIC_SIZE_Pixels, 24, 1 };
+        close_button->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 24, 1 };
+        close_button->default_color   = ui->theme.window_title_bar_button_color;
+        close_button->hovered_color   = ui->theme.hovered_window_title_bar_color;
+        close_button->float_vector    = { (title_bar_container->screen_size.x - 5.0f) / title_bar_container->screen_size.x, 16.0f / title_bar_container->screen_size.y };
+    
+        if(close_button->signals & UI_SIGNAL_Clicked) window_state = UI_WINDOW_Closed;
+    }
+
+    if(title_bar_container->created_this_frame && position != null) title_bar_container->float_vector = *position;
+
+    UI_Flags background_flags = UI_Background;
+    if(window_flags & UI_WINDOW_Center_Children) background_flags |= UI_Center_Children;
+    
+    UI_Element *background = ui_element(ui, "__background"_s, background_flags);
+    background->default_color = ui->theme.window_background_color;
+    
+    if(window_state != UI_WINDOW_Collapsed) {
+        // If the window just got closed this frame, then we have already started pushing the window header,
+        // and should continue building the body so that the window does not flicker...
+        // The window should then not appear at all during the next frame.
+        background->semantic_width  = { UI_SEMANTIC_SIZE_Sum_Of_Children, 10, 1 };
+        background->semantic_height = { UI_SEMANTIC_SIZE_Sum_Of_Children, 10, 1 };
+    } else {
+        // Completey hide the window body.
+        background->semantic_width  = { UI_SEMANTIC_SIZE_Pixels, 0, 1 };
+        background->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 0, 1 };
+    }
+
+    ui_push_parent(ui, UI_DIRECTION_Vertical);
+
+    if(position != null) *position = title_bar_container->float_vector;
+    
+    return window_state;
+}
+
+b8 ui_pop_window(UI *ui) {
+    ui_pop_parent(ui);
+    ui_pop_parent(ui);
+    b8 hovered = (ui->last_element->signals & UI_SIGNAL_Subtree_Hovered) || (ui->last_element->signals & UI_SIGNAL_Hovered);
+    return hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Pressed;
+}
+
+void ui_push_growing_container(UI *ui, UI_Direction direction) {
+    UI_Element *element      = ui_element(ui, UI_NULL_HASH, ""_s, UI_Spacer);
+    element->semantic_width  = { UI_SEMANTIC_SIZE_Sum_Of_Children, 0, 0 };
+    element->semantic_height = { UI_SEMANTIC_SIZE_Sum_Of_Children, 0, 0 };
+    ui_push_parent(ui, direction);
+}
+
+void ui_push_fixed_container(UI *ui, UI_Direction direction) {
+    UI_Element *element = ui_element(ui, UI_NULL_HASH, ""_s, UI_Spacer);
+    element->semantic_width = ui_query_width(ui);
+    element->semantic_height = ui_query_height(ui);
+    ui_push_parent(ui, direction);
+}
+
+void ui_pop_container(UI *ui) {
+    ui_pop_parent(ui);
+}
+
+b8 ui_push_collapsable(UI *ui, string name, b8 open_by_default) {
+    //
+    // Build the header bar, which includes the toggle button and the label
+    //    
+    UI_Element *header = ui_element(ui, ui_hash(ui, ui_concat_strings(ui, name, "__collapsable_header"_s)), ""_s, UI_Background | UI_Label | UI_Clickable | UI_Activatable);
+    header->default_color = ui->theme.window_title_bar_color;
+    header->hovered_color = ui->theme.window_title_bar_color;
+    header->active_color  = ui->theme.window_title_bar_color;
+    
+    if(header->created_this_frame && open_by_default) header->signals |= UI_SIGNAL_Active;
+    
+    b8 body_expanded = header->signals & UI_SIGNAL_Active;
+    
+    // We can only set the display label after we know whether the container is actually expanded or not.
+    // This is pretty ugly, but I don't know a better way to solve this right now.
+    if(body_expanded) {
+        header->label = ui_concat_strings(ui, " v "_s, name);
+    } else {
+        header->label = ui_concat_strings(ui, " > "_s, name);
+    }
+
+    header->label_size.x = (f32) get_string_width_in_pixels(ui->font, header->label);
+    header->label_size.y = (f32) ui->font->glyph_height;
+
+    //
+    // Build the body container, which only has a valid size if the body is currently opened.
+    // The opened body then again consists of two elements. The left one is a spacer that indents the
+    // children a little to the right for more visual clarity. The other element is then the child container.
+    //
+    if(body_expanded) {
+        // The body container which will grow vertically
+        UI_Element *body_container = ui_element(ui, ui_concat_strings(ui, name, "__collapsable_body"_s), UI_Spacer);
+        body_container->semantic_height = { UI_SEMANTIC_SIZE_Sum_Of_Children, 0, 1 };        
+        ui_push_parent(ui, UI_DIRECTION_Horizontal);
+        
+        // The little spacer for indentation of the actual children
+        ui_spacer(ui, UI_SEMANTIC_SIZE_Pixels, 10, 1, UI_SEMANTIC_SIZE_Pixels, 0, 0);
+        
+        // The actual child container for the children yet to come.
+        UI_Element *children_container = ui_element(ui, ui_concat_strings(ui, name, "__collapsable_children"_s), UI_Spacer);
+        children_container->semantic_width = { UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0 };
+        children_container->semantic_height = { UI_SEMANTIC_SIZE_Sum_Of_Children, 0, 1 };
+        ui_push_parent(ui, UI_DIRECTION_Vertical);
+    } else {
+        // The body is collapsed, but the ui_pop_collapsable method does not actually know that, so "fake" the
+        // body by creating some empty spacer, one for the body_container and one for the children_container.
+        ui_spacer(ui, UI_SEMANTIC_SIZE_Pixels, 0, 0, UI_SEMANTIC_SIZE_Pixels, 0, 0);
+        ui_push_parent(ui, UI_DIRECTION_Vertical);
+
+        ui_spacer(ui, UI_SEMANTIC_SIZE_Pixels, 0, 0, UI_SEMANTIC_SIZE_Pixels, 0, 0);
+        ui_push_parent(ui, UI_DIRECTION_Vertical);
+    }
+    
+    return body_expanded;
+}
+
+void ui_pop_collapsable(UI *ui) {
+    ui_pop_parent(ui); // Pop the children container    
+    ui_pop_parent(ui); // Pop the body container
+}
+
+b8 ui_push_dropdown(UI *ui, string label) {
+    UI_Element *element = ui_element(ui, label, ui->theme.button_style | UI_Label | UI_Center_Label | UI_Clickable | UI_Extrude_Children);
+    ui_push_parent(ui, get_opposite_layout_direction(ui));
+    return element->signals & UI_SIGNAL_Active || element->signals & UI_SIGNAL_Hovered || element->signals & UI_SIGNAL_Subtree_Hovered;
+}
+
+void ui_pop_dropdown(UI *ui) {
+    ui_pop_parent(ui);
+}
+
+void ui_push_tooltip(UI *ui, UI_Vector2 screen_space_position) {
+    UI_Element *background      = ui_element(ui, "__tooltip"_s, UI_Background | UI_Border | UI_Floating | UI_Drag_On_Screen_Space);
+    background->semantic_width  = { UI_SEMANTIC_SIZE_Sum_Of_Children, 0, 1 };
+    background->semantic_height = { UI_SEMANTIC_SIZE_Sum_Of_Children, 0, 1 };
+    background->drag_offset     = { 0, 0 };
+    background->float_vector    = screen_space_position;
+    
+    ui_push_parent(ui, UI_DIRECTION_Vertical);
+}
+
+void ui_pop_tooltip(UI *ui) {
+    ui_pop_parent(ui);
+}
+
+void ui_push_scroll_view(UI *ui, string label, UI_Direction direction) {
+    UI_Direction opposite_direction = get_opposite_layout_direction(direction);
+    
+    UI_Element *container = ui_element(ui, label, UI_Background | UI_Border);
+    container->default_color = { ui->theme.window_background_color.r, ui->theme.window_background_color.g, ui->theme.window_background_color.b, 255 }; // Transparency just looks shit with scroll views.
+    ui_push_parent(ui, opposite_direction);
+    
+    UI_Element *area      = ui_element(ui, "__scrollview_area"_s, UI_View_Scroll_Children);
+    area->semantic_width  = { UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0 };
+    area->semantic_height = { UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0 };
+    ui_push_parent(ui, direction);
+}
+
+void ui_pop_scroll_view(UI *ui) {
+    UI_Element *area = query_ui_stack(&ui->parent_stack);    
+    ui_pop_parent(ui); // Pop the area    
+    
+    if(area->layout_direction == UI_DIRECTION_Vertical && area->view_scroll_screen_size.y > area->screen_size.y) {
+        UI_Element *scrollbar_container      = ui_element(ui, "__scrollview_container"_s, UI_Background | UI_Center_Children);
+        scrollbar_container->semantic_width  = { UI_SEMANTIC_SIZE_Pixels, 15, 1 };
+        scrollbar_container->semantic_height = { UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0 };
+        scrollbar_container->default_color   = { ui->theme.window_background_color.r, ui->theme.window_background_color.g, ui->theme.window_background_color.b, 255 };        
+        ui_push_parent(ui, UI_DIRECTION_Vertical); // Center the children horizontally
+        
+        ui_spacer(ui, UI_SEMANTIC_SIZE_Pixels, 0, 0, UI_SEMANTIC_SIZE_Pixels, 5, 1);
+        
+        UI_Element *scrollbar_background      = ui_element(ui, "__scrollview_background"_s, UI_Background | UI_Snap_Draggable_Children_On_Click | UI_Extrude_Children);
+        scrollbar_background->semantic_width  = { UI_SEMANTIC_SIZE_Pixels, 7, 1 };
+        scrollbar_background->semantic_height = { UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0 };
+        scrollbar_background->default_color   = ui->theme.border_color;
+        scrollbar_background->hovered_color   = ui->theme.border_color;
+        scrollbar_background->rounding        = ui->theme.rounding;
+        ui_push_parent(ui, UI_DIRECTION_Vertical);
+
+        f32 knob_size = roundf(min(area->screen_size.y / area->view_scroll_screen_size.y, 1.0f) * (scrollbar_background->screen_size.y));
+        UI_Element *scrollbar_knob      = ui_element(ui, "__scrollview_knob"_s, UI_Background | UI_Clickable | UI_Floating | UI_Draggable);
+        scrollbar_knob->semantic_width  = { UI_SEMANTIC_SIZE_Pixels, 7, 1 };
+        scrollbar_knob->semantic_height = { UI_SEMANTIC_SIZE_Pixels, knob_size, 1 };
+        scrollbar_knob->default_color   = ui->theme.accent_color;
+        scrollbar_knob->hovered_color   = ui->theme.hovered_color;
+        scrollbar_knob->rounding        = ui->theme.rounding;
+
+        if(scrollbar_knob->signals & UI_SIGNAL_Hovered || scrollbar_knob->signals & UI_SIGNAL_Dragged) {
+            scrollbar_background->semantic_width = { UI_SEMANTIC_SIZE_Pixels, 1, 1 };
+        } else {
+            scrollbar_knob->float_vector.y = area->view_scroll_screen_offset.y / (area->view_scroll_screen_size.y - area->screen_size.y); // If the scroll screen size has not yet been calculated, this would cause an NaN...
+        }
+
+        ui_pop_parent(ui);
+        
+        ui_spacer(ui, UI_SEMANTIC_SIZE_Pixels, 0, 0, UI_SEMANTIC_SIZE_Pixels, 5, 1);
+
+        ui_pop_parent(ui);
+        
+        area->view_scroll_screen_offset.y = scrollbar_knob->float_vector.y * (area->view_scroll_screen_size.y - area->screen_size.y);
+    } else if(area->layout_direction == UI_DIRECTION_Horizontal && area->view_scroll_screen_size.x > area->screen_size.x) {
+        UI_Element *scrollbar_container      = ui_element(ui, "__scrollview_container"_s, UI_Background | UI_Center_Children);
+        scrollbar_container->semantic_width  = { UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0 };
+        scrollbar_container->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 15, 1 };
+        scrollbar_container->default_color   = { ui->theme.window_background_color.r, ui->theme.window_background_color.g, ui->theme.window_background_color.b, 255 };        
+        ui_push_parent(ui, UI_DIRECTION_Horizontal); // Center the children vertically
+        
+        ui_spacer(ui, UI_SEMANTIC_SIZE_Pixels, 5, 1, UI_SEMANTIC_SIZE_Pixels, 0, 0);
+        
+        UI_Element *scrollbar_background      = ui_element(ui, "__scrollview_background"_s, UI_Background | UI_Snap_Draggable_Children_On_Click | UI_Extrude_Children);
+        scrollbar_background->semantic_width  = { UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0 };
+        scrollbar_background->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 7, 1 };
+        scrollbar_background->default_color   = ui->theme.border_color;
+        scrollbar_background->hovered_color   = ui->theme.border_color;
+        scrollbar_background->rounding        = ui->theme.rounding;
+        ui_push_parent(ui, UI_DIRECTION_Horizontal);
+
+        f32 knob_size = roundf(min(area->screen_size.x / area->view_scroll_screen_size.x, 1.0f) * (scrollbar_background->screen_size.x));
+        UI_Element *scrollbar_knob      = ui_element(ui, "__scrollview_knob"_s, UI_Background | UI_Clickable | UI_Floating | UI_Draggable);
+        scrollbar_knob->semantic_width  = { UI_SEMANTIC_SIZE_Pixels, knob_size, 1 };
+        scrollbar_knob->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 7, 1 };
+        scrollbar_knob->default_color   = ui->theme.accent_color;
+        scrollbar_knob->hovered_color   = ui->theme.hovered_color;
+        scrollbar_knob->rounding        = ui->theme.rounding;
+
+        if(scrollbar_knob->signals & UI_SIGNAL_Hovered || scrollbar_knob->signals & UI_SIGNAL_Dragged) {
+            scrollbar_background->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 1, 1 };
+        } else {
+            scrollbar_knob->float_vector.x = area->view_scroll_screen_offset.x / (area->view_scroll_screen_size.x - area->screen_size.x); // If the scroll screen size has not yet been calculated, this would cause an NaN...
+        }
+
+        ui_pop_parent(ui);
+        
+        ui_spacer(ui, UI_SEMANTIC_SIZE_Pixels, 5, 1, UI_SEMANTIC_SIZE_Pixels, 0, 0);
+
+        ui_pop_parent(ui);
+        
+        area->view_scroll_screen_offset.x = scrollbar_knob->float_vector.x * (area->view_scroll_screen_size.x - area->screen_size.x);        
+    }
+    
+    ui_pop_parent(ui); // Pop the complete container
 }
