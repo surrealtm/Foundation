@@ -31,6 +31,7 @@ typedef void(*UI_Draw_Text_Callback)(void *, string, UI_Vector2, UI_Color, UI_Co
 typedef void(*UI_Draw_Quad_Callback)(void *, UI_Vector2, UI_Vector2, f32, UI_Color); // user_pointer, top_left, bottom_right, rounding, color
 typedef void(*UI_Set_Scissors_Callback)(void *, UI_Rect); // user_pointer, rect
 typedef void(*UI_Clear_Scissors_Callback)(void *); // user_pointer
+typedef void(*UI_Custom_Update_Callback)(void *, UI_Element *, void *); // user_pointer, element, element_custom_state
 typedef void(*UI_Custom_Draw_Callback)(void *, UI_Element *, void *); // user_pointer, element, element_custom_draw_data
 
 #define UI_NULL_HASH ((UI_Hash) 0)
@@ -65,7 +66,7 @@ enum UI_Text_Input_State {
 };
 
 enum UI_Flags {
-    UI_Empty = 0x0,
+    UI_Spacer     = 0x0,
 
     /* Rendering Flags */
     UI_Label      = 1 << 0,
@@ -217,6 +218,19 @@ struct UI_Callbacks {
     UI_Clear_Scissors_Callback clear_scissors;
 };
 
+struct UI_Text_Input_Data {
+    b8 entered;
+    b8 valid;
+    string _string;
+    s64 _integer;
+    f64 _floating_point;
+};
+
+struct UI_Custom_Widget_Data {
+    b8 created_this_frame;
+    void *custom_state;
+};
+
 template<typename T>
 struct UI_Stack {
     T elements[UI_STACK_CAPACITY];
@@ -301,3 +315,35 @@ void ui_vertical_layout(UI *ui);
 /* ---------------------------------------------- Basic Widgets ---------------------------------------------- */
 
 UI_Element *ui_element(UI *ui, string label, UI_Flags flags);
+void ui_spacer(UI *ui);
+void ui_divider(UI *ui, b8 visual);
+
+void ui_label(UI *ui, b8 centered, string label);
+b8 ui_button(UI *ui, string label);
+void ui_deactivated_button(UI *ui, string label); // Gives the visual and layout of a functional button but indicates that this button is deactivated, for whatever application purpose.
+b8 ui_toggle_button(UI *ui, string label);
+b8 ui_toggle_button_with_pointer(UI *ui, string label, b8 *active);
+b8 ui_check_box(UI *ui, string label, b8 *active);
+void ui_draggable_element(UI *ui, string label);
+void ui_slider(UI *ui, string label, f32 *value, f32 min, f32 max);
+UI_Text_Input_Data ui_text_input(UI *ui, string label, Text_Input_Mode mode);
+b8 ui_text_input_with_string(UI *ui, string label, string *data, Allocator *data_allocator);
+b8 ui_text_input_with_pointer(UI *ui, string label, f32 *data);
+UI_Custom_Widget_Data ui_custom_widget(UI *ui, string label, UI_Custom_Update_Callback update_procedure, UI_Custom_Draw_Callback draw_callback, u64 requested_custom_state_size);
+
+
+/* --------------------------------------------- Advanced Widgets --------------------------------------------- */
+
+UI_Window_State ui_push_window(UI *ui, string label, UI_Window_Flags window_flags, UI_Vector2 *position = null);
+b8 ui_pop_window(UI *ui); // Returns true if the window has been interacted with this frame
+void ui_push_growing_container(UI *ui, UI_Direction direction);
+void ui_push_fixed_container(UI *ui, UI_Direction direction);
+void ui_pop_container(UI *ui);
+b8 ui_push_collapsable(UI *ui, string name, b8 open_by_default);
+void ui_pop_collapsable(UI *ui);
+void ui_push_dropdown(UI *ui, string label);
+void ui_pop_dropdown(UI *ui);
+void ui_push_tooltip(UI *ui, UI_Vector2 screen_space_position);
+void ui_pop_tooltip(UI *ui);
+void ui_push_scroll_view(UI *ui, string label, UI_Direction direction);
+void ui_pop_scroll_view(UI *ui);

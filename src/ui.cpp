@@ -1307,12 +1307,282 @@ void ui_vertical_layout(UI *ui) {
 
 /* ---------------------------------------------- Basic Widgets ---------------------------------------------- */
 
-UI_Element *ui_element(UI *ui, string label, UI_Flags flags) {
-    UI_Element *element      = insert_element_with_hash(ui, ui_hash(ui, label), label, flags);
+UI_Element *ui_element(UI *ui, UI_Hash hash, string label, UI_Flags flags) {
+    UI_Element *element      = insert_element_with_hash(ui, hash, label, flags);
     element->semantic_width  = ui_query_width(ui);
     element->semantic_height = ui_query_height(ui);
     element->default_color   = ui->theme.default_color;
     element->hovered_color   = ui->theme.hovered_color;
     element->active_color    = ui->theme.accent_color;
     return element;
+}
+
+UI_Element *ui_element(UI *ui, string label, UI_Flags flags) {
+    return ui_element(ui, ui_hash(ui, label), label, flags);
+}
+
+void ui_spacer(UI *ui) {
+    ui_element(ui, UI_NULL_HASH, ""_s, UI_Spacer);
+}
+
+void ui_divider(UI *ui, b8 visual) {
+    UI_Element *parent = query_ui_stack(&ui->parent_stack);
+    UI_Direction parent_direction = parent->layout_direction;
+    
+    if(visual) {
+        if(parent_direction == UI_DIRECTION_Horizontal) {
+            ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 4.f, 1.f);
+            ui_spacer(ui);
+            
+            UI_Element *element     = ui_element(ui, UI_NULL_HASH, ""_s, UI_Background);
+            element->semantic_width = { UI_SEMANTIC_SIZE_Pixels, 2, 1 };
+            
+            ui_spacer(ui);
+            ui_pop_width(ui);                    
+        } else if(parent_direction == UI_DIRECTION_Vertical) {
+            ui_push_height(ui, UI_SEMANTIC_SIZE_Pixels, 4.f, 1.f);
+            ui_spacer(ui);
+            
+            UI_Element *element      = ui_element(ui, UI_NULL_HASH, ""_s, UI_Background);
+            element->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 2, 1 };
+            
+            ui_spacer(ui);
+            ui_pop_height(ui);
+        }
+    } else {
+        if(parent_direction == UI_DIRECTION_Horizontal) {            
+            UI_Element *element      = ui_element(ui, UI_NULL_HASH, ""_s, UI_Spacer);
+            element->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 10, 1 };
+        } else if(parent_direction == UI_DIRECTION_Vertical) {
+            UI_Element *element     = ui_element(ui, UI_NULL_HASH, ""_s, UI_Spacer);
+            element->semantic_width = { UI_SEMANTIC_SIZE_Pixels, 10, 1 };
+        }
+    }
+}
+
+
+void ui_label(UI *ui, b8 centered, string label) {
+    UI_Flags flags = UI_Label;
+    if(centered) flags |= UI_Center_Label;
+    
+    UI_Element *element    = ui_element(ui, UI_NULL_HASH, label, flags);
+    element->default_color = get_default_color_recursively(element);
+}
+
+b8 ui_button(UI *ui, string label) {
+    UI_Element *element = ui_element(ui, label, ui->theme.button_style | UI_Label | UI_Center_Label | UI_Clickable);
+    return element->signals & UI_SIGNAL_Clicked;
+}
+
+void ui_deactivated_button(UI *ui, string label) {
+    UI_Element *element = ui_element(ui, label, ui->theme.button_style | UI_Label | UI_Center_Label);
+    element->default_color = { 70, 70, 70, 255 };
+    element->hovered_color = element->default_color;
+    element->active_color  = element->default_color;
+}
+
+b8 ui_toggle_button(UI *ui, string label) {
+    UI_Element *element = ui_element(ui, label, ui->theme.button_style | UI_Label | UI_Center_Label | UI_Clickable | UI_Activatable);
+    return element->signals & UI_SIGNAL_Active;
+}
+
+b8 ui_toggle_button_with_pointer(UI *ui, string label, u8 *active) {
+    UI_Element *element = ui_element(ui, label, ui->theme.button_style | UI_Label | UI_Center_Label | UI_Clickable | UI_Activatable);
+    
+    if(element->signals & UI_SIGNAL_Clicked) {
+        *active = element->signals & UI_SIGNAL_Active;
+    } else if(*active) {
+        element->signals |= UI_SIGNAL_Active;    
+    } else {
+        element->signals &= ~UI_SIGNAL_Active;
+    }
+    
+    return element->signals & UI_SIGNAL_Clicked;
+}
+
+// @Cleanup:
+// Maybe only make the background interactable, so that we don't need to press on the teeny tiny 
+// button but instead also on the label and shit, and then only use the teeny tiny button for visual
+// representation of state?
+b8 ui_check_box(UI *ui, string label, b8 *active) {
+    //
+    // The background is just a non-interactable button
+    //
+    ui_element(ui, label, UI_Center_Children);
+    ui_push_parent(ui, UI_DIRECTION_Horizontal);
+    
+    //
+    // Add the actual toggle box in the left corner of the background.
+    //
+    ui_push_height(ui, UI_SEMANTIC_SIZE_Pixels, 16, 1);
+    ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 16, 1);
+    
+    UI_Element *toggle_box = ui_element(ui, ui_concat_strings(ui, label, "_togglebox"_s), UI_Background | UI_Clickable | UI_Activatable | UI_Animate_Size_On_Activation);
+    toggle_box->rounding   = ui->theme.rounding;
+    
+    if(toggle_box->signals & UI_SIGNAL_Clicked) {
+        *active = toggle_box->signals & UI_SIGNAL_Active;
+    } else if(*active) {
+        toggle_box->signals |= UI_SIGNAL_Active;
+        if(toggle_box->created_this_frame) toggle_box->active_t = 1.f;
+    } else {
+        toggle_box->signals &= ~UI_SIGNAL_Active;
+    }
+    
+    ui_pop_width(ui);
+    ui_pop_height(ui);
+    
+    //
+    // Add a little space between the toggle box and the label.
+    //
+    ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 8, 1);
+    ui_spacer(ui);
+    ui_pop_width(ui);
+    
+    //
+    // Make the vertically centered label
+    //
+    ui_push_width(ui, UI_SEMANTIC_SIZE_Label_Size, 0, 0);
+    ui_label(ui, true, label);
+    ui_pop_width(ui);
+    
+    ui_pop_parent(ui);
+    return toggle_box->signals & UI_SIGNAL_Clicked;
+}
+
+void ui_draggable_element(UI *ui, string label) {
+    ui_element(ui, label, ui->theme.button_style | UI_Label | UI_Center_Label | UI_Clickable | UI_Floating | UI_Draggable);
+}
+
+void ui_slider(UI *ui, string label, f32 *value, f32 min, f32 max) {
+    // The background is just a non-interactable button
+    ui_element(ui, label, UI_Center_Children);
+    ui_push_parent(ui, UI_DIRECTION_Horizontal);
+    
+    // Make the label for the slider
+    ui_push_height(ui, UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0);
+    ui_push_width(ui, UI_SEMANTIC_SIZE_Label_Size, 5, 1);
+    ui_label(ui, false, label);
+    ui_pop_width(ui);
+    ui_pop_height(ui);
+    
+    // Make a little gap between the text and the actual slider bar.
+    ui_set_width(ui, UI_SEMANTIC_SIZE_Pixels, 10, 1);
+    ui_spacer(ui);
+    
+    // Make the small area on which the actual slider button can be moved
+    ui_push_height(ui, UI_SEMANTIC_SIZE_Pixels, 15, 1);
+    ui_push_width(ui, UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0);
+    ui_element(ui, ui_concat_strings(ui, label, "_sliderarea"_s), UI_Center_Children | UI_Snap_Draggable_Children_On_Click);
+    ui_push_parent(ui, UI_DIRECTION_Horizontal);
+    
+    // Make the little slider button
+    UI_Element *slider_button      = ui_element(ui, ui_concat_strings(ui, label, "_sliderbutton"_s), UI_Background | UI_Clickable | UI_Floating | UI_Draggable);
+    slider_button->semantic_width  = { UI_SEMANTIC_SIZE_Pixels, 7, 1 };
+    slider_button->semantic_height = { UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0 };
+    slider_button->default_color   = ui->theme.accent_color;
+    slider_button->rounding        = ui->theme.rounding;
+    
+    if(slider_button->signals & UI_SIGNAL_Dragged) {
+        *value = (slider_button->drag_vector.x * (max - min) + min);
+    } else {
+        slider_button->drag_vector.x = clamp((*value - min) / (max - min), 0, 1);
+    }    
+    
+    // Make a visible bar in the area on which to drag
+    UI_Element *slider_bar      = ui_element(ui, ui_concat_strings(ui, label, "_sliderbar"_s), UI_Background);
+    slider_bar->semantic_width  = { UI_SEMANTIC_SIZE_Percentage_Of_Parent, 1, 0 };
+    slider_bar->semantic_height = { UI_SEMANTIC_SIZE_Pixels, 1, 0 };
+    slider_bar->default_color   = ui->theme.border_color;
+
+    // Pop the slider area
+    ui_pop_width(ui);
+    ui_pop_height(ui);
+    ui_pop_parent(ui);
+    
+    // Pop the background
+    ui_pop_parent(ui);
+}
+
+UI_Text_Input_Data ui_text_input(UI *ui, string label, Text_Input_Mode mode) {
+    UI_Element *element = ui_element(ui, label, ui->theme.button_style | UI_Clickable | UI_Activatable | UI_Deactivate_Automatically_On_Click | UI_Text_Input);
+    
+    if(element->created_this_frame) {
+        element->text_input = ui->text_input_pool.push();
+        create_text_input(element->text_input, mode);
+        element->text_input->tool_tip = label;
+    }
+    
+    b8 is_active_text_input = element->text_input == ui->active_text_input;
+    
+    UI_Text_Input_Data data;
+    data.entered = false;
+    
+    if(element->signals & UI_SIGNAL_Clicked && !is_active_text_input) {
+        // If this element has been clicked, active this text input.
+        if(ui->active_text_input) toggle_text_input_activeness(ui->active_text_input, false);
+        toggle_text_input_activeness(element->text_input, true);
+        ui->active_text_input = element->text_input;
+    } else if(!(element->signals & UI_SIGNAL_Active) && is_active_text_input) {
+        // If this element was the active text input but has since gotten deactivated, then disable
+        // the text input
+        toggle_text_input_activeness(element->text_input, false);
+        ui->active_text_input = null;
+    } else if(element->text_input->entered_this_frame && is_active_text_input) {
+        // The text input got entered, which automatically deactivates it.
+        element->signals ^= UI_SIGNAL_Active;
+        toggle_text_input_activeness(element->text_input, false);
+        ui->active_text_input = null;
+        data.entered = true;
+    }
+
+    switch(mode) {
+    case TEXT_INPUT_Everything: 
+        data._string = text_input_string_view(element->text_input); 
+        data.valid = true;
+        break;
+        
+    case TEXT_INPUT_Integer:
+        data._integer = string_to_int(text_input_string_view(element->text_input), &data.valid);        
+        break;    
+
+    case TEXT_INPUT_Floating_Point:
+        data._floating_point = string_to_double(text_input_string_view(element->text_input), &data.valid);        
+        break;
+    }
+    
+    return data;
+}
+
+b8 ui_text_input_with_string(UI *ui, string label, string *data, Allocator *data_allocator) {
+    UI_Text_Input_Data result = ui_text_input(ui, label, TEXT_INPUT_Everything);
+    
+    if(result.entered && result.valid) {
+        *data = copy_string(data_allocator, result._string);
+    }
+    
+    return result.entered && result.valid;
+}
+
+b8 ui_text_input_with_pointer(UI *ui, string label, f32 *data) {
+    UI_Text_Input_Data result = ui_text_input(ui, label, TEXT_INPUT_Everything);
+    
+    if(result.entered && result.valid) {
+        *data = (f32) result._floating_point;
+    }
+    
+    return result.entered && result.valid;    
+}
+
+UI_Custom_Widget_Data ui_custom_widget(UI *ui, string label, UI_Custom_Update_Callback update_procedure, UI_Custom_Draw_Callback draw_procedure, u64 required_custom_state_size) {
+    UI_Element *element = ui_element(ui, label, UI_Custom_Drawing_Procedure | UI_Clickable | UI_Draggable); // So that the user code gets all the signals it may want.
+    if(!element->custom_state) element->custom_state = Default_Allocator->allocate(required_custom_state_size);
+    element->custom_draw = draw_procedure;
+
+    update_procedure(ui, element, element->custom_state);
+    
+    UI_Custom_Widget_Data data;
+    data.custom_state = element->custom_state;
+    data.created_this_frame = element->created_this_frame;    
+    return data;
 }
