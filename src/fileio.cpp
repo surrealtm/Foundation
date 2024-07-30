@@ -164,6 +164,10 @@ void Ascii_Writer::write_string(string data) {
 	this->builder.append_string(data);
 }
 
+void Ascii_Writer::write_char(char c) {
+    this->builder.append_char(c);
+}
+
 void Ascii_Writer::write_u8(u8 value) {
     this->builder.append_u8(value);
 }

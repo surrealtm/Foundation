@@ -64,6 +64,7 @@ void copy_cstring(char *dst, const char *src, s64 src_count);
 void copy_cstring(char *dst, s64 dst_count, const char *src, s64 src_count);
 
 
+
 /* ------------------------------------------------- Strings ------------------------------------------------- */
 
 string operator "" _s(const char *literal, size_t size);
@@ -88,6 +89,10 @@ b8 string_starts_with(string lhs, string rhs);
 b8 string_ends_with(string lhs, string rhs);
 
 string read_next_line(string *input);
+
+string trim_string_left(string input);
+string trim_string_right(string input);
+string trim_string(string input);
 
 u64 string_hash(const string &input);
 u64 string_hash(const char *input);

@@ -16,6 +16,11 @@
 
 /* ------------------------------------------------ Characters ------------------------------------------------ */
 
+static
+b8 is_empty_character(u8 c) {
+    return c == ' ' || c == '\t';
+}
+
 b8 is_lower_character(u8 c) {
     return c >= 'a' && c <= 'z';
 }
@@ -300,6 +305,33 @@ string read_next_line(string *input) {
         *input = ""_s;
     }
     return result;
+}
+
+
+string trim_string_left(string input) {
+    string output = input;
+
+    while(output.count && is_empty_character(output[0])) {
+        ++output.data;
+        --output.count;
+    }
+    
+    return output;
+}
+
+string trim_string_right(string input) {
+    string output = input;
+
+    while(output.count && is_empty_character(output[output.count - 1])) {
+        --output.count;
+    }
+    
+    return output;
+}
+
+string trim_string(string input) {
+    string output = trim_string_left(input);
+    return trim_string_right(output);
 }
 
 

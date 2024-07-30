@@ -39,6 +39,7 @@ struct Ascii_Writer {
     void flush();
 
     void write_string(string data);
+    void write_char(char c);
     void write_u8(u8 value);
     void write_u16(u16 value);
     void write_u32(u32 value);

@@ -384,12 +384,13 @@ File_Information os_get_file_information(string file_path) {
     File_Information information;
     
     if(result) {
+        information.valid                  = true;
         information.file_size_in_bytes     = sb.st_size;
         information.creation_time          = sb.st_ctime;
         information.last_access_time       = sb.st_atime;
         information.last_modification_time = sb.st_mtime;
     } else {
-        information = File_Information();
+        information.valid = false;
     }
 
     return information;

@@ -68,6 +68,7 @@ b8 os_file_exists(string file_path);
 b8 os_directory_exists(string file_path);
 
 struct File_Information {
+    b8 valid;
     s64 file_size_in_bytes;
     s64 creation_time;
     s64 last_access_time;

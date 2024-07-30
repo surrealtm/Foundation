@@ -408,10 +408,13 @@ File_Information os_get_file_information(string file_path) {
 
     WIN32_FILE_ATTRIBUTE_DATA win32_data;
     if(GetFileAttributesExA(cstring, GetFileExInfoStandard, &win32_data)) {
+        result.valid                  = true;
         result.file_size_in_bytes     = ((u64) win32_data.nFileSizeHigh << 32) | (u64) win32_data.nFileSizeLow;
         result.creation_time          = ((u64) win32_data.ftCreationTime.dwHighDateTime << 32) | (u64) win32_data.ftCreationTime.dwLowDateTime;
         result.last_access_time       = ((u64) win32_data.ftLastAccessTime.dwHighDateTime << 32) | (u64) win32_data.ftLastAccessTime.dwLowDateTime;
         result.last_modification_time = ((u64) win32_data.ftLastWriteTime.dwHighDateTime << 32) | (u64) win32_data.ftLastWriteTime.dwLowDateTime;
+    } else {
+        result.valid = false;
     }
     
 	free_cstring(Default_Allocator, cstring);

@@ -317,8 +317,10 @@ void ui_vertical_layout(UI *ui);
 
 /* ---------------------------------------------- Basic Widgets ---------------------------------------------- */
 
+UI_Element *ui_element(UI *ui, UI_Hash hash, string label, UI_Flags flags);
 UI_Element *ui_element(UI *ui, string label, UI_Flags flags);
 void ui_spacer(UI *ui);
+void ui_spacer(UI *ui, UI_Semantic_Size_Tag width_tag, f32 width_value, f32 width_strictness, UI_Semantic_Size_Tag height_tag, f32 height_value, f32 height_strictness);
 void ui_divider(UI *ui, b8 visual);
 
 void ui_label(UI *ui, b8 centered, string label);
