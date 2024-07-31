@@ -146,17 +146,6 @@ Color query_pixel(u8 *pixel, Color_Format format) {
 }
 
 static
-Color query_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y) {
-    if(x < 0 || x >= frame_buffer->w || y < 0 || y >= frame_buffer->h) return Color(255, 255, 255, 255);
-
-    u8 channels = channels_per_pixel[frame_buffer->format];
-
-    u8 *pixel = get_pixel_in_frame_buffer(frame_buffer, x, y);
-    
-    return query_pixel(pixel, frame_buffer->format);
-}
-
-static
 Color query_texture(Texture *texture, v2f uv) {
     s32 x = (s32) roundf(uv.x * texture->w), y = (s32) roundf(uv.y * texture->h);
     
@@ -165,19 +154,6 @@ Color query_texture(Texture *texture, v2f uv) {
     u8 *pixel = get_pixel_in_texture(texture, x, y);
 
     return query_pixel(pixel, texture->format);
-}
-
-static
-void write_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y, Color color) {
-    if(x < 0 || x >= frame_buffer->w || y < 0 || y >= frame_buffer->h) return;
-
-    u8 channels = channels_per_pixel[frame_buffer->format];
-    
-    u8 *pixel = get_pixel_in_frame_buffer(frame_buffer, x, y);
-    if(channels > 0) *(pixel + channel_indices[frame_buffer->format][CHANNEL_R]) = color.r;
-    if(channels > 1) *(pixel + channel_indices[frame_buffer->format][CHANNEL_G]) = color.g;
-    if(channels > 2) *(pixel + channel_indices[frame_buffer->format][CHANNEL_B]) = color.b;
-    if(channels > 3) *(pixel + channel_indices[frame_buffer->format][CHANNEL_A]) = color.a;
 }
 
 static
@@ -465,6 +441,14 @@ void maybe_resize_back_buffer() {
 
 
 
+/* ------------------------------------------------- Colors ------------------------------------------------- */
+
+Color lerp(Color lhs, Color rhs, f32 t) {
+    return mix(lhs, rhs, 1.0f - t, t);
+}
+
+
+
 /* ------------------------------------------------- Texture ------------------------------------------------- */
 
 static
@@ -584,6 +568,37 @@ void swap_buffers() {
     if(state.window->w > 0 && state.window->h > 0 && state.back_buffer.w > 0 && state.back_buffer.h > 0) {
         blit_pixels_to_window(state.window, state.back_buffer.buffer, state.back_buffer.w, state.back_buffer.h, channels_per_pixel[state.back_buffer.format]);
     }
+}
+
+
+void write_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y, Color color) {
+    if(x < 0 || x >= frame_buffer->w || y < 0 || y >= frame_buffer->h) return;
+
+    u8 channels = channels_per_pixel[frame_buffer->format];
+    
+    u8 *pixel = get_pixel_in_frame_buffer(frame_buffer, x, y);
+    if(channels > 0) *(pixel + channel_indices[frame_buffer->format][CHANNEL_R]) = color.r;
+    if(channels > 1) *(pixel + channel_indices[frame_buffer->format][CHANNEL_G]) = color.g;
+    if(channels > 2) *(pixel + channel_indices[frame_buffer->format][CHANNEL_B]) = color.b;
+    if(channels > 3) *(pixel + channel_indices[frame_buffer->format][CHANNEL_A]) = color.a;
+}
+
+void write_frame_buffer(s32 x, s32 y, Color color) {
+    write_frame_buffer(&state.back_buffer, x, y, color);
+}
+
+Color query_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y) {
+    if(x < 0 || x >= frame_buffer->w || y < 0 || y >= frame_buffer->h) return Color(255, 255, 255, 255);
+
+    u8 channels = channels_per_pixel[frame_buffer->format];
+
+    u8 *pixel = get_pixel_in_frame_buffer(frame_buffer, x, y);
+    
+    return query_pixel(pixel, frame_buffer->format);
+}
+
+Color query_frame_buffer(s32 x, s32 y) {
+    return query_frame_buffer(&state.back_buffer, x, y);
 }
 
 

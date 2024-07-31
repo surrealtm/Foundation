@@ -54,6 +54,12 @@ void maybe_resize_back_buffer();
 
 
 
+/* ------------------------------------------------- Colors ------------------------------------------------- */
+
+Color lerp(Color lhs, Color rhs, f32 t);
+
+
+
 /* ------------------------------------------------- Texture ------------------------------------------------- */
 
 Error_Code create_texture_from_file(Texture *texture, string file_path);
@@ -73,6 +79,11 @@ void unbind_frame_buffer();
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);
 void swap_buffers(Frame_Buffer *src);
 void swap_buffers();
+
+void write_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y, Color color);
+void write_frame_buffer(s32 x, s32 y, Color color);
+Color query_frame_buffer(Frame_Buffer *frame_buffer, s32 x, s32 y);
+Color query_frame_buffer(s32 x, s32 y);
 
 
 
