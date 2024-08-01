@@ -3,6 +3,7 @@
 #include "ui.h"
 #include "font.h"
 #include "software_renderer.h"
+#include "random.h"
 #include "math/maths.h"
 
 struct Viewport {
@@ -10,6 +11,8 @@ struct Viewport {
     s32 height_in_pixels;
     f32 aspect_ratio;
     f32 depth;
+    s32 samples;
+    s32 max_depth;
 };
 
 struct Camera {
@@ -57,9 +60,13 @@ struct Raytracer {
     Camera camera;
     Viewport viewport;
 
-    v3f sky_color;
+    v3f horizon_color;
+    v3f zenith_color;
     Resizable_Array<Sphere> spheres;
     Resizable_Array<Plane>  planes;
+
+    // Util
+    Random_Generator random;
 };
 
 
@@ -86,11 +93,14 @@ void set_viewport(Raytracer *tracer) {
     tracer->viewport.height_in_pixels = tracer->window.h;
     tracer->viewport.aspect_ratio     = (f32) tracer->viewport.width_in_pixels / (f32) tracer->viewport.height_in_pixels;
     tracer->viewport.depth            = 100.0f;
+    tracer->viewport.samples          = 8;
+    tracer->viewport.max_depth        = 8;
 }
 
 static
-void set_environment(Raytracer *tracer, v3f sky) {
-    tracer->sky_color = sky;
+void set_environment(Raytracer *tracer, v3f horizon, v3f zenith) {
+    tracer->horizon_color = horizon;
+    tracer->zenith_color  = zenith;
 }
 
 static
@@ -161,6 +171,13 @@ f32 test_ray_plane(Raytracer *tracer, Plane *plane, v3f ray_origin, v3f ray_dire
     return t;
 }
 
+static inline
+v3f random_hemisphere(Raytracer *tracer, v3f normal) {
+    v3f result = v3f(tracer->random.random_f32(-1.f, 1.f), tracer->random.random_f32(-1.f, 1.f), tracer->random.random_f32(-1.f, 1.f));
+    f32 denom = sign(v3_dot_v3(result, normal)) / v3_length(result);
+    return result * denom;
+}
+
 static
 Ray_Cast_Result cast_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
     Ray_Cast_Result result;
@@ -194,34 +211,71 @@ Ray_Cast_Result cast_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
 
 static
 v3f color_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
-    Ray_Cast_Result result = cast_ray(tracer, ray_origin, ray_direction);
-    return result.intersection ? result.material->albedo : tracer->sky_color;
+    v3f ray_color = v3f(1, 1, 1);
+    v3f light_color = v3f(0, 0, 0);
+    
+    for(s32 i = 0; i < tracer->viewport.max_depth; ++i) {        
+        Ray_Cast_Result result = cast_ray(tracer, ray_origin, ray_direction);
+        if(!result.intersection) {
+            // Sky background
+            f32 a = (ray_direction.y / v3_length(ray_direction) + 1.0f) * 0.5f;
+            v3f environment = (1.0f - a) * tracer->horizon_color + a * tracer->zenith_color;
+            light_color = light_color + environment * ray_color;
+            break;
+        }
+    
+        // Diffuse calculation
+        ray_origin = result.point;    
+        ray_direction = random_hemisphere(tracer, result.normal);
+        
+        light_color = light_color + result.material->emission * ray_color;
+        ray_color = ray_color * result.material->albedo;
+    }
+
+    return light_color;
 }
 
 static
 void raytrace_pixel(Raytracer *tracer, s32 x, s32 y) {
-    // Set up the initial ray for this pixel
-    v2f screen_coordinates = v2f((f32) x, (f32) y) / v2f((f32) tracer->viewport.width_in_pixels, (f32) tracer->viewport.height_in_pixels);
-    v2f normalized_device_coordinates = v2f(2.0f * screen_coordinates.x - 1.0f, 1.0f - 2.0f * screen_coordinates.y);
-    v2f eye_coordinates = normalized_device_coordinates * v2f(tracer->viewport.aspect_ratio * tracer->camera.vertical_fov * 2.0f, tracer->camera.vertical_fov * 2.0f);
+    //
+    // Sum the raw color for this pixel over all samples
+    //
+    v3f raw_color = v3f(0, 0, 0);
     
-    v3f ray_origin    = tracer->camera.position;
-    v3f ray_direction = tracer->camera.forward + eye_coordinates.x * tracer->camera.right + eye_coordinates.y * tracer->camera.up;
-    ray_direction = v3_normalize(ray_direction); // nocheckin
+    for(s32 i = 0; i < tracer->viewport.samples; ++i) {
+        v2f screen_offset = v2f(tracer->random.random_f32(-.5f, .5f), tracer->random.random_f32(-.5f, .5f));
+    
+        v2f screen_coordinates = v2f((f32) x + screen_offset.x, (f32) y + screen_offset.y) / v2f((f32) tracer->viewport.width_in_pixels, (f32) tracer->viewport.height_in_pixels);
+        v2f normalized_device_coordinates = v2f(2.0f * screen_coordinates.x - 1.0f, 1.0f - 2.0f * screen_coordinates.y);
+        v2f eye_coordinates = normalized_device_coordinates * v2f(tracer->viewport.aspect_ratio * tracer->camera.vertical_fov * 2.0f, tracer->camera.vertical_fov * 2.0f);
+        
+        v3f ray_origin    = tracer->camera.position;
+        v3f ray_direction = tracer->camera.forward + eye_coordinates.x * tracer->camera.right + eye_coordinates.y * tracer->camera.up;
 
-    // Calculate the raw color for this pixel    
-    v3f raw_color = color_ray(tracer, ray_origin, ray_direction);
-    
+        raw_color = raw_color + color_ray(tracer, ray_origin, ray_direction);
+    }
+
+    raw_color = raw_color / (f32) tracer->viewport.samples;
+
+    //    
     // Tone map from HDR to LDR
+    //
+    /*
     raw_color.x = clamp(raw_color.x / (raw_color.x + 1.0f), 0.0f, 1.0f);
     raw_color.y = clamp(raw_color.y / (raw_color.y + 1.0f), 0.0f, 1.0f);
     raw_color.z = clamp(raw_color.z / (raw_color.z + 1.0f), 0.0f, 1.0f);
+    */
     
+    //
     // Gamma correct the result
+    //
     raw_color.x = powf(raw_color.x, tracer->camera.inverse_gamma);
     raw_color.y = powf(raw_color.y, tracer->camera.inverse_gamma);
     raw_color.z = powf(raw_color.z, tracer->camera.inverse_gamma);
-    
+
+    //
+    // Mix into the output buffer
+    //    
     write_frame_buffer(x, y, { (u8) (raw_color.x * 255.f), (u8) (raw_color.y * 255.f), (u8) (raw_color.z * 255.f), 255 });
 }
 
@@ -266,13 +320,13 @@ void clear_ui_scissors(void *user_pointer) {
 static
 void setup_basic_scene(Raytracer *tracer) {
     // These are the five differently colored, differently sized balls
-    set_camera(tracer, { -3, 1, 4 }, { 0, -0.06f, 0 });
-    set_environment(tracer, { 0, .55f, 1.0f });
-    make_sphere(tracer, 1.0f, { -3.1f, 1.0f, -1.3f }, { 1.f, .1f, .1f }, { 0, 0, 0 }, 1.0f, 0.1f);
-    make_sphere(tracer, 0.7f, { -1.3f, 0.7f, -1.0f }, { .2f, 1.f, .2f }, { 0, 0, 0 }, 0.9f, 0.1f);
-    make_sphere(tracer, 0.6f, {  0.1f, 0.6f, -0.7f }, { .2f, .2f, 1.f }, { 0, 0, 0 }, 0.6f, 0.1f);
-    make_sphere(tracer, 0.5f, {  1.3f, 0.5f, -0.7f }, { .2f, .2f, .2f }, { 0, 0, 0 }, 0.4f, 0.1f);
-    make_sphere(tracer, 0.4f, {  2.3f, 0.4f, -1.0f }, { 1.f, 1.f, .2f }, { 0, 0, 0 }, 0.2f, 0.5f);
+    set_camera(tracer, { -4, 1, 0 }, { 0, -0.25f, 0 });
+    set_environment(tracer, { 1.0f, 1.0f, 1.0f }, { 0.5f, 0.7f, 1.0f });
+    make_sphere(tracer, 1.0f, { -3.1f, 1.0f, 0.0f }, { 1.f, .1f, .1f }, { 0, 0, 0 }, 1.0f, 0.1f);
+    make_sphere(tracer, 0.7f, { -1.3f, 0.7f, 0.0f }, { .2f, 1.f, .2f }, { 0, 0, 0 }, 0.9f, 0.1f);
+    make_sphere(tracer, 0.6f, {  0.1f, 0.6f, 0.0f }, { .2f, .2f, 1.f }, { 0, 0, 0 }, 0.6f, 0.1f);
+    make_sphere(tracer, 0.5f, {  1.3f, 0.5f, 0.0f }, { .2f, .2f, .2f }, { 0, 0, 0 }, 0.4f, 0.1f);
+    make_sphere(tracer, 0.4f, {  2.3f, 0.4f, 0.0f }, { 1.f, 1.f, .2f }, { 0, 0, 0 }, 0.2f, 0.5f);
     make_plane(tracer, { 0, 0, 0 }, { 0, 0, 50 }, { 50, 0, 0 }, { 1.f, .4f, 1.f }, { 0, 0, 0 }, 0.0f, 0.0f);
 }
 
@@ -285,7 +339,7 @@ void setup_cornell_scene(Raytracer *tracer) {
     f32 l = 2;
 
     set_camera(tracer, { 0, 0, 10.95f }, { 0, 0, 0 });
-    set_environment(tracer, { 0, .55f, 1.0f });
+    set_environment(tracer, { 1.0f, 1.0f, 1.0f }, { 0.5f, 0.7f, 1.0f });
     make_sphere(tracer, 1, { -4.4f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 1.0f);
     make_sphere(tracer, 1, { -2.2f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 0.8f);
     make_sphere(tracer, 1, {  0.0f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 0.6f);
