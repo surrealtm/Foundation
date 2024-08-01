@@ -77,6 +77,7 @@ void destroy_frame_buffer(Frame_Buffer *frame_buffer);
 void bind_frame_buffer(Frame_Buffer *frame_buffer);
 void unbind_frame_buffer();
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);
+void blit_frame_buffer(Frame_Buffer *src);
 void swap_buffers(Frame_Buffer *src);
 void swap_buffers();
 

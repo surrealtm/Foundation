@@ -3,6 +3,7 @@
 #include "ui.h"
 #include "font.h"
 #include "software_renderer.h"
+#include "jobs.h"
 #include "random.h"
 #include "math/maths.h"
 
@@ -55,6 +56,11 @@ struct Raytracer {
     Window window;
     UI ui;    
     Software_Font font;
+
+    // Job System
+    Frame_Buffer frame_buffer[2]; // Used for the actual raytracing, since we only want to swap that whenever a frame has been finished. We may want to swap the UI in between though, so we always need a valid previous frame.
+    s32 front_buffer, back_buffer; // Indices into the frame_buffer array.
+    Job_System job_system;
 
     // World
     Camera camera;
@@ -284,11 +290,11 @@ void raytrace_pixel(Raytracer *tracer, s32 x, s32 y) {
     Color current_color  = { (u8) (raw_color.x * 255.f), (u8) (raw_color.y * 255.f), (u8) (raw_color.z * 255.f), 255 };
 
     if(tracer->frame_index > 1) {
-        Color previous_color = query_frame_buffer(x, y);
+        Color previous_color = query_frame_buffer(&tracer->frame_buffer[tracer->back_buffer], x, y);
         Color final_color = lerp(previous_color, current_color, 1.f / (f32) tracer->frame_index);
-        write_frame_buffer(x, y, final_color);
+        write_frame_buffer(&tracer->frame_buffer[tracer->front_buffer], x, y, final_color);
     } else {
-        write_frame_buffer(x, y, current_color);
+        write_frame_buffer(&tracer->frame_buffer[tracer->front_buffer], x, y, current_color);
     }
 }
 
@@ -376,9 +382,14 @@ int main() {
     create_software_renderer(&tracer.window);
 
     create_software_font_from_file(&tracer.font, "C:/Windows/fonts/segoeui.ttf"_s, 13, GLYPH_SET_Extended_Ascii);
-
+    create_frame_buffer(&tracer.frame_buffer[0], tracer.window.w, tracer.window.h, COLOR_FORMAT_RGB);
+    create_frame_buffer(&tracer.frame_buffer[1], tracer.window.w, tracer.window.h, COLOR_FORMAT_RGB);
+    tracer.front_buffer = tracer.back_buffer = 0;
+    
     UI_Callbacks callbacks = { &tracer, draw_ui_text, draw_ui_quad, set_ui_scissors, clear_ui_scissors };
     create_ui(&tracer.ui, callbacks, UI_Dark_Theme, &tracer.window, tracer.font.underlying);
+
+    create_job_system(&tracer.job_system, os_get_number_of_hardware_threads());
 
     setup_basic_scene(&tracer);
     
@@ -386,6 +397,10 @@ int main() {
         Hardware_Time frame_start = os_get_hardware_time();
         update_window(&tracer.window);
 
+        // @Incomplete: Window resizing.
+        
+        b8 jobs_finished = get_number_of_incomplete_jobs(&tracer.job_system) == 0;
+        
         // Prepare the frame.
         {
             begin_ui_frame(&tracer.ui, { 128, 24 });
@@ -393,9 +408,17 @@ int main() {
 
         // Render one frame.
         {
-            ++tracer.frame_index;
-            set_viewport(&tracer);
-            raytrace_viewport_area(&tracer, 0, tracer.viewport.height_in_pixels - 1);
+            // Restart the jobs for the next frame.
+            if(jobs_finished) {
+                ++tracer.frame_index;
+                tracer.front_buffer = tracer.back_buffer;
+                tracer.back_buffer  = (tracer.front_buffer + 1) & 2;
+                set_viewport(&tracer);
+                raytrace_viewport_area(&tracer, 0, tracer.viewport.height_in_pixels - 1);
+            }
+            
+            // Blit the previous frame into the window because we clear the window every time for the UI.
+            blit_frame_buffer(&tracer.frame_buffer[tracer.back_buffer]);
         }
 
         // Build the UI for this frame.
@@ -408,12 +431,16 @@ int main() {
             draw_ui_frame(&tracer.ui);
             swap_buffers();
         }
-
+        
         Hardware_Time frame_end = os_get_hardware_time();        
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
 
+    destroy_job_system(&tracer.job_system, JOB_SYSTEM_Detach_Workers);
+
     destroy_ui(&tracer.ui);    
+    destroy_frame_buffer(&tracer.frame_buffer[0]);
+    destroy_frame_buffer(&tracer.frame_buffer[1]);
     destroy_software_font(&tracer.font);
     destroy_software_renderer();
     destroy_window(&tracer.window);

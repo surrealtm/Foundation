@@ -551,6 +551,10 @@ void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
     }
 }
 
+void blit_frame_buffer(Frame_Buffer *src) {
+    blit_frame_buffer(&state.back_buffer, src);
+}
+
 void swap_buffers(Frame_Buffer *src) {
     blit_frame_buffer(&state.back_buffer, src);
     swap_buffers();
