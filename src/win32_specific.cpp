@@ -114,6 +114,12 @@ b8 os_load_and_run_dynamic_library(string file_path, string procedure, void *arg
     return procedure_pointer != null;
 }
 
+s32 os_get_number_of_hardware_threads() {
+    SYSTEM_INFO system_info;
+    GetSystemInfo(&system_info);
+    return system_info.dwNumberOfProcessors;
+}
+
 string os_get_user_name() {
     char buffer[256];
     DWORD buffer_size = sizeof(buffer);

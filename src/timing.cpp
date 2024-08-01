@@ -483,7 +483,7 @@ void _tmEnter(const char *procedure_name, const char *source_string, int color_i
     //
     // Set up the global timing state.
     //
-    u64 setup_value_before = interlocked_compare_exchange(&_tm_state.setup, true, false);
+    u64 setup_value_before = atomic_compare_exchange(&_tm_state.setup, true, false);
     if(!setup_value_before) {
         create_mutex(&_tm_state.thread_array_mutex);
         _tm_state.setup = true;

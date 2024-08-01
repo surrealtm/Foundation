@@ -20,7 +20,7 @@ void os_terminate_process(u32 exit_code);
 void os_enable_high_resolution_clock();
 void os_get_desktop_dpi(s32 *x, s32 *y);
 b8 os_load_and_run_dynamic_library(string file_path, string procedure, void *argument);
-
+s32 os_get_number_of_hardware_threads();
 string os_get_user_name();
 
 

@@ -14,15 +14,23 @@ enum Job_System_Shutdown_Mode {
     JOB_SYSTEM_Detach_Workers,   // Just detach the worker threads. The worker threads will complete their current jobs, but won't start running new ones.
 };
 
+enum Job_Worker_State {
+    JOB_WORKER_Initializing,
+    JOB_WORKER_Waiting_For_Job,
+    JOB_WORKER_Running_Job,
+    JOB_WORKER_Shutting_Down,
+    JOB_WORKER_Shut_Down,
+};
+
 struct Job_Declaration {
     Job_Procedure procedure_pointer;
     void *user_pointer;
 };
 
 struct Job_Worker {
+    Atomic<u32> state; // Job_Worker_State
     Job_System *system;
     Thread thread;
-    b8 shutting_down;
 };
 
 struct Job_System {
@@ -36,3 +44,4 @@ struct Job_System {
 void create_job_system(Job_System *system, s64 worker_count);
 void destroy_job_system(Job_System *system, Job_System_Shutdown_Mode shutdown_mode);
 void spawn_job(Job_System *system, Job_Declaration declaration);
+s64 get_number_of_incomplete_jobs(Job_System *system);

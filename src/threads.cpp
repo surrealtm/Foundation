@@ -3,6 +3,7 @@
 #if FOUNDATION_WIN32
 # define WIN32_LEAN_AND_MEAN
 # include <windows.h>
+# include <intrin.h>
 
 struct Thread_Win32_State {
     b8 setup;
@@ -278,7 +279,6 @@ void thread_sleep(f32 seconds) {
 #endif
 }
 
-
 u32 thread_get_id() {
 #if FOUNDATION_WIN32
     return GetCurrentThreadId();
@@ -333,12 +333,297 @@ void unlock(Mutex *mutex) {
 
 
 
+/* ---------------------------------------------- Semaphose API ---------------------------------------------- */
+
+void create_semaphore(Semaphore *semaphore) {
+    semaphore->counter = 0;
+}
+
+void destroy_semaphore(Semaphore *semaphore) {
+}
+
+void lock_shared(Semaphore *semaphore) {
+    do {
+        if(semaphore->counter == -1) continue; // Exclusive lock, wait.
+
+        if(atomic_compare_exchange(&semaphore->counter, semaphore->counter + 1, semaphore->counter) >= 0) break;
+    } while(true);
+}
+
+void unlock_shared(Semaphore *semaphore) {
+    atomic_exchange_add(&semaphore->counter, -1);
+}
+
+void lock_exclusive(Semaphore *semaphore) {
+    while(atomic_compare_exchange(&semaphore->counter, -1, 0) != 0) {};
+}
+
+void unlock_exclusive(Semaphore *semaphore) {
+    atomic_store(&semaphore->counter, 0);
+}
+
+
+
 /* ------------------------------------------------ Atomic API ------------------------------------------------ */
 
-u64 interlocked_compare_exchange(u64 volatile *dst, u64 src, u64 cmp) {
+u64 atomic_compare_exchange(u64 volatile *dst, u64 desired, u64 expected) {
 #if FOUNDATION_WIN32
-    return InterlockedCompareExchange(dst, src, cmp);
+    return _InterlockedCompareExchange64((LONG64 volatile *) dst, desired, expected);
 #elif FOUNDATION_LINUX
-    return __sync_val_compare_and_swap(dst, src, cmp);
+    return __sync_val_compare_and_swap(dst, desired, expected);
+#endif
+}
+
+u32 atomic_compare_exchange(u32 volatile *dst, u32 desired, u32 expected) {
+#if FOUNDATION_WIN32
+    return _InterlockedCompareExchange((LONG volatile *) dst, desired, expected);
+#elif FOUNDATION_LINUX
+    return __sync_val_compare_and_swap(dst, desired, expected);
+#endif
+}
+
+u16 atomic_compare_exchange(u16 volatile *dst, u16 desired, u16 expected) {
+#if FOUNDATION_WIN32
+    return _InterlockedCompareExchange16((SHORT volatile *) dst, desired, expected);
+#elif FOUNDATION_LINUX
+    return __sync_val_compare_and_swap(dst, desired, expected);
+#endif
+}
+
+u8 atomic_compare_exchange(u8 volatile *dst, u8 desired, u8 expected) {
+#if FOUNDATION_WIN32
+    return _InterlockedCompareExchange8((CHAR volatile *) dst, desired, expected);
+#elif FOUNDATION_LINUX
+    return __sync_val_compare_and_swap(dst, desired, expected);
+#endif
+}
+
+s64 atomic_compare_exchange(s64 volatile *dst, s64 desired, s64 expected) {
+#if FOUNDATION_WIN32
+    return _InterlockedCompareExchange64((LONG64 volatile *) dst, desired, expected);
+#elif FOUNDATION_LINSX
+    return __sync_val_compare_and_swap(dst, desired, expected);
+#endif
+}
+
+s32 atomic_compare_exchange(s32 volatile *dst, s32 desired, s32 expected) {
+#if FOUNDATION_WIN32
+    return _InterlockedCompareExchange((LONG volatile *) dst, desired, expected);
+#elif FOUNDATION_LINSX
+    return __sync_val_compare_and_swap(dst, desired, expected);
+#endif
+}
+
+s16 atomic_compare_exchange(s16 volatile *dst, s16 desired, s16 expected) {
+#if FOUNDATION_WIN32
+    return _InterlockedCompareExchange16((SHORT volatile *) dst, desired, expected);
+#elif FOUNDATION_LINSX
+    return __sync_val_compare_and_swap(dst, desired, expected);
+#endif
+}
+
+s8 atomic_compare_exchange(s8 volatile *dst, s8 desired, s8 expected) {
+#if FOUNDATION_WIN32
+    return _InterlockedCompareExchange8((CHAR volatile *) dst, desired, expected);
+#elif FOUNDATION_LINSX
+    return __sync_val_compare_and_swap(dst, desired, expected);
+#endif
+}
+
+
+
+u64 atomic_load(u64 volatile *value) {
+#if FOUNDATION_WIN32
+    return _InterlockedOr64((LONG64 volatile *) value, 0);
+#elif FOUNDATION_LINUX
+    return __atomic_load_n(value, __ATOMIC_SEQ_CST);
+#endif
+}
+
+u32 atomic_load(u32 volatile *value) {
+#if FOUNDATION_WIN32
+    return _InterlockedOr((LONG volatile *) value, 0);
+#elif FOUNDATION_LINUX
+    return __atomic_load_n(value, __ATOMIC_SEQ_CST);
+#endif
+}
+
+u16 atomic_load(u16 volatile *value) {
+#if FOUNDATION_WIN32
+    return _InterlockedOr16((SHORT volatile *) value, 0);
+#elif FOUNDATION_LINUX
+    return __atomic_load_n(value, __ATOMIC_SEQ_CST);
+#endif
+}
+
+u8 atomic_load(u8 volatile *value) {
+#if FOUNDATION_WIN32
+    return _InterlockedOr8((CHAR volatile *) value, 0);
+#elif FOUNDATION_LINUX
+    return __atomic_load_n(value, __ATOMIC_SEQ_CST);
+#endif
+}
+
+s64 atomic_load(s64 volatile *value) {
+#if FOUNDATION_WIN32
+    return _InterlockedOr64((LONG64 volatile *) value, 0);
+#elif FOUNDATION_LINUX
+    return __atomic_load_n(value, __ATOMIC_SEQ_CST);
+#endif
+}
+
+s32 atomic_load(s32 volatile *value) {
+#if FOUNDATION_WIN32
+    return _InterlockedOr((LONG volatile *) value, 0);
+#elif FOUNDATION_LINUX
+    return __atomic_load_n(value, __ATOMIC_SEQ_CST);
+#endif
+}
+
+s16 atomic_load(s16 volatile *value) {
+#if FOUNDATION_WIN32
+    return _InterlockedOr16((SHORT volatile *) value, 0);
+#elif FOUNDATION_LINUX
+    return __atomic_load_n(value, __ATOMIC_SEQ_CST);
+#endif
+}
+
+s8 atomic_load(s8 volatile *value) {
+#if FOUNDATION_WIN32
+    return _InterlockedOr8((CHAR volatile *) value, 0);
+#elif FOUNDATION_LINUX
+    return __atomic_load_n(value, __ATOMIC_SEQ_CST);
+#endif
+}
+
+
+
+void atomic_store(u64 volatile *dst, u64 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchange64((LONG64 volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    __atomic_store_n(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_store(u32 volatile *dst, u32 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchange((LONG volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    __atomic_store_n(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_store(u16 volatile *dst, u16 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchange16((SHORT volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    __atomic_store_n(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_store(u8 volatile *dst, u8 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchange8((CHAR volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    __atomic_store_n(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_store(s64 volatile *dst, s64 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchange64((LONG64 volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    __atomic_store_n(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_store(s32 volatile *dst, s32 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchange((LONG volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    __atomic_store_n(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_store(s16 volatile *dst, s16 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchange16((SHORT volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    __atomic_store_n(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_store(s8 volatile *dst, s8 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchange8((CHAR volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    __atomic_store_n(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+
+
+void atomic_exchange_add(u64 volatile *dst, u64 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchangeAdd64((LONG64 volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_exchange_add(u32 volatile *dst, u32 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchangeAdd((LONG volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_exchange_add(u16 volatile *dst, u16 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchangeAdd16((SHORT volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_exchange_add(u8 volatile *dst, u8 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchangeAdd8((CHAR volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_exchange_add(s64 volatile *dst, s64 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchangeAdd64((LONG64 volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_exchange_add(s32 volatile *dst, s32 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchangeAdd((LONG volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_exchange_add(s16 volatile *dst, s16 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchangeAdd16((SHORT volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+#endif
+}
+
+void atomic_exchange_add(s8 volatile *dst, s8 src) {
+#if FOUNDATION_WIN32
+    _InterlockedExchangeAdd8((CHAR volatile *) dst, src);
+#elif FOUNDATION_LINUX
+    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
 #endif
 }
