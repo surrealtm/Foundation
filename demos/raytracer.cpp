@@ -9,6 +9,7 @@ struct Viewport {
     s32 width_in_pixels;
     s32 height_in_pixels;
     f32 aspect_ratio;
+    f32 depth;
 };
 
 struct Camera {
@@ -16,9 +17,34 @@ struct Camera {
     v3f position;
     v3f rotation;
 
+    f32 inverse_gamma;
+
     v3f forward;
     v3f right;
     v3f up;
+};
+
+struct Material {
+    v3f albedo;
+    v3f emission;
+    f32 smoothness;
+    f32 metalness;
+};
+
+struct Sphere {
+    v3f origin;
+    f32 radius;
+    Material material;        
+};
+
+struct Plane {
+    v3f u;
+    v3f v;
+    f32 ulength2;
+    f32 vlength2;
+    v3f normal;
+    v3f origin;
+    Material material;
 };
 
 struct Raytracer {   
@@ -30,6 +56,10 @@ struct Raytracer {
     // World
     Camera camera;
     Viewport viewport;
+
+    v3f sky_color;
+    Resizable_Array<Sphere> spheres;
+    Resizable_Array<Plane>  planes;
 };
 
 
@@ -41,8 +71,10 @@ void set_camera(Raytracer *tracer, v3f position, v3f rotation) {
     tracer->camera.vertical_fov = degrees_to_turns(60.0f);
     tracer->camera.position     = position;
     tracer->camera.rotation     = rotation;
+
+    tracer->camera.inverse_gamma = 1.f / 2.2f;
     
-    qtf quat = qt_from_euler_turns(rotation);
+    qtf quat               = qt_from_euler_turns(rotation);
     tracer->camera.forward = qt_rotate(quat, v3f(0, 0, -1));
     tracer->camera.right   = qt_rotate(quat, v3f(1, 0, 0));
     tracer->camera.up      = qt_rotate(quat, v3f(0, 1, 0));
@@ -53,30 +85,144 @@ void set_viewport(Raytracer *tracer) {
     tracer->viewport.width_in_pixels  = tracer->window.w;
     tracer->viewport.height_in_pixels = tracer->window.h;
     tracer->viewport.aspect_ratio     = (f32) tracer->viewport.width_in_pixels / (f32) tracer->viewport.height_in_pixels;
+    tracer->viewport.depth            = 100.0f;
+}
+
+static
+void set_environment(Raytracer *tracer, v3f sky) {
+    tracer->sky_color = sky;
+}
+
+static
+void make_sphere(Raytracer *tracer, f32 radius, v3f origin, v3f albedo, v3f emission, f32 smoothness, f32 metalness) {
+    Sphere *sphere   = tracer->spheres.push();
+    sphere->radius   = radius;
+    sphere->origin   = origin;
+    sphere->material = { albedo, emission, smoothness, metalness };
+}
+
+static
+void make_plane(Raytracer *tracer, v3f origin, v3f u, v3f v, v3f albedo, v3f emission, f32 smoothness, f32 metalness) {
+    Plane *plane    = tracer->planes.push();
+    plane->origin   = origin;
+    plane->u        = u;
+    plane->v        = v;
+    plane->ulength2 = v3_dot_v3(u, u);
+    plane->vlength2 = v3_dot_v3(v, v);
+    plane->normal   = v3_normalize(v3_cross_v3(u, v));
+    plane->material = { albedo, emission, smoothness, metalness };
 }
 
 
 
 /* -------------------------------------------- Actual Ray Tracing -------------------------------------------- */
 
+struct Ray_Cast_Result {
+    b8 intersection;
+    f32 distance;
+    v3f point;
+    v3f normal;
+    Material *material;
+};
+
 static
-Color cast_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
-    return { (u8) (ray_direction.x * 128 + 127), (u8) (ray_direction.y * 128 + 127), 255, 255 };
+f32 test_ray_sphere(Raytracer *tracer, Sphere *sphere, v3f ray_origin, v3f ray_direction) {
+    v3f lane = { ray_origin.x - sphere->origin.x, ray_origin.y - sphere->origin.y, ray_origin.z - sphere->origin.z };
+    f32 a = ray_direction.x * ray_direction.x + ray_direction.y * ray_direction.y + ray_direction.z * ray_direction.z; // Handle non-normalized ray_directions!
+    f32 b = (lane.x * ray_direction.x + lane.y * ray_direction.y + lane.z * ray_direction.z);
+    f32 c = (lane.x * lane.x + lane.y * lane.y + lane.z * lane.z) - (sphere->radius * sphere->radius);
+
+    f32 discriminant = b * b - a * c;
+
+    if(discriminant < 0) return tracer->viewport.depth; // The distance along the ray must be positive, or else the sphere is behind the camera
+
+    return (b - sqrtf(discriminant)) / a;
+}
+
+static
+f32 test_ray_plane(Raytracer *tracer, Plane *plane, v3f ray_origin, v3f ray_direction) {
+    f32 denom = ray_direction.x * plane->normal.x + ray_direction.y * plane->normal.y + ray_direction.z * plane->normal.z;
+    if(denom > -F32_EPSILON) return tracer->viewport.depth; // The ray and the normal must be facing in opposite directions
+    
+    v3f lane = { plane->origin.x - ray_origin.x, plane->origin.y - ray_origin.y, plane->origin.z - ray_origin.z };
+    f32 t = (lane.x * plane->normal.x + lane.y * plane->normal.y + lane.z * plane->normal.z) / denom;
+    
+    if(t < F32_EPSILON) return tracer->viewport.depth; // The distance along the ray must be positive, or else the plane is behind the camera
+    
+    v3f intersection_to_origin = { ray_origin.x + ray_direction.x * t - plane->origin.x,
+                                   ray_origin.y + ray_direction.y * t - plane->origin.y,
+                                   ray_origin.z + ray_direction.z * t - plane->origin.z };
+                                   
+    f32 u = fabsf(plane->u.x * intersection_to_origin.x + plane->u.y * intersection_to_origin.y + plane->u.z * intersection_to_origin.z);
+    f32 v = fabsf(plane->v.x * intersection_to_origin.x + plane->v.y * intersection_to_origin.y + plane->v.z * intersection_to_origin.z);
+
+    if(u > plane->ulength2 || v > plane->vlength2) return tracer->viewport.depth; // The intersection point is outside the actual plane region
+    
+    return t;
+}
+
+static
+Ray_Cast_Result cast_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
+    Ray_Cast_Result result;
+    result.intersection = false;
+    result.distance     = tracer->viewport.depth;
+    
+    for(Sphere &sphere : tracer->spheres) {
+        f32 distance_to_sphere = test_ray_sphere(tracer, &sphere, ray_origin, ray_direction);
+        if(distance_to_sphere < result.distance) {
+            result.intersection = true;
+            result.distance     = distance_to_sphere;
+            result.point        = ray_origin + ray_direction * result.distance;
+            result.normal       = -ray_direction;
+            result.material     = &sphere.material;
+        }
+    }
+       
+    for(Plane &plane : tracer->planes) {
+        f32 distance_to_plane = test_ray_plane(tracer, &plane, ray_origin, ray_direction);
+        if(distance_to_plane < result.distance) {
+            result.intersection = true;
+            result.distance     = distance_to_plane;
+            result.point        = ray_origin + ray_direction * result.distance;
+            result.normal       = plane.normal;
+            result.material     = &plane.material;
+        }
+    }
+            
+    return result;    
+}
+
+static
+v3f color_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
+    Ray_Cast_Result result = cast_ray(tracer, ray_origin, ray_direction);
+    return result.intersection ? result.material->albedo : tracer->sky_color;
 }
 
 static
 void raytrace_pixel(Raytracer *tracer, s32 x, s32 y) {
-    Color color = { 255, 255, 255, 255 };
-
-    v2f normalized_device_coordinates = v2f((f32) x, (f32) y) / v2f((f32) tracer->viewport.width_in_pixels, (f32) tracer->viewport.height_in_pixels) - v2f(0.5f, 0.5f);
-    v2f eye_coordinates = normalized_device_coordinates * v2f(tracer->viewport.aspect_ratio * tracer->camera.vertical_fov, tracer->camera.vertical_fov);
+    // Set up the initial ray for this pixel
+    v2f screen_coordinates = v2f((f32) x, (f32) y) / v2f((f32) tracer->viewport.width_in_pixels, (f32) tracer->viewport.height_in_pixels);
+    v2f normalized_device_coordinates = v2f(2.0f * screen_coordinates.x - 1.0f, 1.0f - 2.0f * screen_coordinates.y);
+    v2f eye_coordinates = normalized_device_coordinates * v2f(tracer->viewport.aspect_ratio * tracer->camera.vertical_fov * 2.0f, tracer->camera.vertical_fov * 2.0f);
     
     v3f ray_origin    = tracer->camera.position;
-    v3f ray_direction = tracer->camera.forward + eye_coordinates.x * tracer->camera.right - eye_coordinates.y * tracer->camera.up;
+    v3f ray_direction = tracer->camera.forward + eye_coordinates.x * tracer->camera.right + eye_coordinates.y * tracer->camera.up;
+    ray_direction = v3_normalize(ray_direction); // nocheckin
+
+    // Calculate the raw color for this pixel    
+    v3f raw_color = color_ray(tracer, ray_origin, ray_direction);
     
-    color = cast_ray(tracer, ray_origin, ray_direction);
+    // Tone map from HDR to LDR
+    raw_color.x = clamp(raw_color.x / (raw_color.x + 1.0f), 0.0f, 1.0f);
+    raw_color.y = clamp(raw_color.y / (raw_color.y + 1.0f), 0.0f, 1.0f);
+    raw_color.z = clamp(raw_color.z / (raw_color.z + 1.0f), 0.0f, 1.0f);
     
-    write_frame_buffer(x, y, color);
+    // Gamma correct the result
+    raw_color.x = powf(raw_color.x, tracer->camera.inverse_gamma);
+    raw_color.y = powf(raw_color.y, tracer->camera.inverse_gamma);
+    raw_color.z = powf(raw_color.z, tracer->camera.inverse_gamma);
+    
+    write_frame_buffer(x, y, { (u8) (raw_color.x * 255.f), (u8) (raw_color.y * 255.f), (u8) (raw_color.z * 255.f), 255 });
 }
 
 static
@@ -117,6 +263,43 @@ void clear_ui_scissors(void *user_pointer) {
 
 /* ----------------------------------------------- Entry Point ----------------------------------------------- */
 
+static
+void setup_basic_scene(Raytracer *tracer) {
+    // These are the five differently colored, differently sized balls
+    set_camera(tracer, { -3, 1, 4 }, { 0, -0.06f, 0 });
+    set_environment(tracer, { 0, .55f, 1.0f });
+    make_sphere(tracer, 1.0f, { -3.1f, 1.0f, -1.3f }, { 1.f, .1f, .1f }, { 0, 0, 0 }, 1.0f, 0.1f);
+    make_sphere(tracer, 0.7f, { -1.3f, 0.7f, -1.0f }, { .2f, 1.f, .2f }, { 0, 0, 0 }, 0.9f, 0.1f);
+    make_sphere(tracer, 0.6f, {  0.1f, 0.6f, -0.7f }, { .2f, .2f, 1.f }, { 0, 0, 0 }, 0.6f, 0.1f);
+    make_sphere(tracer, 0.5f, {  1.3f, 0.5f, -0.7f }, { .2f, .2f, .2f }, { 0, 0, 0 }, 0.4f, 0.1f);
+    make_sphere(tracer, 0.4f, {  2.3f, 0.4f, -1.0f }, { 1.f, 1.f, .2f }, { 0, 0, 0 }, 0.2f, 0.5f);
+    make_plane(tracer, { 0, 0, 0 }, { 0, 0, 50 }, { 50, 0, 0 }, { 1.f, .4f, 1.f }, { 0, 0, 0 }, 0.0f, 0.0f);
+}
+
+static
+void setup_cornell_scene(Raytracer *tracer) {
+    // These are four uniform spheres in the cornell box of the following half sizes
+    f32 w = 7.1111f; // Keep the 16:9 aspect ratio for the cornell box
+    f32 h = 4;
+    f32 d = 3;
+    f32 l = 2;
+
+    set_camera(tracer, { 0, 0, 10.95f }, { 0, 0, 0 });
+    set_environment(tracer, { 0, .55f, 1.0f });
+    make_sphere(tracer, 1, { -4.4f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 1.0f);
+    make_sphere(tracer, 1, { -2.2f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 0.8f);
+    make_sphere(tracer, 1, {  0.0f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 0.6f);
+    make_sphere(tracer, 1, {  2.2f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 0.4f);
+    make_sphere(tracer, 1, {  4.4f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 0.1f);
+    make_plane(tracer, {  0,  -h,  0 }, { 0, 0, d }, { w, 0, 0 }, {  1,  1,   1  }, { 0, 0, 0 }, 0, 0); // Floor
+    make_plane(tracer, {  0,   h,  0 }, { w, 0, 0 }, { 0, 0, d }, {  1,  1,   1  }, { 0, 0, 0 }, 0, 0); // Ceiling
+    make_plane(tracer, {  0,   0, -d }, { w, 0, 0 }, { 0, h, 0 }, {  1,  1,   1  }, { 0, 0, 0 }, 0, 0); // Back wall
+    make_plane(tracer, {  0,   0,  d }, { 0, h, 0 }, { w, 0, 0 }, {  0, .4f, .8f }, { 0, 0, 0 }, 0, 0); // Front wall
+    make_plane(tracer, { -w,   0,  0 }, { 0, h, 0 }, { 0, 0, d }, { .3f, 1,  .3f }, { 0, 0, 0 }, 0, 0); // Right wall
+    make_plane(tracer, {  w,   0,  0 }, { 0, 0, d }, { 0, h, 0 }, {  1, .3f, .3f }, { 0, 0, 0 }, 0, 0); // Left wall
+    make_plane(tracer, {  0, h - 0.01f, 0 }, { l, 0, 0 }, { 0, 0, l / 2 }, {  1,  1,  1 }, { 2, 2, 2 }, 0, 0); // Light
+}
+
 int main() {
     Raytracer tracer;
     
@@ -128,6 +311,8 @@ int main() {
 
     UI_Callbacks callbacks = { &tracer, draw_ui_text, draw_ui_quad, set_ui_scissors, clear_ui_scissors };
     create_ui(&tracer.ui, callbacks, UI_Dark_Theme, &tracer.window, tracer.font.underlying);
+
+    setup_basic_scene(&tracer);
     
     while(!tracer.window.should_close) {
         Hardware_Time frame_start = os_get_hardware_time();
@@ -140,7 +325,6 @@ int main() {
 
         // Render one frame.
         {
-            set_camera(&tracer, v3f(0, 0, 0), v3f(0, 0, 0));
             set_viewport(&tracer);
             raytrace_viewport_area(&tracer, 0, tracer.viewport.height_in_pixels - 1);
         }
