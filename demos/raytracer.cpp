@@ -66,6 +66,7 @@ struct Raytracer {
     Resizable_Array<Plane>  planes;
 
     // Util
+    s32 frame_index;
     Random_Generator random;
 };
 
@@ -94,7 +95,7 @@ void set_viewport(Raytracer *tracer) {
     tracer->viewport.aspect_ratio     = (f32) tracer->viewport.width_in_pixels / (f32) tracer->viewport.height_in_pixels;
     tracer->viewport.depth            = 100.0f;
     tracer->viewport.samples          = 8;
-    tracer->viewport.max_depth        = 8;
+    tracer->viewport.max_depth        = 20;
 }
 
 static
@@ -137,16 +138,20 @@ struct Ray_Cast_Result {
 
 static
 f32 test_ray_sphere(Raytracer *tracer, Sphere *sphere, v3f ray_origin, v3f ray_direction) {
-    v3f lane = { ray_origin.x - sphere->origin.x, ray_origin.y - sphere->origin.y, ray_origin.z - sphere->origin.z };
-    f32 a = ray_direction.x * ray_direction.x + ray_direction.y * ray_direction.y + ray_direction.z * ray_direction.z; // Handle non-normalized ray_directions!
-    f32 b = (lane.x * ray_direction.x + lane.y * ray_direction.y + lane.z * ray_direction.z);
-    f32 c = (lane.x * lane.x + lane.y * lane.y + lane.z * lane.z) - (sphere->radius * sphere->radius);
+    v3f oo = { sphere->origin.x - ray_origin.x, sphere->origin.y - ray_origin.y, sphere->origin.z - ray_origin.z };
+    f32 a = ray_direction.x * ray_direction.x + ray_direction.y * ray_direction.y + ray_direction.z * ray_direction.z;
+    f32 h = ray_direction.x * oo.x + ray_direction.y * oo.y + ray_direction.z * oo.z;
+    f32 c = oo.x * oo.x + oo.y * oo.y + oo.z * oo.z - sphere->radius * sphere->radius;
 
-    f32 discriminant = b * b - a * c;
+    f32 discriminant = h * h - a * c;
 
-    if(discriminant < 0) return tracer->viewport.depth; // The distance along the ray must be positive, or else the sphere is behind the camera
+    if(discriminant < 0) return tracer->viewport.depth;
 
-    return (b - sqrtf(discriminant)) / a;
+    f32 t = (h - sqrtf(discriminant)) / a;
+
+    if(t < 0) return tracer->viewport.depth;
+
+    return t;
 }
 
 static
@@ -276,7 +281,15 @@ void raytrace_pixel(Raytracer *tracer, s32 x, s32 y) {
     //
     // Mix into the output buffer
     //    
-    write_frame_buffer(x, y, { (u8) (raw_color.x * 255.f), (u8) (raw_color.y * 255.f), (u8) (raw_color.z * 255.f), 255 });
+    Color current_color  = { (u8) (raw_color.x * 255.f), (u8) (raw_color.y * 255.f), (u8) (raw_color.z * 255.f), 255 };
+
+    if(tracer->frame_index > 1) {
+        Color previous_color = query_frame_buffer(x, y);
+        Color final_color = lerp(previous_color, current_color, 1.f / (f32) tracer->frame_index);
+        write_frame_buffer(x, y, final_color);
+    } else {
+        write_frame_buffer(x, y, current_color);
+    }
 }
 
 static
@@ -320,13 +333,13 @@ void clear_ui_scissors(void *user_pointer) {
 static
 void setup_basic_scene(Raytracer *tracer) {
     // These are the five differently colored, differently sized balls
-    set_camera(tracer, { -4, 1, 0 }, { 0, -0.25f, 0 });
+    set_camera(tracer, { -3, 1, 6 }, { 0, -0.06f, 0 });
     set_environment(tracer, { 1.0f, 1.0f, 1.0f }, { 0.5f, 0.7f, 1.0f });
     make_sphere(tracer, 1.0f, { -3.1f, 1.0f, 0.0f }, { 1.f, .1f, .1f }, { 0, 0, 0 }, 1.0f, 0.1f);
-    make_sphere(tracer, 0.7f, { -1.3f, 0.7f, 0.0f }, { .2f, 1.f, .2f }, { 0, 0, 0 }, 0.9f, 0.1f);
-    make_sphere(tracer, 0.6f, {  0.1f, 0.6f, 0.0f }, { .2f, .2f, 1.f }, { 0, 0, 0 }, 0.6f, 0.1f);
-    make_sphere(tracer, 0.5f, {  1.3f, 0.5f, 0.0f }, { .2f, .2f, .2f }, { 0, 0, 0 }, 0.4f, 0.1f);
-    make_sphere(tracer, 0.4f, {  2.3f, 0.4f, 0.0f }, { 1.f, 1.f, .2f }, { 0, 0, 0 }, 0.2f, 0.5f);
+    make_sphere(tracer, 0.7f, { -1.3f, 0.7f, -.4f }, { .2f, 1.f, .2f }, { 0, 0, 0 }, 0.9f, 0.1f);
+    make_sphere(tracer, 0.6f, {  0.2f, 0.6f, -.7f }, { .2f, .2f, 1.f }, { 0, 0, 0 }, 0.6f, 0.1f);
+    make_sphere(tracer, 0.5f, {  1.3f, 0.5f, -.4f }, { .2f, .2f, .2f }, { 0, 0, 0 }, 0.4f, 0.1f);
+    make_sphere(tracer, 0.4f, {  2.3f, 0.4f, -.1f }, { 1.f, 1.f, .2f }, { 0, 0, 0 }, 0.2f, 0.5f);
     make_plane(tracer, { 0, 0, 0 }, { 0, 0, 50 }, { 50, 0, 0 }, { 1.f, .4f, 1.f }, { 0, 0, 0 }, 0.0f, 0.0f);
 }
 
@@ -356,6 +369,7 @@ void setup_cornell_scene(Raytracer *tracer) {
 
 int main() {
     Raytracer tracer;
+    tracer.frame_index = 0;
     
     create_window(&tracer.window, "Raytracer"_s);
     show_window(&tracer.window);
@@ -379,6 +393,7 @@ int main() {
 
         // Render one frame.
         {
+            ++tracer.frame_index;
             set_viewport(&tracer);
             raytrace_viewport_area(&tracer, 0, tracer.viewport.height_in_pixels - 1);
         }
