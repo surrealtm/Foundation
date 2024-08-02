@@ -10,7 +10,7 @@ void __internal_job_wait_until_job_queue_empty(volatile s64 *count) {
 }
 
 static
-u32 internal_worker_thread(Job_Worker *worker) {
+u32 internal_worker_thread(Job_Worker *worker) {   
     while(!worker->state.compare(JOB_WORKER_Shutting_Down)) {
         worker->state.store(JOB_WORKER_Waiting_For_Job);
         
@@ -53,6 +53,10 @@ u32 internal_worker_thread(Job_Worker *worker) {
         //
         worker->state.store(JOB_WORKER_Running_Job);
         job.procedure_pointer(job.user_pointer);
+
+#if FOUNDATION_DEVELOPER
+        ++worker->completed_job_count;
+#endif
     }
 
     worker->state.store(JOB_WORKER_Shut_Down);
@@ -81,6 +85,11 @@ void create_job_system(Job_System *system, s64 worker_count) {
     for(s64 i = 0; i < system->worker_count; ++i) {
         system->workers[i].state.store(JOB_WORKER_Initializing);
         system->workers[i].system = system;
+
+#if FOUNDATION_DEVELOPER
+        system->workers[i].completed_job_count = 0;
+#endif
+
         system->workers[i].thread = create_thread((Thread_Entry_Point) internal_worker_thread, &system->workers[i], false); // internal_worker_thread doesn't take 'void *' as user pointer.
     }
 }
@@ -132,6 +141,10 @@ void spawn_job(Job_System *system, Job_Declaration declaration) {
     for(s64 i = 0; i < system->worker_count; ++i) {
         if(system->workers[i].thread.state == THREAD_STATE_Suspended) resume_thread(&system->workers[i].thread);
     }
+}
+
+void wait_for_all_jobs(Job_System *system) {
+    while(get_number_of_incomplete_jobs(system) > 0) {}
 }
 
 s64 get_number_of_incomplete_jobs(Job_System *system) {

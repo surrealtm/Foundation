@@ -31,6 +31,10 @@ struct Job_Worker {
     Atomic<u32> state; // Job_Worker_State
     Job_System *system;
     Thread thread;
+
+#if FOUNDATION_DEVELOPER
+    s64 completed_job_count;
+#endif
 };
 
 struct Job_System {
@@ -44,4 +48,5 @@ struct Job_System {
 void create_job_system(Job_System *system, s64 worker_count);
 void destroy_job_system(Job_System *system, Job_System_Shutdown_Mode shutdown_mode);
 void spawn_job(Job_System *system, Job_Declaration declaration);
+void wait_for_all_jobs(Job_System *system);
 s64 get_number_of_incomplete_jobs(Job_System *system);
