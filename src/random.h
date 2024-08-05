@@ -14,6 +14,9 @@ struct Random_Generator {
     u64 random_u64();
     u64 random_u64(u64 low, u64 high);
 
+    s64 random_s64();
+    s64 random_s64(s64 low, s64 high);
+
     f32 random_f32_zero_to_one();
     f32 random_f32(f32 low, f32 high);
     f32 random_f32_normal_distribution(f32 mean, f32 stddev);
