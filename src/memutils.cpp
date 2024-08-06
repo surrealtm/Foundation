@@ -3,9 +3,6 @@
 
 #include <stdlib.h>
 
-Allocator heap_allocator = { null, heap_allocate, heap_deallocate, heap_reallocate, null, heap_query_allocation_size };
-Allocator *Default_Allocator = &heap_allocator;
-
 
 
 /* ------------------------------------------------ Allocator ------------------------------------------------ */
@@ -115,7 +112,7 @@ void *heap_allocate(void * /*data = null */, u64 size) {
 	// size somewhere. While malloc does this somewhere under the hood, we don't
 	// have access to that information, so instead we need to store that size
 	// ourselves. We do that by simply allocating a bigger block, and writing the
-	// size at the first few bytes of the returned block. Not super elegent, but
+	// size at the first few bytes of the returned block. Not super elegant, but
 	// better than the alternatives.
 	u64 extra_size = align_to(sizeof(u64), 16, u64); // Stuff like SIMD sometimes requires 16-byte alignment...
 	pointer = malloc(extra_size + size);
@@ -561,6 +558,39 @@ Allocator Memory_Pool::allocator() {
 	};
     
 	return allocator;
+}
+
+
+
+/* -------------------------------------------- Builtin Allocators -------------------------------------------- */
+
+Allocator heap_allocator = { null, heap_allocate, heap_deallocate, heap_reallocate, null, heap_query_allocation_size };
+Allocator *Default_Allocator = &heap_allocator;
+
+thread_local Memory_Arena temp_arena;
+thread_local Allocator temp;
+
+void create_temp_allocator(u64 reserved) {
+    if(temp_arena.base) return; // Already initialized in this thread.
+    
+    temp_arena.create(reserved);
+    temp = temp_arena.allocator();
+}
+
+void destroy_temp_allocator() {
+    temp.reset();
+}
+
+u64 mark_temp_allocator() {
+    return temp_arena.mark();
+}
+
+void release_temp_allocator(u64 mark) {
+    temp_arena.release_from_mark(mark);
+
+#if FOUNDATION_ALLOCATOR_STATISTICS
+    temp.stats.working_set = mark;
+#endif
 }
 
 

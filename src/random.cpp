@@ -46,6 +46,14 @@ u64 Random_Generator::random_u64(u64 low, u64 high) {
     return this->random_u64() % (high - low) + low;
 }
 
+s64 Random_Generator::random_s64() {
+    return (s64) this->random_u64();
+}
+
+s64 Random_Generator::random_s64(s64 low, s64 high) {
+    return (s64) this->random_u64((u64) low, (s64) high);    
+}
+
 f32 Random_Generator::random_f32_zero_to_one() {
     return (f32) this->random_u64() / (f32) MAX_U64;
 }

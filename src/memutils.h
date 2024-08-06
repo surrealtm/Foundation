@@ -87,6 +87,8 @@ u64 heap_query_allocation_size(void *data /* = null */, void *pointer);
 extern Allocator heap_allocator;
 extern Allocator *Default_Allocator;
 
+
+
 /* A memory arena (also known as a linear allocator) is just a big block of
  * reserved virtual memory, that gradually commits to physical memory as it
  * grows. A memory arena just pushes its head further along for every allocation
@@ -332,6 +334,21 @@ struct Linked_List {
     Iterator begin() { return Iterator { this->head }; }
 	Iterator end()   { return Iterator { null }; }
 };
+
+
+
+/* ---------------------------------------------- Temp Allocator ---------------------------------------------- */
+
+extern thread_local Memory_Arena temp_arena;
+extern thread_local Allocator temp;
+
+void create_temp_allocator(u64 reserved);
+void destroy_temp_allocator();
+u64 mark_temp_allocator();
+void release_temp_allocator(u64 mark);
+
+
+
 
 #if FOUNDATION_ALLOCATOR_STATISTICS
 void install_allocator_console_logger(Allocator *allocator, const char *name);

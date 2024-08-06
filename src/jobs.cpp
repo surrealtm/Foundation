@@ -10,7 +10,9 @@ void __internal_job_wait_until_job_queue_empty(volatile s64 *count) {
 }
 
 static
-u32 internal_worker_thread(Job_Worker *worker) {   
+u32 internal_worker_thread(Job_Worker *worker) {
+    create_temp_allocator(worker->system->thread_local_temp_space);
+
     while(!worker->state.compare(JOB_WORKER_Shutting_Down)) {
         worker->state.store(JOB_WORKER_Waiting_For_Job);
         
@@ -59,6 +61,7 @@ u32 internal_worker_thread(Job_Worker *worker) {
 #endif
     }
 
+    destroy_temp_allocator();
     worker->state.store(JOB_WORKER_Shut_Down);
 
     return 0;
@@ -66,7 +69,7 @@ u32 internal_worker_thread(Job_Worker *worker) {
 
 
 
-void create_job_system(Job_System *system, s64 worker_count) {
+void create_job_system(Job_System *system, s64 worker_count, s64 thread_local_temp_space) {
     tmFunction(TM_DEFAULT_COLOR);
 
     //
@@ -79,6 +82,7 @@ void create_job_system(Job_System *system, s64 worker_count) {
     // Initialize all worker threads.
     // @@Speed: Should probably assign each thread to a unique core...
     //
+    system->thread_local_temp_space = thread_local_temp_space;
     system->worker_count = worker_count;
     system->workers = (Job_Worker *) Default_Allocator->allocate(sizeof(Job_Worker) * system->worker_count);
 

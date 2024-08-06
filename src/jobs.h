@@ -39,6 +39,8 @@ struct Job_Worker {
 };
 
 struct Job_System {
+    s64 thread_local_temp_space;
+    
     s64 worker_count;
     Job_Worker *workers;
 
@@ -46,7 +48,7 @@ struct Job_System {
     Resizable_Array<Job_Declaration> job_queue;
 };
 
-void create_job_system(Job_System *system, s64 worker_count);
+void create_job_system(Job_System *system, s64 worker_count, s64 thread_local_temp_space = 64 * ONE_MEGABYTE);
 void destroy_job_system(Job_System *system, Job_System_Shutdown_Mode shutdown_mode);
 void spawn_job(Job_System *system, Job_Declaration declaration);
 void wait_for_all_jobs(Job_System *system);
