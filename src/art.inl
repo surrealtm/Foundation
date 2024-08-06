@@ -59,6 +59,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
     
     while(span_index < span_count && (node = *node_ptr) != null) {
         u8 span = this->span(key, span_index);
+        b8 is_last_span = span_index + 1 == span_count;
         
         switch(node->kind) {
         case ART_Leaf: {
@@ -101,7 +102,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
             memmove(&node4->keys[child_index + 1], &node4->keys[child_index], (4 - child_index - 1) * sizeof(u8));
             memmove(&node4->children[child_index + 1], &node4->children[child_index], (4 - child_index - 1) * sizeof(Art_Node *));
             node4->keys[child_index] = span;
-            node4->children[child_index] = this->allocator->New<Art_Leaf>(); // @@Speed: If this isn't the last span, already create a Node4 because that will happen later anyway.
+            node4->children[child_index] = is_last_span ? (Art_Node *) this->allocator->New<Art_Leaf>() : (Art_Node *) this->allocator->New<Art_Node4>();
             node_ptr = &node4->children[child_index];
             ++node4->count;
             ++span_index;
@@ -142,7 +143,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
             memmove(&node16->keys[child_index + 1], &node16->keys[child_index], (16 - child_index - 1) * sizeof(u8));
             memmove(&node16->children[child_index + 1], &node16->children[child_index], (16 - child_index - 1) * sizeof(Art_Node *));
             node16->keys[child_index] = span;
-            node16->children[child_index] = this->allocator->New<Art_Leaf>(); // @@Speed: If this isn't the last span, already create a Node4 because that will happen later anyway.
+            node16->children[child_index] = is_last_span ? (Art_Node *) this->allocator->New<Art_Leaf>() : (Art_Node *) this->allocator->New<Art_Node4>();
             node_ptr = &node16->children[child_index];
             ++node16->count;
             ++span_index;
@@ -175,7 +176,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
 
             // Insert into the node48
             node48->indirection[span] = node48->count;
-            node48->children[node48->count] = this->allocator->New<Art_Leaf>(); // @@Speed: If this isn't the last span, already create a Node4 because that will happen later anyway.
+            node48->children[node48->count] = is_last_span ? (Art_Node *) this->allocator->New<Art_Leaf>() : (Art_Node *) this->allocator->New<Art_Node4>();
             node_ptr = &node48->children[node48->count];
             ++node48->count;
             ++span_index;
@@ -184,7 +185,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
         case ART_Node256: {
             Art_Node256 *node256 = (Art_Node256 *) node;
             if(node256->children[span] == null) {
-                node256->children[span] = this->allocator->New<Art_Leaf>(); // @@Speed: If this isn't the last span, already create a Node4 because that will happen later anyway.
+                node256->children[span] = is_last_span ? (Art_Node *) this->allocator->New<Art_Leaf>() : (Art_Node *) this->allocator->New<Art_Node4>();
             }
 
             node_ptr = &node256->children[span];
