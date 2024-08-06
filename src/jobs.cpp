@@ -103,15 +103,31 @@ void destroy_job_system(Job_System *system, Job_System_Shutdown_Mode shutdown_mo
     __internal_job_wait_until_job_queue_empty(&system->job_queue.count);
 
     //
+    // Potentially busy wait until all jobs are completed.
+    //
+    if(shutdown_mode == JOB_SYSTEM_Wait_On_All_Jobs) {
+        while(get_number_of_incomplete_jobs(system)) {}
+    }
+
+    //
     // Destroy all workers. These might still try to access the job queue!
     //
     for(s64 i = 0; i < system->worker_count; ++i) {
         system->workers[i].state.store(JOB_WORKER_Shutting_Down);
 
-        if(shutdown_mode != JOB_SYSTEM_Detach_Workers) {
+        switch(shutdown_mode) {
+        case JOB_SYSTEM_Join_Workers:
+        case JOB_SYSTEM_Wait_On_All_Jobs:
             join_thread(&system->workers[i].thread);
-        } else {
+            break;
+            
+        case JOB_SYSTEM_Detach_Workers:
             detach_thread(&system->workers[i].thread);
+            break;
+            
+        case JOB_SYSTEM_Kill_Workers:
+            kill_thread(&system->workers[i].thread);
+            break;    
         }
     }
 

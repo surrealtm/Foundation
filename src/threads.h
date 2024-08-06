@@ -39,6 +39,7 @@ struct Thread {
 Thread create_thread(Thread_Entry_Point procedure, void *user_pointer, b8 start_as_suspended);
 void join_thread(Thread *thread);
 void detach_thread(Thread *thread);
+void kill_thread(Thread *thread);
 void suspend_thread(Thread *thread);
 void resume_thread(Thread *thread);
 void thread_wait_if_suspended(Thread *thread);

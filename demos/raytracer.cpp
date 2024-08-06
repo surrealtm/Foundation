@@ -7,6 +7,8 @@
 #include "random.h"
 #include "math/maths.h"
 
+#define RAYTRACER_JOB_COUNT 12
+
 struct Viewport {
     s32 width_in_pixels;
     s32 height_in_pixels;
@@ -51,6 +53,12 @@ struct Plane {
     Material material;
 };
 
+struct Raytracer_Job {
+    struct Raytracer *tracer;
+    s32 y0;
+    s32 y1;    
+};
+
 struct Raytracer {   
     // Display
     Window window;
@@ -61,6 +69,7 @@ struct Raytracer {
     Frame_Buffer frame_buffer[2]; // Used for the actual raytracing, since we only want to swap that whenever a frame has been finished. We may want to swap the UI in between though, so we always need a valid previous frame.
     s32 front_buffer, back_buffer; // Indices into the frame_buffer array.
     Job_System job_system;
+    Raytracer_Job jobs[RAYTRACER_JOB_COUNT];
 
     // World
     Camera camera;
@@ -100,7 +109,7 @@ void set_viewport(Raytracer *tracer) {
     tracer->viewport.height_in_pixels = tracer->window.h;
     tracer->viewport.aspect_ratio     = (f32) tracer->viewport.width_in_pixels / (f32) tracer->viewport.height_in_pixels;
     tracer->viewport.depth            = 100.0f;
-    tracer->viewport.samples          = 8;
+    tracer->viewport.samples          = 100;
     tracer->viewport.max_depth        = 20;
 }
 
@@ -299,11 +308,26 @@ void raytrace_pixel(Raytracer *tracer, s32 x, s32 y) {
 }
 
 static
-void raytrace_viewport_area(Raytracer *tracer, s32 y0, s32 y1) {
-    for(s32 y = y0; y <= y1; ++y) {
-        for(s32 x = 0; x <= tracer->viewport.width_in_pixels - 1; ++x) {
-            raytrace_pixel(tracer, x, y);
+void raytrace_viewport_area_job(Raytracer_Job *job) {
+    for(s32 y = job->y0; y <= job->y1; ++y) {
+        for(s32 x = 0; x <= job->tracer->viewport.width_in_pixels - 1; ++x) {
+            raytrace_pixel(job->tracer, x, y);
         }
+    }
+}
+
+static
+void raytrace_one_frame(Raytracer *tracer) {
+    s32 height_per_job = tracer->window.h / RAYTRACER_JOB_COUNT;
+    s32 y0 = 0;
+    
+    for(s32 i = 0; i < RAYTRACER_JOB_COUNT; ++i) {
+        tracer->jobs[i].tracer = tracer;
+        tracer->jobs[i].y0     = y0;
+        tracer->jobs[i].y1     = (i + 1 < RAYTRACER_JOB_COUNT) ? (y0 + height_per_job - 1) : (tracer->window.h - 1);
+        spawn_job(&tracer->job_system, { (Job_Procedure) raytrace_viewport_area_job, &tracer->jobs[i] });
+        
+        y0 = y0 + height_per_job;
     }
 }
 
@@ -412,9 +436,9 @@ int main() {
             if(jobs_finished) {
                 ++tracer.frame_index;
                 tracer.front_buffer = tracer.back_buffer;
-                tracer.back_buffer  = (tracer.front_buffer + 1) & 2;
+                tracer.back_buffer  = (tracer.front_buffer + 1) % 2;
                 set_viewport(&tracer);
-                raytrace_viewport_area(&tracer, 0, tracer.viewport.height_in_pixels - 1);
+                raytrace_one_frame(&tracer);
             }
             
             // Blit the previous frame into the window because we clear the window every time for the UI.
@@ -436,7 +460,7 @@ int main() {
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
 
-    destroy_job_system(&tracer.job_system, JOB_SYSTEM_Detach_Workers);
+    destroy_job_system(&tracer.job_system, JOB_SYSTEM_Kill_Workers);
 
     destroy_ui(&tracer.ui);    
     destroy_frame_buffer(&tracer.frame_buffer[0]);

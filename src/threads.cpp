@@ -96,7 +96,7 @@ Thread create_thread(Thread_Entry_Point procedure, void *user_pointer, b8 start_
 }
 
 void join_thread(Thread *thread) {
-    if(thread->state == THREAD_STATE_Terminated) return;
+    if(thread->state == THREAD_STATE_Terminated || thread->state == THREAD_STATE_Detached) return;
 
     if(thread->state == THREAD_STATE_Suspending || thread->state == THREAD_STATE_Suspended) {
         //
@@ -151,6 +151,7 @@ void join_thread(Thread *thread) {
         thread->state = THREAD_STATE_Terminating;
         pthread_join(state->id, null);
         thread->state = THREAD_STATE_Terminated;
+        this_call_destroyed_thread = true;
     }
 
     pthread_mutex_unlock(&state->mutex);
@@ -159,19 +160,20 @@ void join_thread(Thread *thread) {
 }
 
 void detach_thread(Thread *thread) {
-    if(thread->state == THREAD_STATE_Terminated || thread->state == THREAD_STATE_Terminating) return;
+    if(thread->state == THREAD_STATE_Terminated || thread->state == THREAD_STATE_Terminating || thread->state == THREAD_STATE_Detached) return;
 
 #if FOUNDATION_WIN32
     Thread_Win32_State *state = (Thread_Win32_State *) thread->platform_data;
     if(!state->setup) return;
 
-    b8 this_call_destroyed_thread = true;
+    b8 this_call_destroyed_thread = false;
     
     EnterCriticalSection(&state->mutex);
 
     if(thread->state != THREAD_STATE_Terminated && thread->state != THREAD_STATE_Detached) {
         CloseHandle(state->handle);
         thread->state = THREAD_STATE_Detached;
+        this_call_destroyed_thread = true;
     }
 
     LeaveCriticalSection(&state->mutex);
@@ -180,17 +182,61 @@ void detach_thread(Thread *thread) {
     Thread_Linux_State *state = (Thread_Linux_State *) thread->platform_data;
     if(!state->setup) return;
 
-    b8 this_call_destroyed_thread = true;
+    b8 this_call_destroyed_thread = false;
 
     pthread_mutex_lock(&state->mutex);
 
     if(thread->state != THREAD_STATE_Terminated && thread->state != THREAD_STATE_Detached) {
         pthread_detach(state->id);
         thread->state = THREAD_STATE_Detached;
+        this_call_destroyed_thread = true;
     }
 
     pthread_mutex_unlock(&state->mutex);
     if(this_call_destroyed_thread) __thread_internal_cleanup(state);
+#endif
+}
+
+void kill_thread(Thread *thread) {
+    if(thread->state == THREAD_STATE_Terminated || thread->state == THREAD_STATE_Terminating || thread->state == THREAD_STATE_Detached) return;
+
+#if FOUNDATION_WIN32
+    Thread_Win32_State *state = (Thread_Win32_State *) thread->platform_data;
+    if(!state->setup) return;
+    
+    b8 this_call_destroyed_thread = false;
+    
+    EnterCriticalSection(&state->mutex);
+    
+    if(thread->state != THREAD_STATE_Terminated && thread->state != THREAD_STATE_Detached) {
+        thread->state = THREAD_STATE_Terminating;
+        TerminateThread(state->handle, 0);
+        WaitForSingleObject(state->handle, INFINITE);
+        CloseHandle(state->handle);
+        thread->state = THREAD_STATE_Terminated;
+        this_call_destroyed_thread = true;
+    }
+
+    LeaveCriticalSection(&state->mutex);
+    if(this_call_destroyed_thread) __thread_internal_cleanup(state);
+#elif FOUNDATION_LINUX
+    Thread_Linux_State *state = (Thread_Linux_State *) thread->platform_data;
+    if(!state->setup) return;
+
+    b8 this_call_destroyed_thread = false;
+
+    pthread_mutex_lock(&state->mutex);
+
+    if(thread->state != THREAD_STATE_Terminated && thread->state != THREAD_STATE_Detached) {
+        thread->state = THREAD_STATE_Terminating;
+        pthread_cancel(state->id);
+        pthread_join(state->id);
+        thread->state = THREAD_STATE_Terminated;
+        this_call_destroyed_thread = true;
+    }
+
+    pthread_mutex_unlock(&state->mutex);
+    if(this_call_destroyed_thread) __thread_internal_cleanup(state);    
 #endif
 }
 
