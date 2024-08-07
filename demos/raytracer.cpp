@@ -57,6 +57,7 @@ struct Raytracer_Job {
     struct Raytracer *tracer;
     s32 y0;
     s32 y1;    
+    b8 should_stop;
 };
 
 typedef b8(*Panel_Procedure)(Raytracer *, UI *);
@@ -220,6 +221,12 @@ v3f random_hemisphere(Raytracer *tracer, v3f normal) {
     return result * denom;
 }
 
+static inline
+v3f random_sphere(Raytracer *tracer) {
+    v3f result = v3f(tracer->random.random_f32(-1.f, 1.f), tracer->random.random_f32(-1.f, 1.f), tracer->random.random_f32(-1.f, 1.f));
+    return v3_normalize(result);
+}
+
 static
 Ray_Cast_Result cast_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
     Ray_Cast_Result result;
@@ -232,7 +239,7 @@ Ray_Cast_Result cast_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
             result.intersection = true;
             result.distance     = distance_to_sphere;
             result.point        = ray_origin + ray_direction * result.distance;
-            result.normal       = -ray_direction;
+            result.normal       = v3_normalize(result.point - sphere.origin);
             result.material     = &sphere.material;
         }
     }
@@ -253,7 +260,7 @@ Ray_Cast_Result cast_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
 
 static
 v3f color_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
-    v3f ray_color = v3f(1, 1, 1);
+    v3f ray_color   = v3f(1, 1, 1);
     v3f light_color = v3f(0, 0, 0);
     
     for(s32 i = 0; i < tracer->viewport.max_depth; ++i) {        
@@ -266,12 +273,19 @@ v3f color_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
             break;
         }
     
-        // Diffuse calculation
-        ray_origin = result.point;    
-        ray_direction = random_hemisphere(tracer, result.normal);
+        v3f diffuse_direction = result.normal + random_sphere(tracer);
+        if(v3_fuzzy_equals(diffuse_direction, v3f(0.f))) 
+            diffuse_direction = result.normal; // Catch degenerate random directions.
+        else
+            diffuse_direction = v3_normalize(diffuse_direction);
+
+        v3f specular_direction = v3_reflect(ray_direction, result.normal);
+              
+        ray_origin    = result.point + result.normal * 0.001f; 
+        ray_direction = v3_lerp(diffuse_direction, specular_direction, result.material->smoothness);
         
         light_color = light_color + result.material->emission * ray_color;
-        ray_color = ray_color * result.material->albedo;
+        ray_color   = result.material->albedo * ray_color;
     }
 
     return light_color;
@@ -292,7 +306,7 @@ void raytrace_pixel(Raytracer *tracer, s32 x, s32 y) {
         v2f eye_coordinates = normalized_device_coordinates * v2f(tracer->viewport.aspect_ratio * tracer->camera.vertical_fov * 2.0f, tracer->camera.vertical_fov * 2.0f);
         
         v3f ray_origin    = tracer->camera.position;
-        v3f ray_direction = tracer->camera.forward + eye_coordinates.x * tracer->camera.right + eye_coordinates.y * tracer->camera.up;
+        v3f ray_direction = v3_normalize(tracer->camera.forward + eye_coordinates.x * tracer->camera.right + eye_coordinates.y * tracer->camera.up);
 
         raw_color = raw_color + color_ray(tracer, ray_origin, ray_direction);
     }
@@ -303,9 +317,9 @@ void raytrace_pixel(Raytracer *tracer, s32 x, s32 y) {
     // Tone map from HDR to LDR
     //
     /*
-    raw_color.x = clamp(raw_color.x / (raw_color.x + 1.0f), 0.0f, 1.0f);
-    raw_color.y = clamp(raw_color.y / (raw_color.y + 1.0f), 0.0f, 1.0f);
-    raw_color.z = clamp(raw_color.z / (raw_color.z + 1.0f), 0.0f, 1.0f);
+    raw_color.x = raw_color.x / (raw_color.x + 1.0f);
+    raw_color.y = raw_color.y / (raw_color.y + 1.0f);
+    raw_color.z = raw_color.z / (raw_color.z + 1.0f);
     */
     
     //
@@ -314,7 +328,14 @@ void raytrace_pixel(Raytracer *tracer, s32 x, s32 y) {
     raw_color.x = powf(raw_color.x, tracer->camera.inverse_gamma);
     raw_color.y = powf(raw_color.y, tracer->camera.inverse_gamma);
     raw_color.z = powf(raw_color.z, tracer->camera.inverse_gamma);
-
+    
+    //
+    // Clamp the result into the byte range
+    //
+    raw_color.x = clamp(raw_color.x, 0.0f, 1.0f);
+    raw_color.y = clamp(raw_color.y, 0.0f, 1.0f);
+    raw_color.z = clamp(raw_color.z, 0.0f, 1.0f);
+    
     //
     // Mix into the output buffer
     //    
@@ -335,6 +356,8 @@ void raytrace_viewport_area_job(Raytracer_Job *job) {
         for(s32 x = 0; x <= job->tracer->viewport.width_in_pixels - 1; ++x) {
             raytrace_pixel(job->tracer, x, y);
         }
+        
+        if(job->should_stop) break;
     }
 }
 
@@ -350,9 +373,10 @@ void start_raytrace_frame(Raytracer *tracer) {
     s32 y0 = 0;
     
     for(s32 i = 0; i < RAYTRACER_JOB_COUNT; ++i) {
-        tracer->jobs[i].tracer = tracer;
-        tracer->jobs[i].y0     = y0;
-        tracer->jobs[i].y1     = (i + 1 < RAYTRACER_JOB_COUNT) ? (y0 + height_per_job - 1) : (tracer->window.h - 1);
+        tracer->jobs[i].tracer      = tracer;
+        tracer->jobs[i].y0          = y0;
+        tracer->jobs[i].y1          = (i + 1 < RAYTRACER_JOB_COUNT) ? (y0 + height_per_job - 1) : (tracer->window.h - 1);
+        tracer->jobs[i].should_stop = false;
         spawn_job(&tracer->job_system, { (Job_Procedure) raytrace_viewport_area_job, &tracer->jobs[i] });
         
         y0 = y0 + height_per_job;
@@ -419,7 +443,7 @@ b8 perf_panel(Raytracer *tracer, UI *ui) {
 static
 void setup_basic_scene(Raytracer *tracer) {
     // These are the five differently colored, differently sized balls
-    set_camera(tracer, { -3, 1, 6 }, { 0, -0.06f, 0 });
+    set_camera(tracer, { -3.2f, 1, 6 }, { 0, -0.06f, 0 });
     set_environment(tracer, { 1.0f, 1.0f, 1.0f }, { 0.5f, 0.7f, 1.0f });
     make_sphere(tracer, 1.0f, { -3.1f, 1.0f, 0.0f }, { 1.f, .1f, .1f }, { 0, 0, 0 }, 1.0f, 0.1f);
     make_sphere(tracer, 0.7f, { -1.3f, 0.7f, -.4f }, { .2f, 1.f, .2f }, { 0, 0, 0 }, 0.9f, 0.1f);
@@ -481,7 +505,8 @@ int main() {
     
     // Create the actual raytracer
     create_job_system(&tracer.job_system, os_get_number_of_hardware_threads());
-    setup_basic_scene(&tracer);
+    //setup_basic_scene(&tracer);
+    setup_cornell_scene(&tracer);
     
     while(!tracer.window.should_close) {
         Hardware_Time frame_start = os_get_hardware_time();
@@ -538,6 +563,8 @@ int main() {
         Hardware_Time frame_end = os_get_hardware_time();        
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
+
+    for(Raytracer_Job &job : tracer.jobs) job.should_stop = true;
 
     destroy_job_system(&tracer.job_system, JOB_SYSTEM_Kill_Workers);
     destroy_scene(&tracer);

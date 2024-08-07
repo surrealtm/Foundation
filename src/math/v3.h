@@ -86,3 +86,16 @@ v3<T> v3_normalize(v3<T> const &v) { T denom = 1 / v3_length(v); return v3<T>(v.
 
 template<typename T>
 v3<T> v3_cross_v3(v3<T> const &lhs, v3<T> const &rhs) { return v3<T>(lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.x - lhs.x * rhs.z, lhs.x * rhs.y - lhs.y * rhs.x); }
+
+template<typename T>
+v3<T> v3_lerp(v3<T> const &lhs, v3<T> const &rhs, T t) { 
+    T one_minus_t = 1 - t;
+    return v3<T>(one_minus_t * lhs.x + t * rhs.x,
+                 one_minus_t * lhs.y + t * rhs.y,
+                 one_minus_t * lhs.z + t * rhs.z);
+}
+
+template<typename T>
+v3<T> v3_reflect(v3<T> const &direction, v3<T> const &normal) {
+    return v3_normalize(direction - 2 * v3_dot_v3(direction, normal) * normal);
+}
