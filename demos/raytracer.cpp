@@ -7,7 +7,7 @@
 #include "random.h"
 #include "math/maths.h"
 
-#define RAYTRACER_JOB_COUNT 12
+#define RAYTRACER_JOB_COUNT 36
 
 struct Viewport {
     s32 width_in_pixels;
@@ -59,6 +59,20 @@ struct Raytracer_Job {
     s32 y1;    
 };
 
+typedef b8(*Panel_Procedure)(Raytracer *, UI *);
+
+enum Panel_Kind {
+    PANEL_Perf,
+    PANEL_Scene,
+    PANEL_Count,
+};
+
+struct Panel {
+    Panel_Procedure procedure;
+    UI_Vector2 position;
+    UI_Window_State state;
+};
+
 struct Raytracer {   
     // Display
     Window window;
@@ -71,6 +85,10 @@ struct Raytracer {
     Job_System job_system;
     Raytracer_Job jobs[RAYTRACER_JOB_COUNT];
 
+    Hardware_Time frame_start_time;
+    Hardware_Time frame_end_time;
+    f32 previous_frame_time_seconds;
+    
     // World
     Camera camera;
     Viewport viewport;
@@ -80,6 +98,10 @@ struct Raytracer {
     Resizable_Array<Sphere> spheres;
     Resizable_Array<Plane>  planes;
 
+    // UI
+    Panel panels[PANEL_Count];
+    Linked_List<Panel *> panel_stack;
+    
     // Util
     s32 frame_index;
     Random_Generator random;
@@ -317,7 +339,13 @@ void raytrace_viewport_area_job(Raytracer_Job *job) {
 }
 
 static
-void raytrace_one_frame(Raytracer *tracer) {
+void start_raytrace_frame(Raytracer *tracer) {
+    tracer->frame_start_time = os_get_hardware_time();
+
+    tracer->front_buffer = tracer->back_buffer;
+    tracer->back_buffer  = (tracer->front_buffer + 1) % 2;
+    set_viewport(tracer);
+    
     s32 height_per_job = tracer->window.h / RAYTRACER_JOB_COUNT;
     s32 y0 = 0;
     
@@ -354,6 +382,34 @@ void set_ui_scissors(void *user_pointer, UI_Rect rect) {
 static
 void clear_ui_scissors(void *user_pointer) {
     clear_scissors();
+}
+
+
+
+/* ---------------------------------------------------- UI ---------------------------------------------------- */
+
+static
+void create_panel(Raytracer *tracer, Panel_Kind kind, Panel_Procedure procedure, UI_Vector2 position, UI_Window_State state) {
+    tracer->panels[kind].procedure = procedure;
+    tracer->panels[kind].position  = position;
+    tracer->panels[kind].state     = state;
+    tracer->panel_stack.add(&tracer->panels[kind]);
+}
+
+static
+b8 perf_panel(Raytracer *tracer, UI *ui) {
+    if(tracer->panels[PANEL_Perf].state == UI_WINDOW_Closed) return false;
+    
+    tracer->panels[PANEL_Perf].state = ui_push_window(ui, "Performance"_s, UI_WINDOW_Closeable | UI_WINDOW_Collapsable | UI_WINDOW_Draggable | UI_WINDOW_Keep_Body_On_Screen, &tracer->panels[PANEL_Perf].position);
+
+    if(tracer->panels[PANEL_Perf].state != UI_WINDOW_Collapsed) {
+        ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 256, 1);
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Frame Index:     %d", tracer->frame_index));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Prev Frame Time: %fs", tracer->previous_frame_time_seconds));
+        ui_pop_width(ui);
+    }
+
+    return ui_pop_window(ui);
 }
 
 
@@ -397,24 +453,34 @@ void setup_cornell_scene(Raytracer *tracer) {
     make_plane(tracer, {  0, h - 0.01f, 0 }, { l, 0, 0 }, { 0, 0, l / 2 }, {  1,  1,  1 }, { 2, 2, 2 }, 0, 0); // Light
 }
 
+static
+void destroy_scene(Raytracer *tracer) {
+    tracer->spheres.clear();
+    tracer->planes.clear();
+}
+
 int main() {
     Raytracer tracer;
     tracer.frame_index = 0;
     
+    // Create the output
     create_window(&tracer.window, "Raytracer"_s);
     show_window(&tracer.window);
     create_software_renderer(&tracer.window);
 
-    create_software_font_from_file(&tracer.font, "C:/Windows/fonts/segoeui.ttf"_s, 13, GLYPH_SET_Extended_Ascii);
     create_frame_buffer(&tracer.frame_buffer[0], tracer.window.w, tracer.window.h, COLOR_FORMAT_RGB);
     create_frame_buffer(&tracer.frame_buffer[1], tracer.window.w, tracer.window.h, COLOR_FORMAT_RGB);
     tracer.front_buffer = tracer.back_buffer = 0;
     
+    // Create the UI
     UI_Callbacks callbacks = { &tracer, draw_ui_text, draw_ui_quad, set_ui_scissors, clear_ui_scissors };
+    create_software_font_from_file(&tracer.font, "C:/Windows/fonts/segoeui.ttf"_s, 11, GLYPH_SET_Extended_Ascii);
     create_ui(&tracer.ui, callbacks, UI_Dark_Theme, &tracer.window, tracer.font.underlying);
 
+    create_panel(&tracer, PANEL_Perf, perf_panel, { 1, 1 }, UI_WINDOW_Closed);
+    
+    // Create the actual raytracer
     create_job_system(&tracer.job_system, os_get_number_of_hardware_threads());
-
     setup_basic_scene(&tracer);
     
     while(!tracer.window.should_close) {
@@ -422,8 +488,6 @@ int main() {
         update_window(&tracer.window);
 
         // @Incomplete: Window resizing.
-        
-        b8 jobs_finished = get_number_of_incomplete_jobs(&tracer.job_system) == 0;
         
         // Prepare the frame.
         {
@@ -433,12 +497,12 @@ int main() {
         // Render one frame.
         {
             // Restart the jobs for the next frame.
-            if(jobs_finished) {
+            if(get_number_of_incomplete_jobs(&tracer.job_system) == 0) {
+                tracer.frame_end_time = os_get_hardware_time();
+                if(tracer.frame_index > 0) tracer.previous_frame_time_seconds = (f32) os_convert_hardware_time(tracer.frame_end_time - tracer.frame_start_time, Seconds);
+                
                 ++tracer.frame_index;
-                tracer.front_buffer = tracer.back_buffer;
-                tracer.back_buffer  = (tracer.front_buffer + 1) % 2;
-                set_viewport(&tracer);
-                raytrace_one_frame(&tracer);
+                start_raytrace_frame(&tracer);
             }
             
             // Blit the previous frame into the window because we clear the window every time for the UI.
@@ -447,7 +511,22 @@ int main() {
 
         // Build the UI for this frame.
         {
-            if(ui_button(&tracer.ui, "Hello"_s)) printf("Pressed the button.\n");
+            // Menu Bar
+            ui_toggle_button_with_pointer(&tracer.ui, "Perf"_s, (b8 *) &tracer.panels[PANEL_Perf].state);
+
+            // Panels
+            Panel *interacted_panel = null;
+
+            for(Panel *panel : tracer.panel_stack) {
+                if(panel->procedure(&tracer, &tracer.ui)) {
+                    interacted_panel = panel;
+                }
+            }
+
+            if(interacted_panel) {
+                tracer.panel_stack.remove_value(interacted_panel);
+                tracer.panel_stack.add_first(interacted_panel);
+            }
         }
 
         // Display the frame.
@@ -461,11 +540,14 @@ int main() {
     }
 
     destroy_job_system(&tracer.job_system, JOB_SYSTEM_Kill_Workers);
+    destroy_scene(&tracer);
 
-    destroy_ui(&tracer.ui);    
+    tracer.panel_stack.clear();
+    
     destroy_frame_buffer(&tracer.frame_buffer[0]);
     destroy_frame_buffer(&tracer.frame_buffer[1]);
     destroy_software_font(&tracer.font);
+    destroy_ui(&tracer.ui);    
     destroy_software_renderer();
     destroy_window(&tracer.window);
     

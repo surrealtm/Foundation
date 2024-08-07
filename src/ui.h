@@ -47,11 +47,12 @@ typedef void(*UI_Custom_Draw_Callback)(void *, UI_Element *, void *); // user_po
 #define UI_FORMAT_STRING(ui, format, ...) mprint(&ui->allocator, format, __VA_ARGS__)
 
 enum UI_Window_Flags {
-    UI_WINDOW_Default         = 0x0,
-    UI_WINDOW_Closeable       = 0x1,
-    UI_WINDOW_Collapsable     = 0x2,
-    UI_WINDOW_Draggable       = 0x4,
-    UI_WINDOW_Center_Children = 0x8,
+    UI_WINDOW_Default             = 0x0,
+    UI_WINDOW_Closeable           = 0x1,
+    UI_WINDOW_Collapsable         = 0x2,
+    UI_WINDOW_Draggable           = 0x4,
+    UI_WINDOW_Center_Children     = 0x8,
+    UI_WINDOW_Keep_Body_On_Screen = 0x10,
 };
 
 BITWISE(UI_Window_Flags);
@@ -94,13 +95,14 @@ enum UI_Flags {
     UI_Snap_Draggable_Children_On_Click  = 1 << 13, // When an element has a draggable child, snap that child to the cursor when the left button gets pressed
     UI_Deactivate_Automatically_On_Click = 1 << 14, // When an element is active and the mouse button is pressed somewhere else on the screen, deactivate it
     UI_Drag_On_Screen_Space              = 1 << 15, // The element is prevented from being partially dragged off the screen
-
+    UI_Drag_Keep_Children_On_Screen      = 1 << 16, // Make sure (extruded) children of this element cannot be dragged off the screen.
+    
     /* Animation Flags */
-    UI_Animate_Size_On_Activation = 1 << 16,
-    UI_Animate_Size_On_Hover      = 1 << 17,
+    UI_Animate_Size_On_Activation = 1 << 17,
+    UI_Animate_Size_On_Hover      = 1 << 19,
 
     /* User Level Customization */
-    UI_Custom_Drawing_Procedure = 1 << 18, // This UI element requires user-level drawing mechanisms, so call the callback pointer when drawing the element.
+    UI_Custom_Drawing_Procedure = 1 << 19, // This UI element requires user-level drawing mechanisms, so call the callback pointer when drawing the element.
 };
 
 BITWISE(UI_Flags);

@@ -318,6 +318,7 @@ struct Linked_List {
 
     void clear();
 	void add(T const &value);
+    void add_first(T const &value);
 	void remove_node(Linked_List_Node<T> *node);
 	void remove_value(T const &value);
 	void remove_value_pointer(T *value_pointer);

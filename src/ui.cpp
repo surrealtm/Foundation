@@ -330,22 +330,44 @@ UI_Element *insert_element_with_hash(UI *ui, UI_Hash hash, string label, UI_Flag
 }
 
 static
-void set_element_drag(UI *ui, UI_Element *element) {
+UI_Vector2 calculate_used_element_size_for_drag(UI_Element *element) {
+    UI_Vector2 used_element_size = element->screen_size;
+
+    if(element->flags & UI_Drag_Keep_Children_On_Screen) {
+        for(auto *child = element->first_child; child != null; child = child->next) {
+            if((child->flags & UI_Floating) == 0) {
+                if(element->layout_direction == UI_DIRECTION_Horizontal) {
+                    used_element_size.x += child->screen_size.x;
+                    used_element_size.y  = max(child->screen_size.y, used_element_size.y);
+                } else if(element->layout_direction == UI_DIRECTION_Vertical) {
+                    used_element_size.x  = max(child->screen_size.x, used_element_size.x);
+                    used_element_size.y += child->screen_size.y;
+                }
+            }
+        }
+    }
+
+    return used_element_size;
+}
+
+static
+void set_element_drag(UI *ui, UI_Element *element, b8 respond_to_input) {
     // It can happen that the element has a bigger size in a dimension than the parent, e.g. if this
     // is a scrollbar knob moving on the scrollbar background (which is made smaller for more visual
     // clarity when dragging...)
     // In that case, we want to restrict the movement on that axis.
-
-    if(element->parent->screen_size.x >= element->screen_size.x) {
-        element->float_vector.x = clamp((ui->window->mouse_x - element->parent->screen_position.x - element->drag_offset.x) / (element->parent->screen_size.x - element->screen_size.x), 0, 1);
-    } else {
-        element->float_vector.x = ((element->screen_size.x - element->parent->screen_size.x) / 2) / element->screen_size.x;
+    UI_Vector2 used_element_size = calculate_used_element_size_for_drag(element);
+    
+    if(element->parent->screen_size.x >= used_element_size.x && respond_to_input) {
+        element->float_vector.x = clamp((ui->window->mouse_x - element->parent->screen_position.x - element->drag_offset.x) / (element->parent->screen_size.x - used_element_size.x), 0, 1);
+    } else if(element->parent->screen_size.x < used_element_size.x) {
+        element->float_vector.x = ((used_element_size.x - element->parent->screen_size.x) / 2) / used_element_size.x;
     }
 
-    if(element->parent->screen_size.y >= element->screen_size.y) {
-        element->float_vector.y = clamp((ui->window->mouse_y - element->parent->screen_position.y - element->drag_offset.y) / (element->parent->screen_size.y - element->screen_size.y), 0, 1);
-    } else {
-        element->float_vector.y = ((element->screen_size.y - element->parent->screen_size.y) / 2) / element->screen_size.y;
+    if(element->parent->screen_size.y >= used_element_size.y && respond_to_input) {
+        element->float_vector.y = clamp((ui->window->mouse_y - element->parent->screen_position.y - element->drag_offset.y) / (element->parent->screen_size.y - used_element_size.y), 0, 1);
+    } else if(element->parent->screen_size.y < element->screen_size.y) {
+        element->float_vector.y = ((used_element_size.y - element->parent->screen_size.y) / 2) / used_element_size.y;
     }
 }
 
@@ -669,7 +691,7 @@ void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rec
     if(element->signals & UI_SIGNAL_Dragged && ui->window->mouse_active_this_frame) {
         // If the element is currently being dragged, update the dragging offset. This should be done before
         // the actual element is positioned to avoid any latency in the dragging.
-        set_element_drag(ui, element);
+        set_element_drag(ui, element, true);
     }
 
     if(element->flags & UI_Floating) {
@@ -677,22 +699,14 @@ void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rec
         // frame.
         // Every draggable element needs to be floating, but non-draggable elements may have a custom drag vector
         // (e.g. to be positioned under the mouse cursor).
-        if(element->flags & UI_Draggable) {
-            // See set_ui_elemnt_drag.
-            if(element->parent->screen_size.x < element->screen_size.x) {
-                element->float_vector.x = ((element->screen_size.x - element->parent->screen_size.x) / 2) / element->screen_size.x;
-            }
-
-            if(element->parent->screen_size.y < element->screen_size.y) {
-                element->float_vector.y = ((element->screen_size.y - element->parent->screen_size.y) / 2) / element->screen_size.y;
-            }
-        }
+        if(element->flags & UI_Draggable) set_element_drag(ui, element, false);
 
         UI_Vector2 available_parent_size = element->parent->screen_size;
+        UI_Vector2 used_element_size = calculate_used_element_size_for_drag(element);
 
         if(!(element->flags & UI_Drag_On_Screen_Space)) {
-            available_parent_size.x -= element->screen_size.x;
-            available_parent_size.y -= element->screen_size.y;
+            available_parent_size.x -= used_element_size.x;
+            available_parent_size.y -= used_element_size.y;
         }
 
         element->screen_position.x = element->parent->screen_position.x + roundf(element->float_vector.x * available_parent_size.x);
@@ -873,7 +887,7 @@ void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rec
                 child->signals |= UI_SIGNAL_Hovered | UI_SIGNAL_Clicked | UI_SIGNAL_Dragged;
                 child->hover_t = 1;
                 
-                set_element_drag(ui, child);
+                set_element_drag(ui, child, true);
             }
         }
     }    
@@ -1601,7 +1615,8 @@ UI_Custom_Widget_Data ui_custom_widget(UI *ui, string label, UI_Custom_Update_Ca
 
 UI_Window_State ui_push_window(UI *ui, string label, UI_Window_Flags window_flags, UI_Vector2 *position) {
     UI_Flags title_bar_flags = UI_Background | UI_Label | UI_Clickable | UI_Floating | UI_Center_Label | UI_Extrude_Children | UI_Detach_From_Parent;
-    
+
+    if(window_flags & UI_WINDOW_Keep_Body_On_Screen) title_bar_flags |= UI_Drag_Keep_Children_On_Screen;
     if(window_flags & UI_WINDOW_Draggable) title_bar_flags |= UI_Draggable;
     
     UI_Element *title_bar_container      = ui_element(ui, label, title_bar_flags);

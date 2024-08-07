@@ -456,6 +456,21 @@ void Linked_List<T>::add(T const &value) {
 }
 
 template<typename T>
+void Linked_List<T>::add_first(T const &value) {
+    Linked_List_Node<T> *node = this->make_node(value);
+		
+    if(this->head) {
+        node->next = this->head;
+        this->head = node;
+    } else {
+        this->head = node;
+        this->tail = this->head;
+    }
+
+    ++this->count;
+}
+
+template<typename T>
 void Linked_List<T>::remove_node(Linked_List_Node<T> *node) {
     if(!node) return;
 
