@@ -107,14 +107,14 @@ void atomic_store(s32 volatile *dst, s32 src);
 void atomic_store(s16 volatile *dst, s16 src);
 void atomic_store(s8  volatile *dst, s8  src);
 
-void atomic_exchange_add(u64 volatile *dst, u64 src);
-void atomic_exchange_add(u32 volatile *dst, u32 src);
-void atomic_exchange_add(u16 volatile *dst, u16 src);
-void atomic_exchange_add(u8  volatile *dst, u8 src);
-void atomic_exchange_add(s64 volatile *dst, s64 src);
-void atomic_exchange_add(s32 volatile *dst, s32 src);
-void atomic_exchange_add(s16 volatile *dst, s16 src);
-void atomic_exchange_add(s8  volatile *dst, s8 src);
+void atomic_add(u64 volatile *dst, u64 src);
+void atomic_add(u32 volatile *dst, u32 src);
+void atomic_add(u16 volatile *dst, u16 src);
+void atomic_add(u8  volatile *dst, u8 src);
+void atomic_add(s64 volatile *dst, s64 src);
+void atomic_add(s32 volatile *dst, s32 src);
+void atomic_add(s16 volatile *dst, s16 src);
+void atomic_add(s8  volatile *dst, s8 src);
 
 template<typename T>
 struct Atomic {
@@ -124,4 +124,5 @@ struct Atomic {
     T compare_exchange(const T &desired, const T &expected) { return atomic_compare_exchange(&this->value, desired, expected); };
     b8 compare(const T &value) { return this->load() == value; };
     void store(const T &value) { atomic_store(&this->value, value); };
+    void add(const T &value) { atomic_add(&this->value, value); };
 };

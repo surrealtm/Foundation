@@ -366,7 +366,7 @@ void destroy_font(Font *font) {
 
 
 Text_Mesh build_text_mesh(Font *font, string text, s32 x, s32 y, Text_Alignment alignment, Allocator *allocator) {
-    assert(font->glyph_count > 0);
+    if(!font->glyph_count) return {};
 
     s64 non_empty_glyph_count = 0;
     for(s64 i = 0; i < text.count; ++i) {
@@ -470,6 +470,8 @@ void deallocate_text_mesh(Text_Mesh *text_mesh, Allocator *allocator) {
 
 
 s32 get_character_height_in_pixels(Font *font, u8 character) {
+    if(!font->glyph_count) return 0;
+    
     Font_Glyph *glyph = find_glyph(font, character);
     if(!glyph) return 0;
 
@@ -477,6 +479,8 @@ s32 get_character_height_in_pixels(Font *font, u8 character) {
 }
 
 s32 get_character_width_in_pixels(Font *font, u8 character) {
+    if(!font->glyph_count) return 0;
+
     Font_Glyph *glyph = find_glyph(font, character);
     if(!glyph) return 0;
 
@@ -484,6 +488,8 @@ s32 get_character_width_in_pixels(Font *font, u8 character) {
 }
 
 s32 get_string_width_in_pixels(Font *font, string text) {
+    if(!font->glyph_count) return 0;
+
     s32 width = 0;
 
     for(s64 i = 0; i < text.count; ++i) {

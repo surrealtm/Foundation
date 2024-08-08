@@ -397,7 +397,7 @@ void lock_shared(Semaphore *semaphore) {
 }
 
 void unlock_shared(Semaphore *semaphore) {
-    atomic_exchange_add(&semaphore->counter, -1);
+    atomic_add(&semaphore->counter, -1);
 }
 
 void lock_exclusive(Semaphore *semaphore) {
@@ -610,66 +610,66 @@ void atomic_store(s8 volatile *dst, s8 src) {
 
 
 
-void atomic_exchange_add(u64 volatile *dst, u64 src) {
+void atomic_add(u64 volatile *dst, u64 src) {
 #if FOUNDATION_WIN32
     _InterlockedExchangeAdd64((LONG64 volatile *) dst, src);
 #elif FOUNDATION_LINUX
-    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+    __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
 #endif
 }
 
-void atomic_exchange_add(u32 volatile *dst, u32 src) {
+void atomic_add(u32 volatile *dst, u32 src) {
 #if FOUNDATION_WIN32
     _InterlockedExchangeAdd((LONG volatile *) dst, src);
 #elif FOUNDATION_LINUX
-    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+    __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
 #endif
 }
 
-void atomic_exchange_add(u16 volatile *dst, u16 src) {
+void atomic_add(u16 volatile *dst, u16 src) {
 #if FOUNDATION_WIN32
     _InterlockedExchangeAdd16((SHORT volatile *) dst, src);
 #elif FOUNDATION_LINUX
-    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+    __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
 #endif
 }
 
-void atomic_exchange_add(u8 volatile *dst, u8 src) {
+void atomic_add(u8 volatile *dst, u8 src) {
 #if FOUNDATION_WIN32
     _InterlockedExchangeAdd8((CHAR volatile *) dst, src);
 #elif FOUNDATION_LINUX
-    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+    __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
 #endif
 }
 
-void atomic_exchange_add(s64 volatile *dst, s64 src) {
+void atomic_add(s64 volatile *dst, s64 src) {
 #if FOUNDATION_WIN32
     _InterlockedExchangeAdd64((LONG64 volatile *) dst, src);
 #elif FOUNDATION_LINUX
-    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+    __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
 #endif
 }
 
-void atomic_exchange_add(s32 volatile *dst, s32 src) {
+void atomic_add(s32 volatile *dst, s32 src) {
 #if FOUNDATION_WIN32
     _InterlockedExchangeAdd((LONG volatile *) dst, src);
 #elif FOUNDATION_LINUX
-    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+    __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
 #endif
 }
 
-void atomic_exchange_add(s16 volatile *dst, s16 src) {
+void atomic_add(s16 volatile *dst, s16 src) {
 #if FOUNDATION_WIN32
     _InterlockedExchangeAdd16((SHORT volatile *) dst, src);
 #elif FOUNDATION_LINUX
-    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+    __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
 #endif
 }
 
-void atomic_exchange_add(s8 volatile *dst, s8 src) {
+void atomic_add(s8 volatile *dst, s8 src) {
 #if FOUNDATION_WIN32
     _InterlockedExchangeAdd8((CHAR volatile *) dst, src);
 #elif FOUNDATION_LINUX
-    return __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
+    __atomic_fetch_add(dst, src, __ATOMIC_SEQ_CST);
 #endif
 }

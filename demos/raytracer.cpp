@@ -3,11 +3,12 @@
 #include "ui.h"
 #include "font.h"
 #include "software_renderer.h"
+#include "threads.h"
 #include "jobs.h"
 #include "random.h"
 #include "math/maths.h"
 
-#define RAYTRACER_JOB_COUNT 36
+#define RAYTRACER_JOB_COUNT 128
 
 struct Viewport {
     s32 width_in_pixels;
@@ -55,6 +56,7 @@ struct Plane {
 
 struct Raytracer_Job {
     struct Raytracer *tracer;
+    s64 ray_count;
     s32 y0;
     s32 y1;    
     b8 should_stop;
@@ -89,6 +91,8 @@ struct Raytracer {
     Hardware_Time frame_start_time;
     Hardware_Time frame_end_time;
     f32 previous_frame_time_seconds;
+    s64 frame_ray_count; // Gathered from the local ray count of each thread
+    s64 previous_frame_ray_count;
     
     // World
     Camera camera;
@@ -254,16 +258,18 @@ Ray_Cast_Result cast_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
             result.material     = &plane.material;
         }
     }
-            
+    
     return result;    
 }
 
 static
-v3f color_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
+v3f color_ray(Raytracer_Job *job, Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
     v3f ray_color   = v3f(1, 1, 1);
     v3f light_color = v3f(0, 0, 0);
     
     for(s32 i = 0; i < tracer->viewport.max_depth; ++i) {        
+        ++job->ray_count;
+
         Ray_Cast_Result result = cast_ray(tracer, ray_origin, ray_direction);
         if(!result.intersection) {
             // Sky background
@@ -279,10 +285,10 @@ v3f color_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
         else
             diffuse_direction = v3_normalize(diffuse_direction);
 
-        v3f specular_direction = v3_reflect(ray_direction, result.normal);
+        v3f specular_direction = v3_normalize(v3_reflect(ray_direction, result.normal) + random_sphere(tracer) * (1.0f - result.material->smoothness));
               
         ray_origin    = result.point + result.normal * 0.001f; 
-        ray_direction = v3_lerp(diffuse_direction, specular_direction, result.material->smoothness);
+        ray_direction = v3_lerp(diffuse_direction, specular_direction, result.material->metalness);
         
         light_color = light_color + result.material->emission * ray_color;
         ray_color   = result.material->albedo * ray_color;
@@ -292,7 +298,7 @@ v3f color_ray(Raytracer *tracer, v3f ray_origin, v3f ray_direction) {
 }
 
 static
-void raytrace_pixel(Raytracer *tracer, s32 x, s32 y) {
+void raytrace_pixel(Raytracer_Job *job, Raytracer *tracer, s32 x, s32 y) {
     //
     // Sum the raw color for this pixel over all samples
     //
@@ -308,7 +314,7 @@ void raytrace_pixel(Raytracer *tracer, s32 x, s32 y) {
         v3f ray_origin    = tracer->camera.position;
         v3f ray_direction = v3_normalize(tracer->camera.forward + eye_coordinates.x * tracer->camera.right + eye_coordinates.y * tracer->camera.up);
 
-        raw_color = raw_color + color_ray(tracer, ray_origin, ray_direction);
+        raw_color = raw_color + color_ray(job, tracer, ray_origin, ray_direction);
     }
 
     raw_color = raw_color / (f32) tracer->viewport.samples;
@@ -354,7 +360,7 @@ static
 void raytrace_viewport_area_job(Raytracer_Job *job) {
     for(s32 y = job->y0; y <= job->y1; ++y) {
         for(s32 x = 0; x <= job->tracer->viewport.width_in_pixels - 1; ++x) {
-            raytrace_pixel(job->tracer, x, y);
+            raytrace_pixel(job, job->tracer, x, y);
         }
         
         if(job->should_stop) break;
@@ -364,6 +370,8 @@ void raytrace_viewport_area_job(Raytracer_Job *job) {
 static
 void start_raytrace_frame(Raytracer *tracer) {
     tracer->frame_start_time = os_get_hardware_time();
+    tracer->previous_frame_ray_count = tracer->frame_ray_count;
+    tracer->frame_ray_count = 0;
 
     tracer->front_buffer = tracer->back_buffer;
     tracer->back_buffer  = (tracer->front_buffer + 1) % 2;
@@ -374,6 +382,7 @@ void start_raytrace_frame(Raytracer *tracer) {
     
     for(s32 i = 0; i < RAYTRACER_JOB_COUNT; ++i) {
         tracer->jobs[i].tracer      = tracer;
+        tracer->jobs[i].ray_count   = 0;
         tracer->jobs[i].y0          = y0;
         tracer->jobs[i].y1          = (i + 1 < RAYTRACER_JOB_COUNT) ? (y0 + height_per_job - 1) : (tracer->window.h - 1);
         tracer->jobs[i].should_stop = false;
@@ -421,15 +430,38 @@ void create_panel(Raytracer *tracer, Panel_Kind kind, Panel_Procedure procedure,
 }
 
 static
+const char *metric(s64 raw, f32 *value) {
+    f32 fpraw = (f32) raw;
+
+    const char *metrics[] = { "", "k", "m", "g", "t" };
+    s32 metric_index = 0;
+    
+    while(fpraw >= 1000.0f && metric_index < ARRAY_COUNT(metrics)) {
+        fpraw /= 1000.0f;
+        ++metric_index;
+    }
+    
+    *value = fpraw;
+    return metrics[metric_index];    
+}
+
+static
 b8 perf_panel(Raytracer *tracer, UI *ui) {
     if(tracer->panels[PANEL_Perf].state == UI_WINDOW_Closed) return false;
     
     tracer->panels[PANEL_Perf].state = ui_push_window(ui, "Performance"_s, UI_WINDOW_Closeable | UI_WINDOW_Collapsable | UI_WINDOW_Draggable | UI_WINDOW_Keep_Body_On_Screen, &tracer->panels[PANEL_Perf].position);
 
     if(tracer->panels[PANEL_Perf].state != UI_WINDOW_Collapsed) {
+        f32 frame_rays, prev_frame_rays;
+        const char *frame_rays_metric = metric(tracer->frame_ray_count, &frame_rays);
+        const char *prev_frame_rays_metric = metric(tracer->previous_frame_ray_count, &prev_frame_rays);
+     
         ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 256, 1);
         ui_label(ui, false, UI_FORMAT_STRING(ui, "Frame Index:     %d", tracer->frame_index));
-        ui_label(ui, false, UI_FORMAT_STRING(ui, "Prev Frame Time: %fs", tracer->previous_frame_time_seconds));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Frame Progress:  %d%%", (s32) ((1.0f - (f32) get_number_of_incomplete_jobs(&tracer->job_system) / (f32) RAYTRACER_JOB_COUNT) * 100.f)));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Frame Rays:      %.1f%s", frame_rays, frame_rays_metric));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Prev Frame Time: %.1fs", tracer->previous_frame_time_seconds));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Prev Frame Rays: %.1f%s", prev_frame_rays, prev_frame_rays_metric));
         ui_pop_width(ui);
     }
 
@@ -455,6 +487,8 @@ void setup_basic_scene(Raytracer *tracer) {
 
 static
 void setup_cornell_scene(Raytracer *tracer) {
+    // nocheckin: What's the difference between smoothness and metalness? Do we need both parameters?
+
     // These are four uniform spheres in the cornell box of the following half sizes
     f32 w = 7.1111f; // Keep the 16:9 aspect ratio for the cornell box
     f32 h = 4;
@@ -484,7 +518,7 @@ void destroy_scene(Raytracer *tracer) {
 }
 
 int main() {
-    Raytracer tracer;
+    Raytracer tracer{};
     tracer.frame_index = 0;
     
     // Create the output
@@ -498,7 +532,7 @@ int main() {
     
     // Create the UI
     UI_Callbacks callbacks = { &tracer, draw_ui_text, draw_ui_quad, set_ui_scissors, clear_ui_scissors };
-    create_software_font_from_file(&tracer.font, "C:/Windows/fonts/segoeui.ttf"_s, 11, GLYPH_SET_Extended_Ascii);
+    create_software_font_from_file(&tracer.font, "C:/Windows/Fonts/Consola.ttf"_s, 11, GLYPH_SET_Extended_Ascii);
     create_ui(&tracer.ui, callbacks, UI_Dark_Theme, &tracer.window, tracer.font.underlying);
 
     create_panel(&tracer, PANEL_Perf, perf_panel, { 1, 1 }, UI_WINDOW_Closed);
@@ -529,6 +563,10 @@ int main() {
                 ++tracer.frame_index;
                 start_raytrace_frame(&tracer);
             }
+            
+            // Calculate the total number of rays.
+            tracer.frame_ray_count = 0;
+            for(Raytracer_Job &job : tracer.jobs) tracer.frame_ray_count += job.ray_count;
             
             // Blit the previous frame into the window because we clear the window every time for the UI.
             blit_frame_buffer(&tracer.frame_buffer[tracer.back_buffer]);
