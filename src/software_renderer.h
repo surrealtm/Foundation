@@ -63,6 +63,7 @@ Color lerp(Color lhs, Color rhs, f32 t);
 /* ------------------------------------------------- Texture ------------------------------------------------- */
 
 Error_Code create_texture_from_file(Texture *texture, string file_path);
+Error_Code create_texture_from_memory(Texture *texture, string file_content);
 void create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, u8 channels); // This makes a copy from the buffer!
 void create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h, Color_Format format); // This makes a copy from the buffer!
 void destroy_texture(Texture *texture);

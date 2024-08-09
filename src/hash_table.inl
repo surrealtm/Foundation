@@ -202,6 +202,11 @@ typename Chained_Hash_Table<K, V>::Iterator Chained_Hash_Table<K, V>::end() {
     return iterator;
 }
 
+template<typename K, typename V>
+f64 Chained_Hash_Table<K, V>::fill_factor() {
+    return (f64) this->count / (f64) this->bucket_count;
+}
+
 #if FOUNDATION_DEVELOPER
 template<typename K, typename V>
 f64 Chained_Hash_Table<K, V>::expected_number_of_collisions() {
@@ -378,6 +383,11 @@ typename Probed_Hash_Table<K, V>::Iterator Probed_Hash_Table<K, V>::end() {
     iterator.bucket_index  = this->bucket_count;
     iterator.bucket_pointer = null;
     return iterator;
+}
+
+template<typename K, typename V>
+f64 Probed_Hash_Table<K, V>::fill_factor() {
+    return (f64) this->count / (f64) this->bucket_count;
 }
 
 #if FOUNDATION_DEVELOPER

@@ -462,20 +462,30 @@ Error_Code create_texture_from_file(Texture *texture, string file_path) {
 
     int channels;
     texture->buffer = stbi_load(cstring, (int *) &texture->w, (int *) &texture->h, &channels, 0);
+    texture->format = get_color_format_for_channels(channels);
+
+    if(texture->buffer == 0) {
+        texture->w = 0;
+        texture->h = 0;
+        texture->format = COLOR_FORMAT_Unknown;
+        return ERROR_File_Not_Found;
+    }
+
+    return Success;
+}
+
+Error_Code create_texture_from_memory(Texture *texture, string file_content) {
+    int channels;
+    texture->buffer = stbi_load_from_memory(file_content.data, (int) file_content.count, (int *) &texture->w, (int *) &texture->h, &channels, 0);
+    texture->format = get_color_format_for_channels(channels);
 
     if(texture->buffer == 0) {
         texture->w = 0;
         texture->h = 0;
         return ERROR_File_Not_Found;
+        texture->format = COLOR_FORMAT_Unknown;
     }
     
-    switch(channels) {
-    case 1: texture->format = COLOR_FORMAT_R;    break;
-    case 2: texture->format = COLOR_FORMAT_RG;   break;
-    case 3: texture->format = COLOR_FORMAT_RGB;  break;
-    case 4: texture->format = COLOR_FORMAT_RGBA; break;
-    }
-
     return Success;
 }
 

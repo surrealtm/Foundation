@@ -83,6 +83,8 @@ struct Chained_Hash_Table {
     Iterator begin();
     Iterator end();
 
+    f64 fill_factor();
+
 #if FOUNDATION_DEVELOPER
     f64 expected_number_of_collisions();
 #endif
@@ -161,6 +163,8 @@ struct Probed_Hash_Table {
 
     Iterator begin();
     Iterator end();
+
+    f64 fill_factor();
     
 #if FOUNDATION_DEVELOPER
     f64 expected_number_of_collisions();
