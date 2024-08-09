@@ -152,7 +152,7 @@ void win32_adjust_position_and_size(s32 *x, s32 *y, s32 *w, s32 *h, DWORD style,
     *h = rect.bottom - rect.top;
 
     if(*x != WINDOW_DONT_CARE) {
-        rect = RECT { *x, 0, *w, *h };
+        rect = RECT { *x, 0, *x + *w, *h };
         AdjustWindowRectEx(&rect, style, false, exstyle);
         *x = rect.left;
     } else {
@@ -160,7 +160,7 @@ void win32_adjust_position_and_size(s32 *x, s32 *y, s32 *w, s32 *h, DWORD style,
     }
 
     if(*y != WINDOW_DONT_CARE) {
-        rect = RECT { 0, *y, *w, *h };
+        rect = RECT { 0, *y, *w, *y + *h };
         AdjustWindowRectEx(&rect, style, false, exstyle);
         *y = rect.top;
     } else {
@@ -389,7 +389,7 @@ b8 win32_create_window(Window *window, string title, s32 x, s32 y, s32 w, s32 h,
     // Figure out the properties for this window and create it.
     DWORD exstyle = 0;
     DWORD style = win32_get_window_style(flags);
-    win32_adjust_position_and_size(&x, &y, &w, &h, exstyle, style);
+    win32_adjust_position_and_size(&x, &y, &w, &h, style, exstyle);
 
     win32->hwnd = CreateWindowExA(exstyle, WIN32_CLASS_NAME, cstring, style, x, y, w, h, null, null, null, null);
     if(win32->hwnd == INVALID_HANDLE_VALUE) {

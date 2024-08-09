@@ -532,6 +532,12 @@ void unbind_frame_buffer() {
     state.bound_frame_buffer = &state.back_buffer;
 }
 
+void resize_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h) {
+    Color_Format format = frame_buffer->format;
+    destroy_frame_buffer(frame_buffer);
+    create_frame_buffer(frame_buffer, w, h, format);
+}
+
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
     //
     // Flush all remaining commands

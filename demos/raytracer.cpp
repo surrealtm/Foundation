@@ -8,15 +8,13 @@
 #include "random.h"
 #include "math/maths.h"
 
-#define RAYTRACER_JOB_COUNT 128
-
 struct Viewport {
     s32 width_in_pixels;
     s32 height_in_pixels;
     f32 aspect_ratio;
     f32 depth;
     s32 samples;
-    s32 max_depth;
+    s32 max_bounces;
 };
 
 struct Camera {
@@ -34,8 +32,8 @@ struct Camera {
 struct Material {
     v3f albedo;
     v3f emission;
-    f32 smoothness;
     f32 metalness;
+    f32 smoothness;
 };
 
 struct Sphere {
@@ -60,13 +58,14 @@ struct Raytracer_Job {
     s32 y0;
     s32 y1;    
     b8 should_stop;
+    Hardware_Time execution_time;
 };
 
 typedef b8(*Panel_Procedure)(Raytracer *, UI *);
 
 enum Panel_Kind {
     PANEL_Perf,
-    PANEL_Scene,
+    PANEL_Viewport,
     PANEL_Count,
 };
 
@@ -82,11 +81,14 @@ struct Raytracer {
     UI ui;    
     Software_Font font;
 
-    // Job System
+    // Output
     Frame_Buffer frame_buffer[2]; // Used for the actual raytracing, since we only want to swap that whenever a frame has been finished. We may want to swap the UI in between though, so we always need a valid previous frame.
     s32 front_buffer, back_buffer; // Indices into the frame_buffer array.
+
+    // Job System
     Job_System job_system;
-    Raytracer_Job jobs[RAYTRACER_JOB_COUNT];
+    Raytracer_Job *jobs;
+    s32 job_count;
 
     Hardware_Time frame_start_time;
     Hardware_Time frame_end_time;
@@ -117,8 +119,8 @@ struct Raytracer {
 /* ---------------------------------------------- Setup Code ---------------------------------------------- */
 
 static
-void set_camera(Raytracer *tracer, v3f position, v3f rotation) {
-    tracer->camera.vertical_fov = degrees_to_turns(60.0f);
+void set_camera(Raytracer *tracer, v3f position, v3f rotation, f32 vertical_fov) {
+    tracer->camera.vertical_fov = degrees_to_turns(vertical_fov);
     tracer->camera.position     = position;
     tracer->camera.rotation     = rotation;
 
@@ -136,8 +138,8 @@ void set_viewport(Raytracer *tracer) {
     tracer->viewport.height_in_pixels = tracer->window.h;
     tracer->viewport.aspect_ratio     = (f32) tracer->viewport.width_in_pixels / (f32) tracer->viewport.height_in_pixels;
     tracer->viewport.depth            = 100.0f;
-    tracer->viewport.samples          = 100;
-    tracer->viewport.max_depth        = 20;
+    tracer->viewport.samples          = 1;
+    tracer->viewport.max_bounces      = 10;
 }
 
 static
@@ -147,15 +149,15 @@ void set_environment(Raytracer *tracer, v3f horizon, v3f zenith) {
 }
 
 static
-void make_sphere(Raytracer *tracer, f32 radius, v3f origin, v3f albedo, v3f emission, f32 smoothness, f32 metalness) {
+void make_sphere(Raytracer *tracer, f32 radius, v3f origin, v3f albedo, v3f emission, f32 metalness, f32 smoothness) {
     Sphere *sphere   = tracer->spheres.push();
     sphere->radius   = radius;
     sphere->origin   = origin;
-    sphere->material = { albedo, emission, smoothness, metalness };
+    sphere->material = { albedo, emission, metalness, smoothness };
 }
 
 static
-void make_plane(Raytracer *tracer, v3f origin, v3f u, v3f v, v3f albedo, v3f emission, f32 smoothness, f32 metalness) {
+void make_plane(Raytracer *tracer, v3f origin, v3f u, v3f v, v3f albedo, v3f emission, f32 metalness, f32 smoothness) {
     Plane *plane    = tracer->planes.push();
     plane->origin   = origin;
     plane->u        = u;
@@ -163,7 +165,7 @@ void make_plane(Raytracer *tracer, v3f origin, v3f u, v3f v, v3f albedo, v3f emi
     plane->ulength2 = v3_dot_v3(u, u);
     plane->vlength2 = v3_dot_v3(v, v);
     plane->normal   = v3_normalize(v3_cross_v3(u, v));
-    plane->material = { albedo, emission, smoothness, metalness };
+    plane->material = { albedo, emission, metalness, smoothness };
 }
 
 
@@ -267,7 +269,7 @@ v3f color_ray(Raytracer_Job *job, Raytracer *tracer, v3f ray_origin, v3f ray_dir
     v3f ray_color   = v3f(1, 1, 1);
     v3f light_color = v3f(0, 0, 0);
     
-    for(s32 i = 0; i < tracer->viewport.max_depth; ++i) {        
+    for(s32 i = 0; i < tracer->viewport.max_bounces; ++i) {        
         ++job->ray_count;
 
         Ray_Cast_Result result = cast_ray(tracer, ray_origin, ray_direction);
@@ -358,6 +360,8 @@ void raytrace_pixel(Raytracer_Job *job, Raytracer *tracer, s32 x, s32 y) {
 
 static
 void raytrace_viewport_area_job(Raytracer_Job *job) {
+    Hardware_Time start = os_get_hardware_time();
+
     for(s32 y = job->y0; y <= job->y1; ++y) {
         for(s32 x = 0; x <= job->tracer->viewport.width_in_pixels - 1; ++x) {
             raytrace_pixel(job, job->tracer, x, y);
@@ -365,6 +369,8 @@ void raytrace_viewport_area_job(Raytracer_Job *job) {
         
         if(job->should_stop) break;
     }
+
+    job->execution_time = os_get_hardware_time() - start;
 }
 
 static
@@ -377,14 +383,23 @@ void start_raytrace_frame(Raytracer *tracer) {
     tracer->back_buffer  = (tracer->front_buffer + 1) % 2;
     set_viewport(tracer);
     
-    s32 height_per_job = tracer->window.h / RAYTRACER_JOB_COUNT;
+    s32 new_job_count = tracer->window.h;
+    
+    if(new_job_count != tracer->job_count) {
+        Default_Allocator->deallocate(tracer->jobs);
+
+        tracer->job_count = new_job_count;
+        tracer->jobs = (Raytracer_Job *) Default_Allocator->allocate(tracer->job_count * sizeof(Raytracer_Job));
+    }
+    
+    s32 height_per_job = tracer->window.h / tracer->job_count;
     s32 y0 = 0;
     
-    for(s32 i = 0; i < RAYTRACER_JOB_COUNT; ++i) {
+    for(s32 i = 0; i < tracer->job_count; ++i) {
         tracer->jobs[i].tracer      = tracer;
         tracer->jobs[i].ray_count   = 0;
         tracer->jobs[i].y0          = y0;
-        tracer->jobs[i].y1          = (i + 1 < RAYTRACER_JOB_COUNT) ? (y0 + height_per_job - 1) : (tracer->window.h - 1);
+        tracer->jobs[i].y1          = (i + 1 < tracer->job_count) ? (y0 + height_per_job - 1) : (tracer->window.h - 1);
         tracer->jobs[i].should_stop = false;
         spawn_job(&tracer->job_system, { (Job_Procedure) raytrace_viewport_area_job, &tracer->jobs[i] });
         
@@ -449,7 +464,7 @@ static
 b8 perf_panel(Raytracer *tracer, UI *ui) {
     if(tracer->panels[PANEL_Perf].state == UI_WINDOW_Closed) return false;
     
-    tracer->panels[PANEL_Perf].state = ui_push_window(ui, "Performance"_s, UI_WINDOW_Closeable | UI_WINDOW_Collapsable | UI_WINDOW_Draggable | UI_WINDOW_Keep_Body_On_Screen, &tracer->panels[PANEL_Perf].position);
+    tracer->panels[PANEL_Perf].state = ui_push_window(ui, "Performance Panel"_s, UI_WINDOW_Closeable | UI_WINDOW_Collapsable | UI_WINDOW_Draggable | UI_WINDOW_Keep_Body_On_Screen, &tracer->panels[PANEL_Perf].position);
 
     if(tracer->panels[PANEL_Perf].state != UI_WINDOW_Collapsed) {
         f32 frame_rays, prev_frame_rays;
@@ -458,13 +473,40 @@ b8 perf_panel(Raytracer *tracer, UI *ui) {
      
         ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 256, 1);
         ui_label(ui, false, UI_FORMAT_STRING(ui, "Frame Index:     %d", tracer->frame_index));
-        ui_label(ui, false, UI_FORMAT_STRING(ui, "Frame Progress:  %d%%", (s32) ((1.0f - (f32) get_number_of_incomplete_jobs(&tracer->job_system) / (f32) RAYTRACER_JOB_COUNT) * 100.f)));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Frame Progress:  %d%%", (s32) ((1.0f - (f32) get_number_of_incomplete_jobs(&tracer->job_system) / (f32) tracer->job_count) * 100.f)));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Frame Time:      %.1fs", os_convert_hardware_time(os_get_hardware_time() - tracer->frame_start_time, Seconds)));
         ui_label(ui, false, UI_FORMAT_STRING(ui, "Frame Rays:      %.1f%s", frame_rays, frame_rays_metric));
-        ui_label(ui, false, UI_FORMAT_STRING(ui, "Prev Frame Time: %.1fs", tracer->previous_frame_time_seconds));
-        ui_label(ui, false, UI_FORMAT_STRING(ui, "Prev Frame Rays: %.1f%s", prev_frame_rays, prev_frame_rays_metric));
+
+        if(tracer->frame_index > 1) {
+            ui_label(ui, false, UI_FORMAT_STRING(ui, "Prev Frame Time: %.1fs", tracer->previous_frame_time_seconds));
+            ui_label(ui, false, UI_FORMAT_STRING(ui, "Prev Frame Rays: %.1f%s", prev_frame_rays, prev_frame_rays_metric));
+        } else {
+            ui_label(ui, false, "Prev Frame Time: ---"_s);
+            ui_label(ui, false, "Prev Frame Rays: ---"_s);        
+        }
+        
         ui_pop_width(ui);
     }
 
+    return ui_pop_window(ui);
+}
+
+static
+b8 viewport_panel(Raytracer *tracer, UI *ui) {
+    if(tracer->panels[PANEL_Viewport].state == UI_WINDOW_Closed) return false;
+    
+    tracer->panels[PANEL_Viewport].state = ui_push_window(ui, "Viewport Panel"_s, UI_WINDOW_Closeable | UI_WINDOW_Collapsable | UI_WINDOW_Draggable | UI_WINDOW_Keep_Body_On_Screen, &tracer->panels[PANEL_Viewport].position);
+    
+    if(tracer->panels[PANEL_Viewport].state != UI_WINDOW_Collapsed) {
+        ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 256, 1);
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Aspect Ratio: %.2f", tracer->viewport.aspect_ratio));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "FOV:          %.2f", turns_to_degrees(tracer->camera.vertical_fov)));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Gamma:        %.2f", 1.f / tracer->camera.inverse_gamma));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Samples:      %d", tracer->viewport.samples));
+        ui_label(ui, false, UI_FORMAT_STRING(ui, "Bounces:      %d", tracer->viewport.max_bounces));
+        ui_pop_width(ui);
+    }
+    
     return ui_pop_window(ui);
 }
 
@@ -475,13 +517,13 @@ b8 perf_panel(Raytracer *tracer, UI *ui) {
 static
 void setup_basic_scene(Raytracer *tracer) {
     // These are the five differently colored, differently sized balls
-    set_camera(tracer, { -3.2f, 1, 6 }, { 0, -0.06f, 0 });
+    set_camera(tracer, { -3.2f, 1, 6 }, { 0, -0.06f, 0 }, 60.0f);
     set_environment(tracer, { 1.0f, 1.0f, 1.0f }, { 0.5f, 0.7f, 1.0f });
-    make_sphere(tracer, 1.0f, { -3.1f, 1.0f, 0.0f }, { 1.f, .1f, .1f }, { 0, 0, 0 }, 1.0f, 0.1f);
-    make_sphere(tracer, 0.7f, { -1.3f, 0.7f, -.4f }, { .2f, 1.f, .2f }, { 0, 0, 0 }, 0.9f, 0.1f);
-    make_sphere(tracer, 0.6f, {  0.2f, 0.6f, -.7f }, { .2f, .2f, 1.f }, { 0, 0, 0 }, 0.6f, 0.1f);
-    make_sphere(tracer, 0.5f, {  1.3f, 0.5f, -.4f }, { .2f, .2f, .2f }, { 0, 0, 0 }, 0.4f, 0.1f);
-    make_sphere(tracer, 0.4f, {  2.3f, 0.4f, -.1f }, { 1.f, 1.f, .2f }, { 0, 0, 0 }, 0.2f, 0.5f);
+    make_sphere(tracer, 1.0f, { -3.1f, 1.0f, 0.0f }, { 1.f, .1f, .1f }, { 0, 0, 0 }, 0.1f, 1.0f);
+    make_sphere(tracer, 0.7f, { -1.3f, 0.7f, -.4f }, { .2f, 1.f, .2f }, { 0, 0, 0 }, 0.1f, 0.9f);
+    make_sphere(tracer, 0.6f, {  0.2f, 0.6f, -.7f }, { .2f, .2f, 1.f }, { 0, 0, 0 }, 0.1f, 0.6f);
+    make_sphere(tracer, 0.5f, {  1.3f, 0.5f, -.4f }, { .2f, .2f, .2f }, { 0, 0, 0 }, 0.1f, 0.4f);
+    make_sphere(tracer, 0.4f, {  2.3f, 0.4f, -.1f }, { 1.f, 1.f, .2f }, { 0, 0, 0 }, 0.5f, 0.2f);
     make_plane(tracer, { 0, 0, 0 }, { 0, 0, 50 }, { 50, 0, 0 }, { 1.f, .4f, 1.f }, { 0, 0, 0 }, 0.0f, 0.0f);
 }
 
@@ -495,13 +537,21 @@ void setup_cornell_scene(Raytracer *tracer) {
     f32 d = 3;
     f32 l = 2;
 
-    set_camera(tracer, { 0, 0, 10.95f }, { 0, 0, 0 });
+    set_camera(tracer, { 0, 0, 10.95f }, { 0, 0, 0 }, 90.f);
     set_environment(tracer, { 1.0f, 1.0f, 1.0f }, { 0.5f, 0.7f, 1.0f });
+    
     make_sphere(tracer, 1, { -4.4f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 1.0f);
-    make_sphere(tracer, 1, { -2.2f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 0.8f);
-    make_sphere(tracer, 1, {  0.0f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 0.6f);
-    make_sphere(tracer, 1, {  2.2f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 0.4f);
-    make_sphere(tracer, 1, {  4.4f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 1.0f, 0.1f);
+    make_sphere(tracer, 1, { -2.2f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 0.8f, 1.0f);
+    make_sphere(tracer, 1, {  0.0f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 0.6f, 1.0f);
+    make_sphere(tracer, 1, {  2.2f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 0.4f, 1.0f);
+    make_sphere(tracer, 1, {  4.4f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 0.1f, 1.0f);
+    
+    make_sphere(tracer, 1, { -4.4f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 0.0f, 1.0f);
+    make_sphere(tracer, 1, { -2.2f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 0.0f, 0.8f);
+    make_sphere(tracer, 1, {  0.0f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 0.0f, 0.6f);
+    make_sphere(tracer, 1, {  2.2f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 0.0f, 0.4f);
+    make_sphere(tracer, 1, {  4.4f, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0 }, 0.0f, 0.1f);
+    
     make_plane(tracer, {  0,  -h,  0 }, { 0, 0, d }, { w, 0, 0 }, {  1,  1,   1  }, { 0, 0, 0 }, 0, 0); // Floor
     make_plane(tracer, {  0,   h,  0 }, { w, 0, 0 }, { 0, 0, d }, {  1,  1,   1  }, { 0, 0, 0 }, 0, 0); // Ceiling
     make_plane(tracer, {  0,   0, -d }, { w, 0, 0 }, { 0, h, 0 }, {  1,  1,   1  }, { 0, 0, 0 }, 0, 0); // Back wall
@@ -536,6 +586,7 @@ int main() {
     create_ui(&tracer.ui, callbacks, UI_Dark_Theme, &tracer.window, tracer.font.underlying);
 
     create_panel(&tracer, PANEL_Perf, perf_panel, { 1, 1 }, UI_WINDOW_Closed);
+    create_panel(&tracer, PANEL_Viewport, viewport_panel, { 1, 0 }, UI_WINDOW_Closed);
     
     // Create the actual raytracer
     create_job_system(&tracer.job_system, os_get_number_of_hardware_threads());
@@ -546,7 +597,12 @@ int main() {
         Hardware_Time frame_start = os_get_hardware_time();
         update_window(&tracer.window);
 
-        // @Incomplete: Window resizing.
+        if(tracer.window.resized_this_frame) {
+            tracer.frame_index = 0; // We cannot sample previous frame data now...
+            maybe_resize_back_buffer();
+            resize_frame_buffer(&tracer.frame_buffer[0], tracer.window.w, tracer.window.h);
+            resize_frame_buffer(&tracer.frame_buffer[1], tracer.window.w, tracer.window.h);
+        }
         
         // Prepare the frame.
         {
@@ -566,7 +622,7 @@ int main() {
             
             // Calculate the total number of rays.
             tracer.frame_ray_count = 0;
-            for(Raytracer_Job &job : tracer.jobs) tracer.frame_ray_count += job.ray_count;
+            for(s64 i = 0; i < tracer.job_count; ++i) tracer.frame_ray_count += tracer.jobs[i].ray_count;
             
             // Blit the previous frame into the window because we clear the window every time for the UI.
             blit_frame_buffer(&tracer.frame_buffer[tracer.back_buffer]);
@@ -576,6 +632,7 @@ int main() {
         {
             // Menu Bar
             ui_toggle_button_with_pointer(&tracer.ui, "Perf"_s, (b8 *) &tracer.panels[PANEL_Perf].state);
+            ui_toggle_button_with_pointer(&tracer.ui, "Viewport"_s, (b8 *) &tracer.panels[PANEL_Viewport].state);
 
             // Panels
             Panel *interacted_panel = null;
@@ -602,7 +659,7 @@ int main() {
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
 
-    for(Raytracer_Job &job : tracer.jobs) job.should_stop = true;
+    for(s64 i = 0; i < tracer.job_count; ++i) tracer.jobs[i].should_stop = true;
 
     destroy_job_system(&tracer.job_system, JOB_SYSTEM_Kill_Workers);
     destroy_scene(&tracer);

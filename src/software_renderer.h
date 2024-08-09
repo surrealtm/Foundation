@@ -76,6 +76,7 @@ void create_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h, Color_Format 
 void destroy_frame_buffer(Frame_Buffer *frame_buffer);
 void bind_frame_buffer(Frame_Buffer *frame_buffer);
 void unbind_frame_buffer();
+void resize_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h);
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);
 void blit_frame_buffer(Frame_Buffer *src);
 void swap_buffers(Frame_Buffer *src);
