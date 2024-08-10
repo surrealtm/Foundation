@@ -74,7 +74,9 @@ struct Allocator {
 	template<typename T>
 	T *New() { T *raw = (T *) this->allocate(sizeof(T)); *raw = T(); return raw; }
 
-	void debug_print(u32 indent);
+#if FOUNDATION_DEVELOPER
+	void print_stats(u32 indent = 0);
+#endif
 };
 
 /* The Heap Allocator, which just uses malloc under the hood, but also supports
@@ -346,7 +348,7 @@ extern thread_local Allocator temp;
 void create_temp_allocator(u64 reserved);
 void destroy_temp_allocator();
 u64 mark_temp_allocator();
-void release_temp_allocator(u64 mark);
+void release_temp_allocator(u64 mark = 0);
 
 
 

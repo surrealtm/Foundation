@@ -48,7 +48,7 @@ struct Software_Font { // This is just a wrapper around a Font indicating that t
 
 /* -------------------------------------------- Software Renderer -------------------------------------------- */
 
-void create_software_renderer(Window *window);
+void create_software_renderer(Window *window, Allocator *frame_allocator = &temp);
 void destroy_software_renderer();
 void maybe_resize_back_buffer();
 

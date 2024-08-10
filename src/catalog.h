@@ -4,8 +4,7 @@
 #include "hash_table.h"
 #include "memutils.h"
 #include "package.h"
-
-// @Incomplete: Hot loading
+#include "file_watcher.h"
 
 #define INITIAL_CATALOG_SIZE 128
 
@@ -18,6 +17,11 @@ struct Catalog {
     struct Handle {
         Asset asset;
         string name;
+
+#if FOUNDATION_DEVELOPER
+        string file_path_on_disk;
+#endif
+
         u16 references;
         b8 valid;
     };
@@ -37,6 +41,10 @@ struct Catalog {
     Probed_Hash_Table<string,  Handle *> name_table;
     Probed_Hash_Table<Asset *, Handle *> pointer_table;
 
+#if FOUNDATION_DEVELOPER
+    File_Watcher file_watcher;
+#endif
+
     // The actual asset managing code.
     Create_Procedure create_proc;
     Reload_Procedure reload_proc;
@@ -45,10 +53,15 @@ struct Catalog {
     void create_from_package(Package *package, string directory, string file_extension, Create_Procedure create, Reload_Procedure reload, Destroy_Procedure destroy);
     void create_from_file_system(string directory, string file_extension, Create_Procedure create, Reload_Procedure reload, Destroy_Procedure destroy);
     void destroy();
+    
+#if FOUNDATION_DEVELOPER
+    void check_for_reloads();
+#endif
 
     Asset *query(string name);
     void release(Asset *asset);
 
+    string get_file_path(string name);
     string get_file_content(string name);
     void release_file_content(string *file_content);
 };

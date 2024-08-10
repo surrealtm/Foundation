@@ -571,6 +571,8 @@ int main() {
     Raytracer tracer{};
     tracer.frame_index = 0;
     
+    create_temp_allocator(64 * ONE_MEGABYTE);
+
     // Create the output
     create_window(&tracer.window, "Raytracer"_s);
     show_window(&tracer.window);

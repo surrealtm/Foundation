@@ -81,8 +81,8 @@ u64 Allocator::query_allocation_size(void *pointer) {
 	return this->_query_allocation_size_procedure(this->data, pointer);
 }
 
-void Allocator::debug_print(u32 indent) {
 #if FOUNDATION_ALLOCATOR_STATISTICS
+void Allocator::print_stats(u32 indent) {
 	f32 working_set_decimal, peak_working_set_decimal;
 	Memory_Unit working_set_unit, peak_working_set_unit;
     
@@ -97,8 +97,8 @@ void Allocator::debug_print(u32 indent) {
 	printf("%-*s    Working Set:      %.3f%s.\n", indent, "", working_set_decimal, memory_unit_suffix(working_set_unit));
 	printf("%-*s    Peak Working Set: %.3f%s.\n", indent, "", peak_working_set_decimal, memory_unit_suffix(peak_working_set_unit));
 	printf("%-*s=== Allocator ===\n", indent, "");
-#endif
 }
+#endif
 
 
 

@@ -107,11 +107,12 @@ void demo_ui(UI *ui) {
 
 int main() {
     Demo demo;
-
+    
+    create_temp_allocator(64 * ONE_MEGABYTE);
     create_window(&demo.window, "Foundation UI"_s);
     show_window(&demo.window);
 
-    create_software_renderer(&demo.window);
+    create_software_renderer(&demo.window, &temp);
     create_software_font_from_file(&demo.software_font, "C:/Windows/fonts/segoeui.ttf"_s, 12, GLYPH_SET_Extended_Ascii);
 
     UI_Callbacks callbacks = { &demo, draw_ui_text, draw_ui_quad, set_ui_scissors, clear_ui_scissors };
@@ -129,6 +130,10 @@ int main() {
         maybe_resize_back_buffer();
         begin_ui_frame(&demo.ui, { 128, 25 });
 
+#if FOUNDATION_DEVELOPER
+        demo.texture_catalog.check_for_reloads();
+#endif
+
         // Update the UI
         {
             demo_ui(&demo.ui);
@@ -142,6 +147,8 @@ int main() {
             swap_buffers();
         }
 
+        release_temp_allocator();
+
         frame_end = os_get_hardware_time();
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
@@ -149,8 +156,12 @@ int main() {
     demo.texture_catalog.release(texture);
     demo.texture_catalog.destroy();
 
+    destroy_ui(&demo.ui);
     destroy_software_font(&demo.software_font);
     destroy_software_renderer();
     destroy_window(&demo.window);
+
+    Default_Allocator->print_stats();
+
     return 0;
 }

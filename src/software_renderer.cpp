@@ -55,6 +55,7 @@ struct Draw_Command {
 
 struct Software_Renderer {
     Window *window;
+    Allocator *frame_allocator;
 
     Frame_Buffer back_buffer;    
     Frame_Buffer *bound_frame_buffer = null;
@@ -294,7 +295,7 @@ Color multiply(Color lhs, Color rhs) {
 static
 Draw_Command *make_draw_command(Draw_Command_Kind kind) {
     if(!state.command_system_setup) {
-        state.commands.allocator = Default_Allocator;
+        state.commands.allocator = state.frame_allocator;
         state.command_system_setup = true;
     }
     
@@ -309,7 +310,7 @@ static
 Draw_Command *make_triangle_draw_command(s32 vertex_count) {
     Draw_Command *command      = make_draw_command(DRAW_COMMAND_Draw);
     command->draw.vertex_count = vertex_count;
-    command->draw.vertices     = (Draw_Vertex *) Default_Allocator->allocate(command->draw.vertex_count * sizeof(Draw_Vertex));
+    command->draw.vertices     = (Draw_Vertex *) state.frame_allocator->allocate(command->draw.vertex_count * sizeof(Draw_Vertex));
     return command;
 }
 
@@ -317,7 +318,7 @@ static
 void destroy_draw_command(Draw_Command *command) {
     switch(command->kind) {
     case DRAW_COMMAND_Draw:
-        Default_Allocator->deallocate(command->draw.vertices);    
+        state.frame_allocator->deallocate(command->draw.vertices);    
         break;
     }
 }
@@ -420,8 +421,9 @@ void destroy_back_buffer() {
     destroy_frame_buffer(&state.back_buffer);
 }
 
-void create_software_renderer(Window *window) {
-    state.window = window;
+void create_software_renderer(Window *window, Allocator *frame_allocator) {
+    state.window             = window;
+    state.frame_allocator    = frame_allocator;
     state.bound_frame_buffer = &state.back_buffer;
     state.bound_scissors     = { v2f(0, 0), v2f((f32) window->w, (f32) window->h) };
     create_back_buffer();
@@ -718,7 +720,7 @@ void destroy_software_font(Software_Font *software_font) {
 }
 
 void draw_text(Software_Font *software_font, string text, s32 x, s32 y, Text_Alignment alignment, Color color) {
-    auto mesh = build_text_mesh(software_font->underlying, text, x, y, alignment, Default_Allocator);
+    auto mesh = build_text_mesh(software_font->underlying, text, x, y, alignment, state.frame_allocator);
 
     for(s64 i = 0; i < mesh.glyph_count; ++i) {
         Texture *texture = (Texture *) mesh.atlasses[i]->user_handle;
@@ -745,6 +747,4 @@ void draw_text(Software_Font *software_font, string text, s32 x, s32 y, Text_Ali
         command->draw.texture = texture;
         command->draw.options = texture_is_valid_for_draw(texture) ? (DRAW_OPTION_Colored | DRAW_OPTION_Textured | DRAW_OPTION_Blending) : DRAW_OPTION_Nothing;
     }
-    
-    deallocate_text_mesh(&mesh, Default_Allocator);
 }
