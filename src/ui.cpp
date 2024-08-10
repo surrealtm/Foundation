@@ -184,7 +184,7 @@ UI_Color ui_multiply_color(UI_Color color, f32 t) {
 
 static inline
 f32 ui_size_animation_factor(f32 t) {
-    return sinf(t * 10.0f) * (1.0f - t) * 0.25f;
+    return sinf(t * 10.0f) * 0.2f;
 }
 
 static inline
@@ -730,10 +730,13 @@ void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rec
         }
     }
 
-    // Reset the volatile signals before the children are updated, since the children may set the Subtree_Hovered
-    // flag already.
     b8 hovered_last_frame = !!(element->signals & UI_SIGNAL_Hovered);
-    element->signals = (element->signals & UI_SIGNAL_Active) | (element->signals & UI_SIGNAL_Dragged);
+
+    if(!(element->flags & UI_Ignore_Any_Input)) {
+        // Reset the volatile signals before the children are updated, since the children may set the Subtree_Hovered
+        // flag already.
+        element->signals = (element->signals & UI_SIGNAL_Active) | (element->signals & UI_SIGNAL_Dragged);
+    }
 
     //
     // Debug print this element.
@@ -786,79 +789,100 @@ void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rec
     // Handle interactions for this element.
     //
 
-    // Check for mouse hover over this element
-    UI_Rect element_rect = { element->screen_position.x, element->screen_position.y, element->screen_position.x + element->screen_size.x - 1, element->screen_position.y + element->screen_size.y - 1 };
-    b8 mouse_over_element = ui_mouse_over_rect(ui, element_rect) && ui_mouse_over_rect(ui, parent_rect);
-    
-    b8 element_hovered = mouse_over_element && !ui->hovered_element_found && ((!(ui->window->buttons[BUTTON_Left] & BUTTON_Down) && !(ui->window->buttons[BUTTON_Left] & BUTTON_Released)) || ui->window->buttons[BUTTON_Left] & BUTTON_Pressed || element->signals & UI_SIGNAL_Dragged || hovered_last_frame); // For a clickable element to be considered, a few criteria have to be met. First up, no element can already be hovered during this frame, Secondly, the mouse actually has to be on top of the element. Thirdly, the mouse cannot be dragged upon this element (except if this element is already being dragged...)
-    
-    if(!ui->hovered_element_found && mouse_over_element) set_element_parent_tree_to_hovered(element->parent); // If the mouse is over this element, then the parent tree is considered to be hovered visually, whether or not this element actually cares about being hovered right now. This prevents weird glitches where small gaps between buttons on a window background make that window not be hovered.
-    
-    if(element_hovered && element->flags & UI_Clickable) {
-        // Trigger the animation to display the 'hovered' status.
-        element->signals |= UI_SIGNAL_Hovered;
-        ui->hovered_element_found = true;    
-    } else if(element_hovered && !(element->flags & UI_Clickable)) {
-        // If this element is not actually clickable but it is currently being hovered, then we have
-        // found our hovered element. We do this after all children have been updated, so as to not
-        // take away input from our children. This prevents these glitches where hovering over the
-        // border of a window still activates elements under the window.
-        ui->hovered_element_found = true;
-    }
-    
-    if(element->flags & UI_Clickable && element->signals & UI_SIGNAL_Hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Released) {
-        // If the element is currently hovered and the left button was released, this element is
-        // considered clicked
-        element->signals |= UI_SIGNAL_Clicked;
-    }
-
-    if(element->flags & UI_Activatable) {
-        if(element->signals & UI_SIGNAL_Clicked) {
-            // Toggle the active flag if the widget has been clicked
-            element->signals ^= UI_SIGNAL_Active;
+    if(!(element->flags & UI_Ignore_Any_Input)) {
+        // Check for mouse hover over this element
+        UI_Rect element_rect = { element->screen_position.x, element->screen_position.y, element->screen_position.x + element->screen_size.x - 1, element->screen_position.y + element->screen_size.y - 1 };
+        b8 mouse_over_element = ui_mouse_over_rect(ui, element_rect) && ui_mouse_over_rect(ui, parent_rect);
+        
+        b8 element_hovered = mouse_over_element && !ui->hovered_element_found && ((!(ui->window->buttons[BUTTON_Left] & BUTTON_Down) && !(ui->window->buttons[BUTTON_Left] & BUTTON_Released)) || ui->window->buttons[BUTTON_Left] & BUTTON_Pressed || element->signals & UI_SIGNAL_Dragged || hovered_last_frame); // For a clickable element to be considered, a few criteria have to be met. First up, no element can already be hovered during this frame, Secondly, the mouse actually has to be on top of the element. Thirdly, the mouse cannot be dragged upon this element (except if this element is already being dragged...)
+        
+        if(!ui->hovered_element_found && mouse_over_element) set_element_parent_tree_to_hovered(element->parent); // If the mouse is over this element, then the parent tree is considered to be hovered visually, whether or not this element actually cares about being hovered right now. This prevents weird glitches where small gaps between buttons on a window background make that window not be hovered.
+        
+        if(element_hovered && element->flags & UI_Clickable) {
+            // Trigger the animation to display the 'hovered' status.
+            element->signals |= UI_SIGNAL_Hovered;
+            ui->hovered_element_found = true;    
+        } else if(element_hovered && !(element->flags & UI_Clickable)) {
+            // If this element is not actually clickable but it is currently being hovered, then we have
+            // found our hovered element. We do this after all children have been updated, so as to not
+            // take away input from our children. This prevents these glitches where hovering over the
+            // border of a window still activates elements under the window.
+            ui->hovered_element_found = true;
         }
         
-        if(element->flags & UI_Deactivate_Automatically_On_Click && ui->window->buttons[BUTTON_Left] & BUTTON_Released && !(element->signals & UI_SIGNAL_Clicked)) {
-            // If the left button has been released somewhere not on this element, deactivate it
-            element->signals &= ~UI_SIGNAL_Active;
+        if(element->flags & UI_Clickable && element->signals & UI_SIGNAL_Hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Released) {
+            // If the element is currently hovered and the left button was released, this element is
+            // considered clicked
+            element->signals |= UI_SIGNAL_Clicked;
         }
-    }
     
-    if(element->flags & UI_Draggable) {
-        if(element->signals & UI_SIGNAL_Hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Pressed) {
-            // Enter the dragging state for this element if it has been clicked
-            element->signals |= UI_SIGNAL_Dragged;
-            element->drag_offset = { ui->window->mouse_x - element->screen_position.x, ui->window->mouse_y - element->screen_position.y };
-        }
-        
-        if(!(ui->window->buttons[BUTTON_Left] & BUTTON_Down)) {
-            // Exit the dragging state if the left mouse button is not held down
-            element->signals &= ~UI_SIGNAL_Dragged;
-        }
-    }
-    
-    if(element->flags & UI_View_Scroll_Children) {
-        if(mouse_over_element) {
-            // Scroll the content along the axis if the mouse wheel is turned.
-            if(element->layout_direction == UI_DIRECTION_Horizontal && element->screen_size.x < element->view_scroll_screen_size.x) {
-                element->view_scroll_screen_offset.x = clamp(element->view_scroll_screen_offset.x - ui->window->mouse_wheel_turns * 32, 0, element->view_scroll_screen_size.x - element->screen_size.x);
-            } else if(element->layout_direction == UI_DIRECTION_Vertical && element->screen_size.y < element->view_scroll_screen_size.y) {
-                element->view_scroll_screen_offset.y = clamp(element->view_scroll_screen_offset.y - ui->window->mouse_wheel_turns * 32, 0, element->view_scroll_screen_size.y - element->screen_size.y);
+        if(element->flags & UI_Activatable) {
+            if(element->signals & UI_SIGNAL_Clicked) {
+                // Toggle the active flag if the widget has been clicked
+                element->signals ^= UI_SIGNAL_Active;
             }
-        } else {
-            // Ensure that the view scroll offset in pixels is actually valid, in case the size
-            // of the scrollable content or this element's screen size changed.
-            if(element->layout_direction == UI_DIRECTION_Horizontal) {
-                if(element->screen_size.x < element->view_scroll_screen_size.x) {
-                    element->view_scroll_screen_offset.x = clamp(element->view_scroll_screen_offset.x, 0, element->view_scroll_screen_size.x - element->screen_size.x);
-                } else {
-                    element->view_scroll_screen_offset.x = 0;
+            
+            if(element->flags & UI_Deactivate_Automatically_On_Click && ui->window->buttons[BUTTON_Left] & BUTTON_Released && !(element->signals & UI_SIGNAL_Clicked)) {
+                // If the left button has been released somewhere not on this element, deactivate it
+                element->signals &= ~UI_SIGNAL_Active;
+            }
+        }
+        
+        if(element->flags & UI_Draggable) {
+            if(element->signals & UI_SIGNAL_Hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Pressed) {
+                // Enter the dragging state for this element if it has been clicked
+                element->signals |= UI_SIGNAL_Dragged;
+                element->drag_offset = { ui->window->mouse_x - element->screen_position.x, ui->window->mouse_y - element->screen_position.y };
+            }
+            
+            if(!(ui->window->buttons[BUTTON_Left] & BUTTON_Down)) {
+                // Exit the dragging state if the left mouse button is not held down
+                element->signals &= ~UI_SIGNAL_Dragged;
+            }
+        }
+        
+        if(element->flags & UI_View_Scroll_Children) {
+            if(mouse_over_element) {
+                // Scroll the content along the axis if the mouse wheel is turned.
+                if(element->layout_direction == UI_DIRECTION_Horizontal && element->screen_size.x < element->view_scroll_screen_size.x) {
+                    element->view_scroll_screen_offset.x = clamp(element->view_scroll_screen_offset.x - ui->window->mouse_wheel_turns * 32, 0, element->view_scroll_screen_size.x - element->screen_size.x);
+                } else if(element->layout_direction == UI_DIRECTION_Vertical && element->screen_size.y < element->view_scroll_screen_size.y) {
+                    element->view_scroll_screen_offset.y = clamp(element->view_scroll_screen_offset.y - ui->window->mouse_wheel_turns * 32, 0, element->view_scroll_screen_size.y - element->screen_size.y);
                 }
             } else {
-                if(element->screen_size.y < element->view_scroll_screen_size.y) {
-                    element->view_scroll_screen_offset.y = clamp(element->view_scroll_screen_offset.y, 0, element->view_scroll_screen_size.y - element->screen_size.y);
+                // Ensure that the view scroll offset in pixels is actually valid, in case the size
+                // of the scrollable content or this element's screen size changed.
+                if(element->layout_direction == UI_DIRECTION_Horizontal) {
+                    if(element->screen_size.x < element->view_scroll_screen_size.x) {
+                        element->view_scroll_screen_offset.x = clamp(element->view_scroll_screen_offset.x, 0, element->view_scroll_screen_size.x - element->screen_size.x);
+                    } else {
+                        element->view_scroll_screen_offset.x = 0;
+                    }
                 } else {
-                    element->view_scroll_screen_offset.y = 0;  
+                    if(element->screen_size.y < element->view_scroll_screen_size.y) {
+                        element->view_scroll_screen_offset.y = clamp(element->view_scroll_screen_offset.y, 0, element->view_scroll_screen_size.y - element->screen_size.y);
+                    } else {
+                        element->view_scroll_screen_offset.y = 0;  
+                    }
+                }
+            }
+        }
+
+        //    
+        // If this element has a draggable child (and the appropriate flag is set), position that draggable
+        // element under the cursor.
+        //
+        if(element->flags & UI_Snap_Draggable_Children_On_Click && element_hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Pressed) {
+            for(auto *child = element->first_child; child != null; child = child->next) {
+                if(child->flags & UI_Draggable) {
+                    // Snap the center of the child element to the cursor
+                    child->drag_offset.x = child->screen_size.x * 0.5f;
+                    child->drag_offset.y = child->screen_size.y * 0.5f;
+                
+                    child->signals |= UI_SIGNAL_Hovered | UI_SIGNAL_Clicked | UI_SIGNAL_Dragged;
+                    child->hover_t = 1;
+                
+                    set_element_drag(ui, child, true);
                 }
             }
         }
@@ -870,33 +894,10 @@ void position_and_update_element_recursively(UI *ui, UI_Element *element, UI_Rec
         if(element->parent->layout_direction == UI_DIRECTION_Horizontal) element->parent->view_scroll_screen_size.x += element->screen_size.x;
         if(element->parent->layout_direction == UI_DIRECTION_Vertical)   element->parent->view_scroll_screen_size.y += element->screen_size.y;
     }
-
-
-    //    
-    // If this element has a draggable child (and the appropriate flag is set), position that draggable
-    // element under the cursor.
-    //
-
-    if(element->flags & UI_Snap_Draggable_Children_On_Click && element_hovered && ui->window->buttons[BUTTON_Left] & BUTTON_Pressed) {
-        for(auto *child = element->first_child; child != null; child = child->next) {
-            if(child->flags & UI_Draggable) {
-                // Snap the center of the child element to the cursor
-                child->drag_offset.x = child->screen_size.x * 0.5f;
-                child->drag_offset.y = child->screen_size.y * 0.5f;
-                
-                child->signals |= UI_SIGNAL_Hovered | UI_SIGNAL_Clicked | UI_SIGNAL_Dragged;
-                child->hover_t = 1;
-                
-                set_element_drag(ui, child, true);
-            }
-        }
-    }    
-    
     
     //
     // Update the different transition animations.
     //
-
     if(element->signals & UI_SIGNAL_Hovered || element->signals & UI_SIGNAL_Dragged) {
         element->hover_t = min(element->hover_t + frame_time * UI_COLOR_TRANSITION_SPEED, 1.f);
     } else {
@@ -1051,6 +1052,8 @@ void draw_element_recursively(UI *ui, UI_Element *element, UI_Rect parent_rect) 
     }
     
     UI_Vector2 drawn_size = { drawn_bottom_right.x - drawn_top_left.x, drawn_bottom_right.y - drawn_top_left.y };
+
+    // nocheckin: The size animated button goes outside the parent bounds... Maybe yet another UI flag for this?
     
     //
     // Overlap the parent's and the element's rectangle to find out what part of the element should
@@ -1059,7 +1062,13 @@ void draw_element_recursively(UI *ui, UI_Element *element, UI_Rect parent_rect) 
     // area.
     //
     UI_Rect element_rect = { drawn_top_left.x, drawn_top_left.y, drawn_bottom_right.x, drawn_bottom_right.y };
-    UI_Rect visible_rect = { max(parent_rect.x0, element_rect.x0), max(parent_rect.y0, element_rect.y0), min(parent_rect.x1, element_rect.x1), min(parent_rect.y1, element_rect.y1) };
+    UI_Rect visible_rect;
+    
+    if(element->flags & UI_Dont_Clip_Against_Parent_Rect) {
+        visible_rect = element_rect;
+    } else {
+        visible_rect = { max(parent_rect.x0, element_rect.x0), max(parent_rect.y0, element_rect.y0), min(parent_rect.x1, element_rect.x1), min(parent_rect.y1, element_rect.y1) };
+    }
     
     b8 visible_rect_is_not_empty = visible_rect.x1 >= visible_rect.x0 && visible_rect.y1 >= visible_rect.y0;
     b8 visible_rect_is_on_screen = (visible_rect.x0 < ui->root.screen_size.x && visible_rect.y0 < ui->root.screen_size.y) && (visible_rect.x1 >= 0 && visible_rect.y1 >= 0);
@@ -1420,54 +1429,38 @@ b8 ui_toggle_button_with_pointer(UI *ui, string label, b8 *active) {
     return element->signals & UI_SIGNAL_Clicked;
 }
 
-// @Cleanup:
-// Maybe only make the background interactable, so that we don't need to press on the teeny tiny 
-// button but instead also on the label and shit, and then only use the teeny tiny button for visual
-// representation of state?
 b8 ui_check_box(UI *ui, string label, b8 *active) {
-    //
-    // The background is just a non-interactable button
-    //
-    ui_element(ui, label, UI_Center_Children);
-    ui_push_parent(ui, UI_DIRECTION_Horizontal);
-    
-    //
-    // Add the actual toggle box in the left corner of the background.
-    //
-    ui_push_height(ui, UI_SEMANTIC_SIZE_Pixels, 16, 1);
-    ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 16, 1);
-    
-    UI_Element *toggle_box = ui_element(ui, ui_concat_strings(ui, label, "_togglebox"_s), UI_Background | UI_Clickable | UI_Activatable | UI_Animate_Size_On_Activation);
-    toggle_box->rounding   = ui->theme.rounding;
-    
-    if(toggle_box->signals & UI_SIGNAL_Clicked) {
-        *active = toggle_box->signals & UI_SIGNAL_Active;
+    UI_Element *parent = ui_element(ui, label, UI_Clickable | UI_Activatable | UI_Center_Children); // Vertically center the children
+
+    if(parent->signals & UI_SIGNAL_Clicked) {
+        *active = parent->signals & UI_SIGNAL_Active;
     } else if(*active) {
-        toggle_box->signals |= UI_SIGNAL_Active;
-        if(toggle_box->created_this_frame) toggle_box->active_t = 1.f;
+        parent->signals |= UI_SIGNAL_Active;
+        if(parent->created_this_frame) parent->active_t = 1.f;
     } else {
-        toggle_box->signals &= ~UI_SIGNAL_Active;
+        parent->signals &= ~UI_SIGNAL_Active;
     }
-    
-    ui_pop_width(ui);
+
+    ui_push_parent(ui, UI_DIRECTION_Horizontal);
+
+    ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 16, 1);
+    ui_push_height(ui, UI_SEMANTIC_SIZE_Pixels, 16, 1);
+    UI_Element *box = ui_element(ui, ui_concat_strings(ui, label, "_toggle_box"_s), UI_Background | UI_Animate_Size_On_Activation | UI_Ignore_Any_Input | UI_Dont_Clip_Against_Parent_Rect);
+    box->rounding   = ui->theme.rounding;
+    box->signals    = parent->signals;    
     ui_pop_height(ui);
-    
-    //
-    // Add a little space between the toggle box and the label.
-    //
-    ui_push_width(ui, UI_SEMANTIC_SIZE_Pixels, 8, 1);
-    ui_spacer(ui);
     ui_pop_width(ui);
-    
-    //
-    // Make the vertically centered label
-    //
+
+    ui_spacer(ui, UI_SEMANTIC_SIZE_Pixels, 8, 1, UI_SEMANTIC_SIZE_Pixels, 1, 1);
+
     ui_push_width(ui, UI_SEMANTIC_SIZE_Label_Size, 0, 0);
-    ui_label(ui, true, label);
+    UI_Element *label_element    = ui_element(ui, UI_NULL_HASH, label, UI_Label | UI_Center_Label | UI_Ignore_Any_Input);
+    label_element->default_color = get_default_color_recursively(label_element);
     ui_pop_width(ui);
     
     ui_pop_parent(ui);
-    return toggle_box->signals & UI_SIGNAL_Clicked;
+    
+    return parent->signals & UI_SIGNAL_Clicked;
 }
 
 void ui_draggable_element(UI *ui, string label) {

@@ -78,31 +78,33 @@ enum UI_Flags {
     UI_Border     = 1 << 2,
 
     /* Interaction Flags */
-    UI_Clickable   = 1 << 3,
-    UI_Activatable = 1 << 4,
-    UI_Draggable   = 1 << 5,
-    UI_Text_Input  = 1 << 6,
+    UI_Clickable        = 1 << 3,
+    UI_Activatable      = 1 << 4,
+    UI_Draggable        = 1 << 5,
+    UI_Text_Input       = 1 << 6,
+    UI_Ignore_Any_Input = 1 << 7, // Some elements should be completely ignoring any input (i.e. not prevent underlying elements from receiving input), but that is not the normal behaviour.
 
     /* Layout Flags */
-    UI_Floating             = 1 << 7, // Other elements ignore this one during the layout phase.
-    UI_Center_Label         = 1 << 8,
-    UI_Center_Children      = 1 << 9,
-    UI_Extrude_Children     = 1 << 10,
-    UI_Detach_From_Parent   = 1 << 11, // Ignore the parent stack for this element and instead place this element in the root node.
-    UI_View_Scroll_Children = 1 << 12, // The children of this element can scroll in the layout direction, and only a part of the elements are actually visible.
+    UI_Floating             = 1 << 8, // Other elements ignore this one during the layout phase.
+    UI_Center_Label         = 1 << 9,
+    UI_Center_Children      = 1 << 10,
+    UI_Extrude_Children     = 1 << 11,
+    UI_Detach_From_Parent   = 1 << 12, // Ignore the parent stack for this element and instead place this element in the root node.
+    UI_View_Scroll_Children = 1 << 13, // The children of this element can scroll in the layout direction, and only a part of the elements are actually visible.
 
     /* Misc Flags */
-    UI_Snap_Draggable_Children_On_Click  = 1 << 13, // When an element has a draggable child, snap that child to the cursor when the left button gets pressed
     UI_Deactivate_Automatically_On_Click = 1 << 14, // When an element is active and the mouse button is pressed somewhere else on the screen, deactivate it
-    UI_Drag_On_Screen_Space              = 1 << 15, // The element is prevented from being partially dragged off the screen
-    UI_Drag_Keep_Children_On_Screen      = 1 << 16, // Make sure (extruded) children of this element cannot be dragged off the screen.
+    UI_Snap_Draggable_Children_On_Click  = 1 << 15, // When an element has a draggable child, snap that child to the cursor when the left button gets pressed
+    UI_Drag_On_Screen_Space              = 1 << 16, // The element is prevented from being partially dragged off the screen
+    UI_Drag_Keep_Children_On_Screen      = 1 << 17, // Make sure (extruded) children of this element cannot be dragged off the screen.
+    UI_Dont_Clip_Against_Parent_Rect     = 1 << 18, // Draw elements beyond the parent rectangle, which usually looks weird but can be wanted in some cases
     
     /* Animation Flags */
-    UI_Animate_Size_On_Activation = 1 << 17,
+    UI_Animate_Size_On_Activation = 1 << 18,
     UI_Animate_Size_On_Hover      = 1 << 19,
 
     /* User Level Customization */
-    UI_Custom_Drawing_Procedure = 1 << 19, // This UI element requires user-level drawing mechanisms, so call the callback pointer when drawing the element.
+    UI_Custom_Drawing_Procedure = 1 << 20, // This UI element requires user-level drawing mechanisms, so call the callback pointer when drawing the element.
 };
 
 BITWISE(UI_Flags);

@@ -101,6 +101,8 @@ void draw_histogram(Window *window, Histogram *histogram, s32 histogram_index, s
 }
 
 int main() {
+    create_temp_allocator(64 * ONE_MEGABYTE);
+    
     //
     // Display
     //

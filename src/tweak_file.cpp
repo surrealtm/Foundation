@@ -61,6 +61,8 @@ Tweak_Variable *register_tweak_variable(Tweak_File *file, string absolute_name, 
     variable->type    = type;
     variable->name    = copy_string(file->allocator, variable_name);
     variable->pointer = pointer;
+
+    return variable;
 }
 
 static
@@ -315,7 +317,6 @@ b8 read_tweak_file(Tweak_File *file) {
 }
 
 void write_tweak_file(Tweak_File *file) {
-    // @Incomplete
     os_delete_file(file->file_path);
 
     Ascii_Writer writer;
@@ -346,7 +347,6 @@ void write_tweak_file(Tweak_File *file) {
 }
 
 b8 maybe_reload_tweak_file(Tweak_File *file) {
-    // @Incomplete
     Hardware_Time now = os_get_hardware_time();
     b8 reloaded = false;
 

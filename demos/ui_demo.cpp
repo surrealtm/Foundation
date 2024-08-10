@@ -118,10 +118,6 @@ int main() {
     UI_Callbacks callbacks = { &demo, draw_ui_text, draw_ui_quad, set_ui_scissors, clear_ui_scissors };
     create_ui(&demo.ui, callbacks, UI_Dark_Theme, &demo.window, demo.software_font.underlying);
 
-    demo.texture_catalog.create_from_file_system("C:/source/Foundation/data/textures"_s, ".png"_s, create_texture_from_memory, null, destroy_texture);
-    
-    Texture *texture = demo.texture_catalog.query("door_inactive"_s);
-    
     while(!demo.window.should_close) {
         Hardware_Time frame_start, frame_end;
 
@@ -142,7 +138,6 @@ int main() {
         // Draw the UI
         {
             clear_frame(Color(100, 100, 100, 255));
-            draw_quad(64, 64, 128, 128, texture);
             draw_ui_frame(&demo.ui);            
             swap_buffers();
         }
@@ -152,9 +147,6 @@ int main() {
         frame_end = os_get_hardware_time();
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
-
-    demo.texture_catalog.release(texture);
-    demo.texture_catalog.destroy();
 
     destroy_ui(&demo.ui);
     destroy_software_font(&demo.software_font);
