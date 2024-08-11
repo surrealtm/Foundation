@@ -1053,8 +1053,6 @@ void draw_element_recursively(UI *ui, UI_Element *element, UI_Rect parent_rect) 
     
     UI_Vector2 drawn_size = { drawn_bottom_right.x - drawn_top_left.x, drawn_bottom_right.y - drawn_top_left.y };
 
-    // nocheckin: The size animated button goes outside the parent bounds... Maybe yet another UI flag for this?
-    
     //
     // Overlap the parent's and the element's rectangle to find out what part of the element should
     // actually be drawn. This is in sync with what position_and_update_element_recursively does.
