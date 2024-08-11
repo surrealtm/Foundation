@@ -297,18 +297,18 @@ u8 *convert_pcm_to_floating_point(s16 *input, u64 input_size_in_bytes, u64 *outp
     return (u8 *) output;
 }
 
-static
+static inline
 b8 chunk_name_equals(u8 chunk_name[4], const char *expected_name) {
     return strncmp((char *) chunk_name, expected_name, 4) == 0;
 }
 
-static
+static inline
 b8 pointer_outside_of_file(string file_content, u8 *pointer, u64 size) {
     return pointer - file_content.data < 0 || (s64) (pointer - file_content.data + size) > file_content.count;
 }
 
-Error_Code create_audio_buffer_from_wav_memory(Audio_Buffer *buffer, string file_content, string buffer_name, Allocator *allocator) {
-    buffer->name = copy_string(allocator, buffer_name);
+Error_Code create_audio_buffer_from_wav_memory(Audio_Mixer *mixer, Audio_Buffer *buffer, string file_content, string buffer_name) {
+    buffer->name = copy_string(mixer->allocator, buffer_name);
     buffer->__drflac_cleanup = false;
 
     Wav_File_Header *header = (Wav_File_Header *) file_content.data;
@@ -340,7 +340,7 @@ Error_Code create_audio_buffer_from_wav_memory(Audio_Buffer *buffer, string file
         buffer->channels    = (u8) header->channel_count;
         buffer->sample_rate = header->sample_rate;
         buffer->frame_count = header->subchunk_2.size / (header->bits_per_sample / 8) / header->channel_count;
-        buffer->data        = convert_pcm_to_floating_point((s16 *) (file_content.data + sizeof(Wav_File_Header)), header->subchunk_2.size, &buffer->size_in_bytes, &buffer->format, allocator);
+        buffer->data        = convert_pcm_to_floating_point((s16 *) (file_content.data + sizeof(Wav_File_Header)), header->subchunk_2.size, &buffer->size_in_bytes, &buffer->format, mixer->allocator);
     } else if(header->audio_format == 0x3) {
         //
         // Floating point file format. The file has an additional "fact" chunk to describe the used floating point
@@ -372,7 +372,7 @@ Error_Code create_audio_buffer_from_wav_memory(Audio_Buffer *buffer, string file
             goto _return;
         }
 
-        u8 *data = (u8 *) allocator->allocate(subchunk_4->size);
+        u8 *data = (u8 *) mixer->allocator->allocate(subchunk_4->size);
         memcpy(data, subchunk_4 + 8, subchunk_4->size);
 
         buffer->format        = AUDIO_BUFFER_FORMAT_Float32;
@@ -393,21 +393,21 @@ Error_Code create_audio_buffer_from_wav_memory(Audio_Buffer *buffer, string file
     return result;
 }
 
-Error_Code create_audio_buffer_from_wav_file(Audio_Buffer *buffer, string file_path, Allocator *allocator) {
+Error_Code create_audio_buffer_from_wav_file(Audio_Mixer *mixer, Audio_Buffer *buffer, string file_path) {
     string file_content = os_read_file(Default_Allocator, file_path);
     if(!file_content.count) {
         return ERROR_File_Not_Found;
     }
 
-    Error_Code result = create_audio_buffer_from_wav_memory(buffer, file_content, file_path, allocator);
+    Error_Code result = create_audio_buffer_from_wav_memory(mixer, buffer, file_content, file_path);
 
     os_free_file_content(Default_Allocator, &file_content);
     
     return result;
 }
 
-Error_Code create_audio_buffer_from_flac_memory(Audio_Buffer *buffer, string file_content, string buffer_name, Allocator *allocator) {
-    buffer->name = copy_string(allocator, buffer_name);
+Error_Code create_audio_buffer_from_flac_memory(Audio_Mixer *mixer, Audio_Buffer *buffer, string file_content, string buffer_name) {
+    buffer->name = copy_string(mixer->allocator, buffer_name);
     buffer->__drflac_cleanup = true;
 
     buffer->data = (u8 *) drflac_open_memory_and_read_pcm_frames_f32(file_content.data, file_content.count, (unsigned int *) &buffer->channels, (unsigned int *) &buffer->sample_rate, &buffer->frame_count, null);
@@ -422,38 +422,38 @@ Error_Code create_audio_buffer_from_flac_memory(Audio_Buffer *buffer, string fil
     return Success;
 }
 
-Error_Code create_audio_buffer_from_flac_file(Audio_Buffer *buffer, string file_path, Allocator *allocator) {
+Error_Code create_audio_buffer_from_flac_file(Audio_Mixer *mixer, Audio_Buffer *buffer, string file_path) {
     string file_content = os_read_file(Default_Allocator, file_path);
     if(!file_content.count) {
         return ERROR_File_Not_Found;
     }
 
-    Error_Code result = create_audio_buffer_from_flac_memory(buffer, file_content, file_path, allocator);
+    Error_Code result = create_audio_buffer_from_flac_memory(mixer, buffer, file_content, file_path);
 
     os_free_file_content(Default_Allocator, &file_content);
     
     return result;
 }
 
-void create_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name, Allocator *allocator) {
-    buffer->name             = buffer_name;
+void create_audio_buffer(Audio_Mixer *mixer, Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name) {
+    buffer->name             = copy_string(mixer->allocator, buffer_name);
     buffer->format           = format;
     buffer->channels         = channels;
     buffer->sample_rate      = sample_rate;
     buffer->frame_count      = 0;
     buffer->size_in_bytes    = frame_count * get_size_in_bytes_per_frame(buffer->format, buffer->channels);
     buffer->__drflac_cleanup = false;
-    buffer->data = (u8 *) allocator->allocate(buffer->size_in_bytes);
+    buffer->data = (u8 *) mixer->allocator->allocate(buffer->size_in_bytes);
 }
 
-void destroy_audio_buffer(Audio_Buffer *buffer, Allocator *allocator) {
+void destroy_audio_buffer(Audio_Mixer *mixer, Audio_Buffer *buffer) {
     if(buffer->__drflac_cleanup) {
         drflac_free(buffer->data, null);
     } else {
-        allocator->deallocate(buffer->data);
+        mixer->allocator->deallocate(buffer->data);
     }
 
-    deallocate_string(allocator, &buffer->name);
+    deallocate_string(mixer->allocator, &buffer->name);
     
     buffer->format           = AUDIO_BUFFER_FORMAT_Unknown;
     buffer->channels         = 0;
@@ -621,18 +621,18 @@ void update_audio_stream(Audio_Stream *stream, u32 frames_to_output) {
     stream->source->state                  = AUDIO_SOURCE_Playing;
 }
 
-Audio_Stream *create_audio_stream(Audio_Mixer *mixer, void *user_pointer, Audio_Stream_Callback callback, Audio_Volume_Type type, b8 spatialized, string buffer_name, Allocator *allocator) {
+Audio_Stream *create_audio_stream(Audio_Mixer *mixer, void *user_pointer, Audio_Stream_Callback callback, Audio_Volume_Type type, b8 spatialized, string buffer_name) {
     Audio_Stream *stream = mixer->streams.push();
     stream->user_pointer = user_pointer;
     stream->callback = callback;
     stream->source = acquire_audio_source(mixer, type, spatialized);
-    create_audio_buffer(&stream->buffer, AUDIO_BUFFER_FORMAT_Float32, AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_SAMPLES_PER_UPDATE * 4, buffer_name, allocator);
+    create_audio_buffer(mixer, &stream->buffer, AUDIO_BUFFER_FORMAT_Float32, AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_SAMPLES_PER_UPDATE * 4, buffer_name);
     return stream;
 }
 
-void destroy_audio_stream(Audio_Mixer *mixer, Audio_Stream *stream, Allocator *allocator) {
+void destroy_audio_stream(Audio_Mixer *mixer, Audio_Stream *stream) {
     release_audio_source(mixer, stream->source);
-    destroy_audio_buffer(&stream->buffer, allocator);
+    destroy_audio_buffer(mixer, &stream->buffer);
     mixer->streams.remove_value_pointer(stream);
 }
 
@@ -659,6 +659,9 @@ void setup_arc(Audio_Listener *listener, s8 arc_index, s8 left_channel, s8 right
 }
 
 Error_Code create_audio_mixer(Audio_Mixer *mixer) {
+    mixer->sources.allocator = mixer->allocator;
+    mixer->streams.allocator = mixer->allocator;
+
     // Set up the base volumes.
     for(s64 i = 0; i < AUDIO_VOLUME_COUNT; ++i)
         mixer->volumes[i] = 1.f;

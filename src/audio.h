@@ -110,7 +110,7 @@ struct Audio_Stream {
 struct Audio_Mixer {
     u8 platform_data[AUDIO_PLATFORM_STATE_SIZE];
 
-    Allocator *allocator;
+    Allocator *allocator = Default_Allocator;
 
     Audio_Listener listener;
     f32 volumes[AUDIO_VOLUME_COUNT];
@@ -134,12 +134,12 @@ void update_audio_mixer_with_silence(Audio_Mixer *mixer);
 
 void update_audio_listener(Audio_Mixer *mixer, f32 x, f32 y, f32 z, f32 fx, f32 fy, f32 fz, f32 ux, f32 uy, f32 uz, f32 rx, f32 ry, f32 rz);
 
-Error_Code create_audio_buffer_from_wav_memory(Audio_Buffer *buffer, string file_content, string buffer_name, Allocator *allocator);
-Error_Code create_audio_buffer_from_wav_file(Audio_Buffer *buffer, string file_path, Allocator *allocator);
-Error_Code create_audio_buffer_from_flac_memory(Audio_Buffer *buffer, string file_content, string buffer_name, Allocator *allocator);
-Error_Code create_audio_buffer_from_flac_file(Audio_Buffer *buffer, string file_path, Allocator *allocator);
-void create_audio_buffer(Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name, Allocator *allocator);
-void destroy_audio_buffer(Audio_Buffer *buffer, Allocator *allocator);
+Error_Code create_audio_buffer_from_wav_memory(Audio_Mixer *mixer, Audio_Buffer *buffer, string file_content, string buffer_name);
+Error_Code create_audio_buffer_from_wav_file(Audio_Mixer *mixer, Audio_Buffer *buffer, string file_path);
+Error_Code create_audio_buffer_from_flac_memory(Audio_Mixer *mixer, Audio_Buffer *buffer, string file_content, string buffer_name);
+Error_Code create_audio_buffer_from_flac_file(Audio_Mixer *mixer, Audio_Buffer *buffer, string file_path);
+void create_audio_buffer(Audio_Mixer *mixer, Audio_Buffer *buffer, Audio_Buffer_Format format, u8 channels, u32 sample_rate, u64 frame_count, string buffer_name);
+void destroy_audio_buffer(Audio_Mixer *mixer, Audio_Buffer *buffer);
 
 Audio_Source *acquire_audio_source(Audio_Mixer *mixer, Audio_Volume_Type type, b8 spatialized);
 void release_audio_source(Audio_Mixer *mixer, Audio_Source *source);
@@ -151,7 +151,7 @@ void set_audio_source_transformation(Audio_Source *source, f32 x, f32 y, f32 z, 
 void play_audio_buffer(Audio_Mixer *mixer, Audio_Buffer *buffer, Audio_Volume_Type type, b8 spatialized);
 void play_audio_buffer(Audio_Source *source, Audio_Buffer *buffer);
 
-Audio_Stream *create_audio_stream(Audio_Mixer *mixer, void *user_pointer, Audio_Stream_Callback callback, Audio_Volume_Type type, b8 spatialized, string buffer_name, Allocator *allocator);
-void destroy_audio_stream(Audio_Mixer *mixer, Audio_Stream *stream, Allocator *allocator);
+Audio_Stream *create_audio_stream(Audio_Mixer *mixer, void *user_pointer, Audio_Stream_Callback callback, Audio_Volume_Type type, b8 spatialized, string buffer_name);
+void destroy_audio_stream(Audio_Mixer *mixer, Audio_Stream *stream);
 void pause_audio_stream(Audio_Stream *stream);
 void resume_audio_stream(Audio_Stream *stream);

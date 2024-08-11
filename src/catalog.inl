@@ -1,13 +1,10 @@
 #include "os_specific.h"
 
-template<typename Asset>
-void Catalog<Asset>::create_from_package(Package *package, string directory, string file_extension, Create_Procedure create, Reload_Procedure reload, Destroy_Procedure destroy) {
-    this->package        = package;
-    this->directory      = copy_string(this->allocator, directory);
-    this->file_extension = copy_string(this->allocator, file_extension);
-    this->create_proc    = create;
-    this->reload_proc    = reload;
-    this->destroy_proc   = destroy;
+template<typename Asset, typename Asset_Parameters>
+void Catalog<Asset, Asset_Parameters>::create_from_package(Package *package, string directory, string file_extension) {
+    this->package                 = package;
+    this->directory               = copy_string(this->allocator, directory);
+    this->file_extension          = copy_string(this->allocator, file_extension);
     this->handles.allocator       = this->allocator;
     this->name_table.allocator    = this->allocator;
     this->pointer_table.allocator = this->allocator;
@@ -17,14 +14,11 @@ void Catalog<Asset>::create_from_package(Package *package, string directory, str
     this->file_watcher.create();
 }
 
-template<typename Asset>
-void Catalog<Asset>::create_from_file_system(string directory, string file_extension, Create_Procedure create, Reload_Procedure reload, Destroy_Procedure destroy) {    
-    this->package        = null;
-    this->directory      = copy_string(this->allocator, directory);
-    this->file_extension = copy_string(this->allocator, file_extension);
-    this->create_proc    = create;
-    this->reload_proc    = reload;
-    this->destroy_proc   = destroy;
+template<typename Asset, typename Asset_Parameters>
+void Catalog<Asset, Asset_Parameters>::create_from_file_system(string directory, string file_extension) {    
+    this->package                 = null;
+    this->directory               = copy_string(this->allocator, directory);
+    this->file_extension          = copy_string(this->allocator, file_extension);
     this->handles.allocator       = this->allocator;
     this->name_table.allocator    = this->allocator;
     this->pointer_table.allocator = this->allocator;
@@ -34,8 +28,8 @@ void Catalog<Asset>::create_from_file_system(string directory, string file_exten
     this->file_watcher.create();
 }
 
-template<typename Asset>
-void Catalog<Asset>::destroy() {
+template<typename Asset, typename Asset_Parameters>
+void Catalog<Asset, Asset_Parameters>::destroy() {
     for(Handle &all : this->handles) {
         Hardware_Time start_time = os_get_hardware_time();
       
@@ -61,8 +55,10 @@ void Catalog<Asset>::destroy() {
 }
 
 #if FOUNDATION_DEVELOPER
-template<typename Asset>
-void Catalog<Asset>::check_for_reloads() {
+template<typename Asset, typename Asset_Parameters>
+void Catalog<Asset, Asset_Parameters>::check_for_reloads() {
+    if(this->package) return; // We don't support hot-loading from packages.
+    
     auto changes = this->file_watcher.update(&temp);
     
     for(string file_changed : changes) {
@@ -75,14 +71,7 @@ void Catalog<Asset>::check_for_reloads() {
 
                 string file_content = this->get_file_content(handle.name);
                 
-                Error_Code error;
-                
-                if(this->reload_proc) {
-                    error = this->reload_proc(&handle.asset, file_content);
-                } else {
-                    this->destroy_proc(&handle.asset);
-                    error = this->create_proc(&handle.asset, file_content);
-                }
+                Error_Code error = this->reload_proc(&handle.asset, file_content, handle.parameters);
 
                 handle.valid = error == Success;
                 this->release_file_content(&file_content);
@@ -103,8 +92,8 @@ void Catalog<Asset>::check_for_reloads() {
 }
 #endif
 
-template<typename Asset>
-Asset *Catalog<Asset>::query(string name) {
+template<typename Asset, typename Asset_Parameters>
+Asset *Catalog<Asset, Asset_Parameters>::internal_query(string name, Asset_Parameters parameters) {
     Handle **handle_ptr = this->name_table.query(name);
     if(handle_ptr != null) return &(*handle_ptr)->asset;
 
@@ -114,7 +103,7 @@ Asset *Catalog<Asset>::query(string name) {
 
     Error_Code error;
     if(file_content.count) {
-        error = this->create_proc(&handle->asset, file_content);
+        error = this->create_proc(&handle->asset, file_content, parameters);
     } else {
         error = ERROR_File_Not_Found;
     }
@@ -122,7 +111,8 @@ Asset *Catalog<Asset>::query(string name) {
     handle->name       = copy_string(this->allocator, name);
     handle->references = 1;
     handle->valid      = error == Success;
-    
+    handle->parameters = parameters;
+
     this->release_file_content(&file_content);
     
     this->name_table.add(handle->name, handle);
@@ -145,8 +135,8 @@ Asset *Catalog<Asset>::query(string name) {
     return &handle->asset;
 }
 
-template<typename Asset>
-void Catalog<Asset>::release(Asset *asset) {
+template<typename Asset, typename Asset_Parameters>
+void Catalog<Asset, Asset_Parameters>::release(Asset *asset) {
     if(!asset) return;
 
     Handle **handle_ptr = this->pointer_table.query(asset);
@@ -179,8 +169,8 @@ void Catalog<Asset>::release(Asset *asset) {
     }
 }
 
-template<typename Asset>
-string Catalog<Asset>::get_file_path(string name) {
+template<typename Asset, typename Asset_Parameters>
+string Catalog<Asset, Asset_Parameters>::get_file_path(string name) {
     s64 complete_path_length = this->directory.count + name.count + this->file_extension.count + 1;
     string complete_path = allocate_string(Default_Allocator, complete_path_length);
 
@@ -192,8 +182,8 @@ string Catalog<Asset>::get_file_path(string name) {
     return complete_path;
 }
 
-template<typename Asset>
-string Catalog<Asset>::get_file_content(string name) {
+template<typename Asset, typename Asset_Parameters>
+string Catalog<Asset, Asset_Parameters>::get_file_content(string name) {
     s64 complete_path_length = this->directory.count + name.count + this->file_extension.count + 1;
     string complete_path;
 
@@ -222,8 +212,8 @@ string Catalog<Asset>::get_file_content(string name) {
     return file_content;
 }
 
-template<typename Asset>
-void Catalog<Asset>::release_file_content(string *file_content) {
+template<typename Asset, typename Asset_Parameters>
+void Catalog<Asset, Asset_Parameters>::release_file_content(string *file_content) {
     if(this->package) {
     } else {
         os_free_file_content(Default_Allocator, file_content);

@@ -8,17 +8,15 @@
 
 #define INITIAL_CATALOG_SIZE 128
 
-template<typename Asset>
+template<typename Asset, typename Asset_Parameters = u8> // Asset_Parameters cannot be void (or we'll get compilation errors, so u8 kind of acts like there aren't any parameters...)
 struct Catalog {
-    typedef Error_Code(*Create_Procedure)(Asset *asset, string file_content);
-    typedef Error_Code(*Reload_Procedure)(Asset *asset, string file_content);
-    typedef void(*Destroy_Procedure)(Asset *asset);
-
     struct Handle {
         Asset asset;
         string name;
 
 #if FOUNDATION_DEVELOPER
+        // For hot-loading
+        Asset_Parameters parameters;
         string file_path_on_disk;
 #endif
 
@@ -45,27 +43,25 @@ struct Catalog {
     File_Watcher file_watcher;
 #endif
 
-    // The actual asset managing code.
-    Create_Procedure create_proc;
-    Reload_Procedure reload_proc;
-    Destroy_Procedure destroy_proc;
-    
-    void create_from_package(Package *package, string directory, string file_extension, Create_Procedure create, Reload_Procedure reload, Destroy_Procedure destroy);
-    void create_from_file_system(string directory, string file_extension, Create_Procedure create, Reload_Procedure reload, Destroy_Procedure destroy);
+    virtual Error_Code create_proc(Asset *asset, string file_content, Asset_Parameters) = 0;
+    virtual Error_Code reload_proc(Asset *asset, string file_content, Asset_Parameters) = 0;
+    virtual void destroy_proc(Asset *asset) = 0;
+
+    void create_from_package(Package *package, string directory, string file_extension);
+    void create_from_file_system(string directory, string file_extension);
     void destroy();
     
 #if FOUNDATION_DEVELOPER
     void check_for_reloads();
 #endif
 
-    Asset *query(string name);
+    Asset *internal_query(string name, Asset_Parameters parameters = {});
     void release(Asset *asset);
 
     string get_file_path(string name);
     string get_file_content(string name);
     void release_file_content(string *file_content);
 };
-
 
 // Because C++ is a terrible language, we need to supply the template definitions in the header file for
 // instantiation to work correctly... This feels horrible but still better than just inlining the code I guess.

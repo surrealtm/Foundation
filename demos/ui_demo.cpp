@@ -5,12 +5,51 @@
 #include "os_specific.h"
 #include "catalog.h"
 
+struct Thing {
+    string ident;
+    s64 value;
+};
+
+static
+Error_Code create_thing(Thing *thing, string file_content, string ident, s64 value) {
+    thing->ident = ident;
+    thing->value = value;
+    return Success;
+}
+
+static
+void destroy_thing(Thing *thing) {
+    thing->value = 0;
+}
+
+struct Texture_Asset_Parameter {
+    s64 value;
+};
+
+struct Texture_Catalog : Catalog<Texture, Texture_Asset_Parameter> {
+    virtual Error_Code create_proc(Texture *texture, string file_content, Texture_Asset_Parameters params) {
+        return create_texture_from_memory(texture, file_content);
+    }
+
+    virtual Error_Code reload_proc(Texture *texture, string file_content, Texture_Asset_Parameter params) {
+        destroy_texture(texture);
+        return create_texture_from_memory(texture, file_content);
+    }
+
+    virtual void destroy_proc(Texture *texture) {
+        destroy_texture(texture);
+    }
+
+    Texture *query(string name, s64 value) {
+        return this->internal_query(name, { value });
+    }
+};
+
 struct Demo {
     Window window;
     Software_Font software_font;
     UI ui;
-
-    Catalog<Texture> texture_catalog;
+    Texture_Catalog texture_catalog;
 };
 
 static b8 DARK_THEME;
@@ -118,6 +157,10 @@ int main() {
     UI_Callbacks callbacks = { &demo, draw_ui_text, draw_ui_quad, set_ui_scissors, clear_ui_scissors };
     create_ui(&demo.ui, callbacks, UI_Dark_Theme, &demo.window, demo.software_font.underlying);
 
+    demo.texture_catalog.create_from_file_system("data/textures"_s, ".png"_s);
+
+    Texture *door_inactive = demo.texture_catalog.query("door_inactive"_s, 1);
+
     while(!demo.window.should_close) {
         Hardware_Time frame_start, frame_end;
 
@@ -138,6 +181,7 @@ int main() {
         // Draw the UI
         {
             clear_frame(Color(100, 100, 100, 255));
+            draw_quad(64, 64, 128, 128, door_inactive);
             draw_ui_frame(&demo.ui);            
             swap_buffers();
         }
@@ -148,6 +192,8 @@ int main() {
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
 
+    demo.texture_catalog.release(door_inactive);
+    demo.texture_catalog.destroy();
     destroy_ui(&demo.ui);
     destroy_software_font(&demo.software_font);
     destroy_software_renderer();
