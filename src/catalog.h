@@ -8,6 +8,14 @@
 
 #define INITIAL_CATALOG_SIZE 128
 
+#ifndef CATALOG_LOG_INFO
+# define CATALOG_LOG_INFO(message, ...) printf(message "\n", __VA_ARGS__)
+#endif
+
+#ifndef CATALOG_LOG_ERROR
+# define CATALOG_LOG_ERROR(message, ...) printf(message "\n", __VA_ARGS__)
+#endif
+
 template<typename Asset, typename Asset_Parameters = u8> // Asset_Parameters cannot be void (or we'll get compilation errors, so u8 kind of acts like there aren't any parameters...)
 struct Catalog {
     struct Handle {
@@ -43,6 +51,7 @@ struct Catalog {
     File_Watcher file_watcher;
 #endif
 
+    virtual string make_complete_name(string name, Asset_Parameters) { return name; }
     virtual Error_Code create_proc(Asset *asset, string file_content, Asset_Parameters) = 0;
     virtual Error_Code reload_proc(Asset *asset, string file_content, Asset_Parameters) = 0;
     virtual void destroy_proc(Asset *asset) = 0;
@@ -56,6 +65,7 @@ struct Catalog {
 #endif
 
     Asset *internal_query(string name, Asset_Parameters parameters = {});
+    Asset *query(string name, Asset_Parameters parameters) { return this->internal_query(name, parameters); }
     void release(Asset *asset);
 
     string get_file_path(string name);

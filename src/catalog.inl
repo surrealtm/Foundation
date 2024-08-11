@@ -40,7 +40,7 @@ void Catalog<Asset, Asset_Parameters>::destroy() {
 #endif
         
         Hardware_Time end_time = os_get_hardware_time();
-        printf("Unloaded asset '%.*s' (%.1fms).\n", (u32) all.name.count, all.name.data, os_convert_hardware_time(end_time - start_time, Milliseconds));
+        CATALOG_LOG_INFO("Unloaded asset '%.*s' (%.1fms).", (u32) all.name.count, all.name.data, os_convert_hardware_time(end_time - start_time, Milliseconds));
 
         deallocate_string(this->allocator, &all.name);
     }
@@ -79,14 +79,20 @@ void Catalog<Asset, Asset_Parameters>::check_for_reloads() {
                 found_entry = true;
                 
                 Hardware_Time end_time = os_get_hardware_time();
-                printf("Reloaded asset '%.*s' (%.1fms).\n", (u32) handle.name.count, handle.name.data, os_convert_hardware_time(end_time - start_time, Milliseconds));
+
+                if(error == Success) {
+                    CATALOG_LOG_INFO("Reloaded asset '%.*s' (%.1fms).", (u32) handle.name.count, handle.name.data, os_convert_hardware_time(end_time - start_time, Milliseconds));
+                } else {
+                    string es = error_string(error);
+                    CATALOG_LOG_INFO("Failed to reload asset '%.*s': %.*s.", (u32) handle.name.count, handle.name.data, (u32) es.count, es.data);
+                }
 
                 break;
             }        
         }
         
         if(!found_entry) {
-            printf("Registered non-catalog asset change '%.*s'.\n", (u32) file_changed.count, file_changed.data);
+            CATALOG_LOG_ERROR("Registered non-catalog asset change '%.*s'.", (u32) file_changed.count, file_changed.data);
         }
     }
 }
@@ -94,7 +100,9 @@ void Catalog<Asset, Asset_Parameters>::check_for_reloads() {
 
 template<typename Asset, typename Asset_Parameters>
 Asset *Catalog<Asset, Asset_Parameters>::internal_query(string name, Asset_Parameters parameters) {
-    Handle **handle_ptr = this->name_table.query(name);
+    string complete_name = this->make_complete_name(name, parameters);
+
+    Handle **handle_ptr = this->name_table.query(complete_name);
     if(handle_ptr != null) return &(*handle_ptr)->asset;
 
     Hardware_Time start_time = os_get_hardware_time();
@@ -108,7 +116,7 @@ Asset *Catalog<Asset, Asset_Parameters>::internal_query(string name, Asset_Param
         error = ERROR_File_Not_Found;
     }
 
-    handle->name       = copy_string(this->allocator, name);
+    handle->name       = copy_string(this->allocator, complete_name);
     handle->references = 1;
     handle->valid      = error == Success;
     handle->parameters = parameters;
@@ -126,10 +134,10 @@ Asset *Catalog<Asset, Asset_Parameters>::internal_query(string name, Asset_Param
     Hardware_Time end_time = os_get_hardware_time();
 
     if(error == Success) {
-        printf("Loaded asset '%.*s' (%.1fms).\n", (u32) name.count, name.data, os_convert_hardware_time(end_time - start_time, Milliseconds));
+        CATALOG_LOG_INFO("Loaded asset '%.*s' (%.1fms).", (u32) handle->name.count, handle->name.data, os_convert_hardware_time(end_time - start_time, Milliseconds));
     } else {
         string es = error_string(error);
-        printf("Failed to load asset '%.*s': %.*s.\n", (u32) name.count, name.data, (u32) es.count, es.data);
+        CATALOG_LOG_ERROR("Failed to load asset '%.*s': %.*s.", (u32) handle->name.count, handle->name.data, (u32) es.count, es.data);
     }
     
     return &handle->asset;
@@ -141,7 +149,7 @@ void Catalog<Asset, Asset_Parameters>::release(Asset *asset) {
 
     Handle **handle_ptr = this->pointer_table.query(asset);
     if(handle_ptr == null) {
-        printf("Attempted to release non-catalog asset.");
+        CATALOG_LOG_ERROR("Attempted to release non-catalog asset.");
         return;
     }
 
@@ -164,7 +172,7 @@ void Catalog<Asset, Asset_Parameters>::release(Asset *asset) {
 
         Hardware_Time end_time = os_get_hardware_time();
         
-        printf("Unloaded asset '%.*s' (%.1fms).\n", (u32) name.count, name.data, os_convert_hardware_time(end_time - start_time, Milliseconds));
+        CATALOG_LOG_INFO("Unloaded asset '%.*s' (%.1fms).", (u32) name.count, name.data, os_convert_hardware_time(end_time - start_time, Milliseconds));
         deallocate_string(this->allocator, &name);
     }
 }
@@ -172,7 +180,7 @@ void Catalog<Asset, Asset_Parameters>::release(Asset *asset) {
 template<typename Asset, typename Asset_Parameters>
 string Catalog<Asset, Asset_Parameters>::get_file_path(string name) {
     s64 complete_path_length = this->directory.count + name.count + this->file_extension.count + 1;
-    string complete_path = allocate_string(Default_Allocator, complete_path_length);
+    string complete_path = allocate_string(this->allocator, complete_path_length);
 
     memcpy(&complete_path.data[0], this->directory.data, this->directory.count);
     complete_path.data[this->directory.count] = '/';
