@@ -335,6 +335,7 @@ string Binary_Parser::read_string() {
 
 void Binary_Writer::create(string file_path, s64 buffer_size) {
 	this->buffer_position = 0;
+	this->complete_size   = 0;
 	this->buffer_size     = buffer_size;
 	this->file_path       = copy_string(Default_Allocator, file_path);
 	this->buffer          = (u8 *) Default_Allocator->allocate(this->buffer_size);
@@ -345,6 +346,7 @@ void Binary_Writer::destroy() {
 	this->flush();
 	deallocate_string(Default_Allocator, &this->file_path);
 	Default_Allocator->deallocate(this->buffer);
+	this->complete_size = 0;
 }
 
 void Binary_Writer::flush() {
@@ -366,6 +368,8 @@ void Binary_Writer::write(const void *data, s64 size) {
 
 		if(this->buffer_position == this->buffer_size) this->flush();
 	}
+
+	this->complete_size += size;
 }
 
 void Binary_Writer::write_u8(u8 value) {

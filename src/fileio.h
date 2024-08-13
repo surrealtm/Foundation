@@ -84,6 +84,7 @@ struct Binary_Writer {
 	u8 *buffer;
 	s64 buffer_size;
 	s64 buffer_position;
+	s64 complete_size;
 	b8 append;
 
 	void create(string file_path, s64 buffer_size);

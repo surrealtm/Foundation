@@ -1204,3 +1204,12 @@ void bind_pipeline_state(Pipeline_State *state) {
     d3d_context->OMSetBlendState(state->blender, null, 0xffffffff);
     d3d_context->RSSetState(state->rasterizer);
 }
+
+
+
+/* ------------------------------------------------- Scissors ------------------------------------------------- */
+
+void set_scissors(s32 x0, s32 y0, s32 x1, s32 y1) {
+    D3D11_RECT rect = { x0, y0, x1, y1 };
+    d3d_context->RSSetScissorRects(1, &rect);
+}

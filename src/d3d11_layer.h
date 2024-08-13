@@ -313,3 +313,9 @@ Texture texture_wrapper_for_frame_buffer_depth_attachment(Frame_Buffer *frame_bu
 void create_pipeline_state(Pipeline_State *state); // User Level Input must be set before this!
 void destroy_pipeline_state(Pipeline_State *state);
 void bind_pipeline_state(Pipeline_State *state);
+
+
+
+/* ------------------------------------------------- Scissors ------------------------------------------------- */
+
+void set_scissors(s32 x0, s32 y0, s32 x1, s32 y1);

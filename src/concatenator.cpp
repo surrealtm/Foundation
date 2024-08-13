@@ -5,6 +5,7 @@ void Concatenator::create(Allocator *allocator, u64 block_size) {
     this->allocator   = allocator;
     this->block_size  = block_size;
     this->total_count = 0;
+    this->last        = null;
     this->setup_block(&this->first);
 }
 
