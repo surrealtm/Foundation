@@ -103,4 +103,5 @@ struct Binary_Writer {
 	void write_f32(f32 value);
 	void write_f64(f64 value);
 	void write_string(string value);
+    void write_null_terminated_string(string value);
 };

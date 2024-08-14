@@ -96,6 +96,9 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 
 /* ---------------------------------------------- Macro Helpers ---------------------------------------------- */
 
+#define __INTERNAL_WIDE_STRING(value) L ## value
+#define WIDE_STRING(value) __INTERNAL_WIDE_STRING(value)
+
 #define __INTERNAL_STRINGIFY(EXP) #EXP
 #define STRINGIFY(EXP) __INTERNAL_STRINGIFY(EXP)
 

@@ -358,6 +358,8 @@ void Binary_Writer::flush() {
 }
 
 void Binary_Writer::write(const void *data, s64 size) {
+	this->complete_size += size;
+
 	s64 data_offset = 0;
 	while(size > 0) {
 		s64 batch_size = min(this->buffer_size - this->buffer_position, size);
@@ -368,8 +370,6 @@ void Binary_Writer::write(const void *data, s64 size) {
 
 		if(this->buffer_position == this->buffer_size) this->flush();
 	}
-
-	this->complete_size += size;
 }
 
 void Binary_Writer::write_u8(u8 value) {
@@ -439,4 +439,9 @@ void Binary_Writer::write_f64(f64 value) {
 void Binary_Writer::write_string(string value) {
 	this->write_s64(value.count);
 	this->write(value.data, value.count);
+}
+
+void Binary_Writer::write_null_terminated_string(string value) {
+    this->write(value.data, value.count);
+    this->write_u8(0);
 }

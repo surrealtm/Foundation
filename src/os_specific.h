@@ -133,6 +133,13 @@ u64 os_get_cpu_cycle();
 
 
 
+/* ----------------------------------------------- System Calls ----------------------------------------------- */
+
+s32 os_system_call(char *executable, char *arguments[], s64 argument_count);
+s32 os_system_call_wide_string(wchar_t *command_line); // Only supported on windows...
+
+
+
 /* ---------------------------------------------- Stack Walking ---------------------------------------------- */
 
 struct Stack_Trace {

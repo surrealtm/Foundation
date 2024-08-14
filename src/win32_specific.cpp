@@ -623,6 +623,63 @@ u64 os_get_cpu_cycle() {
 
 
 
+/* ----------------------------------------------- System Calls ----------------------------------------------- */
+
+static
+char *win32_system_call_string(char *executable, char *arguments[], s64 argument_count) {
+    String_Builder builder;
+    builder.create(Default_Allocator);
+    builder.append_string(executable);
+    for(s64 i = 0; i < argument_count; ++i) {
+        builder.append_string(" ");
+        builder.append_string(arguments[i]);
+    }
+    return builder.finish_as_cstring();
+}
+
+s32 os_system_call(char *executable, char *arguments[], s64 argument_count) {
+    char *command_line = win32_system_call_string(executable, arguments, argument_count);
+    
+    PROCESS_INFORMATION  pi = { 0 };
+    STARTUPINFOA start_info = { 0 };
+    start_info.cb = sizeof(STARTUPINFO);
+
+    if(!CreateProcessA(null, command_line, null, null, true, 0, null, null, &start_info, &pi)) {
+        return -1;
+    }
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    DWORD exit_code;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return exit_code;
+
+}
+
+s32 os_system_call_wide_string(wchar_t *command_line) {
+    PROCESS_INFORMATION  pi = { 0 };
+    STARTUPINFOW start_info = { 0 };
+    start_info.cb = sizeof(STARTUPINFO);
+
+    if(!CreateProcessW(null, command_line, null, null, true, 0, null, null, &start_info, &pi)) {
+        return -1;
+    }
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    DWORD exit_code;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return exit_code;
+}
+
+
+
 /* ----------------------------------------------- Stack Trace ----------------------------------------------- */
 
 Stack_Trace os_get_stack_trace() {

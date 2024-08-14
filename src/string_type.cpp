@@ -195,6 +195,13 @@ string string_view(u8 *data, s64 count) {
     return _string;
 }
 
+string string_view(char *data, s64 count) {
+    string _string;
+    _string.count = count;
+    _string.data  = (u8 *) data;
+    return _string;
+}
+
 string make_string(Allocator *allocator, u8 *data, s64 count) {
     string _string;
     _string.count = count;
@@ -918,6 +925,27 @@ string String_Builder::finish() {
         // the supplied allocator.
         return copy_string(this->allocator, string_view(this->first.data, this->first.count));
     }
+}
+
+char *String_Builder::finish_as_cstring() {
+    char *result = (char *) this->allocator->allocate(this->total_count + 1);
+    s64 offset = 0;
+    
+    Block *block = &this->first;
+    while(block) {
+        memcpy(&result[offset], block->data, block->count);
+        offset += block->count;
+               
+        Block *next_block = block->next;
+        if(block != &this->first) this->allocator->deallocate(block);
+        block = next_block;
+    }
+
+    this->first = { 0 };
+    this->current = null;
+    this->total_count = 0;
+    
+    return result;
 }
 
 

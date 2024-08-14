@@ -1,6 +1,9 @@
 #include "concatenator.h"
 #include "memutils.h"
 
+#include <wchar.h>
+#include <stdlib.h> // For mbstowcs
+
 void Concatenator::create(Allocator *allocator, u64 block_size) {
     this->allocator   = allocator;
     this->block_size  = block_size;
@@ -36,7 +39,7 @@ void *Concatenator::finish() {
 }
 
 
-void Concatenator::add(void *bytes, u64 count) {
+void Concatenator::add(const void *bytes, u64 count) {
     assert(this->last != null); // Check for use-before-create
     u64 offset = 0;
     
@@ -52,7 +55,7 @@ void Concatenator::add(void *bytes, u64 count) {
     this->total_count += count;
 }
 
-void Concatenator::add_unchecked(void *bytes, u64 count) {
+void Concatenator::add_unchecked(const void *bytes, u64 count) {
     assert(this->last != null); // Check for use-before-create
     assert(this->last->capacity - this->last->count >= count);
 
@@ -93,6 +96,22 @@ void Concatenator::add_4b_unchecked(u32 b) {
 
 void Concatenator::add_8b_unchecked(u64 b) {
     this->add_unchecked(&b, sizeof(u64));
+}
+
+
+void Concatenator::add_string(string value) {
+    this->add(value.data, value.count);
+}
+
+void Concatenator::add_string_as_wide(string value) {
+    wchar_t *pointer = (wchar_t *) temp.allocate(value.count * sizeof(wchar_t));
+    u64 converted_characters = mbstowcs(pointer, (const char *) value.data, value.count);
+    this->add(pointer, converted_characters * sizeof(wchar_t));
+}
+
+void Concatenator::add_wide_string(const wchar_t *value) {
+    size_t length = wcslen(value);
+    this->add(value, length * sizeof(wchar_t));
 }
 
 
