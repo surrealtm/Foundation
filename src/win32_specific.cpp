@@ -773,3 +773,26 @@ u64 os_lowest_bit_set(u64 value) {
         return 0; // BitScanReverse returns 0 if the value is 0
     return lowest_bit;
 }
+
+b8 os_value_fits_in_bits(u64 value, u64 available_bits, b8 sign) {
+    if(value == 0 || available_bits == 64) return true;
+
+    union {
+        u64 _unsigned;
+        s64 _signed;
+    } _union;
+
+    _union._unsigned = value;
+    
+    if(sign) {
+        u64 highest = (1ULL << (available_bits - 1)) - 1;
+        s64 lowest  = 1ULL << (available_bits - 1);
+        return (_union._signed >= 0 && _union._unsigned <= highest) || (_union._signed < 0 && -_union._signed <= lowest);
+    } else {
+        // Also allow unsigned variables to store negative values if they are in the negative
+        // signed range, for convenience in the compiler's type checker.
+        u64 highest = (1ULL << available_bits) - 1;
+        s64 lowest  = 1ULL << (available_bits - 1);
+        return (_union._signed >= 0 && _union._unsigned <= highest) ||(_union._unsigned < 0 && -_union._signed <= lowest);
+    }
+}

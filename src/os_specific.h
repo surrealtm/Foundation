@@ -162,3 +162,4 @@ void os_free_stack_trace(Stack_Trace *trace);
 
 u64 os_highest_bit_set(u64 value);
 u64 os_lowest_bit_set(u64 value);
+b8 os_value_fits_in_bits(u64 value, u64 available_bits, b8 sign);
