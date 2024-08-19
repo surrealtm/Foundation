@@ -2,13 +2,26 @@
 // Careful:
 // This source file gets #include'd in the header file, because templates are shit!
 //
-#include <intrin.h>
+
+#if FOUNDATION_WIN32
+extern "C" {
+    unsigned __int64 __lzcnt64(unsigned __int64); // From intrin.h
+};
+#endif
 
 static inline
 s64 __hash_table_next_power_of_two(s64 size) {
 #if FOUNDATION_WIN32
     if(size & (size - 1)) {
         return 1ull << (64 - __lzcnt64(size)); // Round up to next power of two.
+    }
+
+    return size; // Already is a power of two!
+#endif
+
+#if FOUNDATION_LINUX
+    if(size & (size - 1)) {
+        return 1ull << (64 - __builtin_clzl(size)); // Round up to next power of two.
     }
 
     return size; // Already is a power of two!

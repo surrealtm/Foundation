@@ -154,6 +154,18 @@ void os_get_desktop_dpi(s32 *x, s32 *y) {
     *y = (s32) dpi;
 }
 
+b8 os_load_and_run_dynamic_library(string file_path, string procedure, void *argument) { // @Incomplete
+    return false;
+}
+
+s32 os_get_number_of_hardware_threads() {
+    return sysconf(_SC_NPROCESSORS_ONLN);
+}
+
+string os_get_user_name() { // @Incomplete
+    return ""_s;
+}
+
 
 
 /* ---------------------------------------------- Console Output ---------------------------------------------- */
@@ -639,4 +651,28 @@ u64 os_highest_bit_set(u64 value) {
 
 u64 os_lowest_bit_set(u64 value) {
     return __builtin_ctzll(value);
+}
+
+b8 os_value_fits_in_bits(u64 value, u64 available_bits, b8 sign) {
+    if(value == 0 || available_bits == 64) return true;
+
+    union {
+        u64 _unsigned;
+        s64 _signed;
+    } _union;
+
+    _union._unsigned = value;
+    
+    if(sign) {
+        u64 highest = (1ULL << (available_bits - 1)) - 1;
+        s64 lowest  = 1ULL << (available_bits - 1);
+        return (_union._signed >= 0 && _union._unsigned <= highest) || (_union._signed < 0 && -_union._signed <= lowest);
+    } else {
+        // Also allow unsigned variables to store negative values if they are in the negative
+        // signed range, for convenience in the compiler's type checker.
+        u64 highest = (1ULL << available_bits) - 1;
+        s64 lowest  = 1ULL << (available_bits - 1);
+        return (_union._signed >= 0 && _union._unsigned <= highest) ||(_union._unsigned < 0 && -_union._signed <= lowest);
+    }
+
 }

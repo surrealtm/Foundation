@@ -1,6 +1,7 @@
 #include "intersect.h"
 
 template<typename T>
+static
 constexpr T intersect_epsilon();
 
 template<>
@@ -216,7 +217,7 @@ b8 point_inside_triangle(const v2<T> &point, const v2<T> &p0, const v2<T> &p1, c
     T d1 = edge_sign(point, p1, p2);
     T d2 = edge_sign(point, p2, p0);
 
-#undef sign
+#undef edge_sign
 
     // Handle cases in which the point lies on the edge of a triangle, in which case we may
     // get very small positive or negative numbers.

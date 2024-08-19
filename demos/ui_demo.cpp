@@ -27,7 +27,7 @@ struct Texture_Asset_Parameter {
 };
 
 struct Texture_Catalog : Catalog<Texture, Texture_Asset_Parameter> {
-    virtual Error_Code create_proc(Texture *texture, string file_content, Texture_Asset_Parameters params) {
+    virtual Error_Code create_proc(Texture *texture, string file_content, Texture_Asset_Parameter params) {
         return create_texture_from_memory(texture, file_content);
     }
 

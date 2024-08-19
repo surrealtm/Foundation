@@ -6,10 +6,10 @@
 
 /* ---------------------------------------------- Implementation ---------------------------------------------- */
 
-#define report_tweak_error(file, line, format, ...) printf("[Error]: %.*s:%" PRId64 ": " format "\n", (u32) file->file_path.count, file->file_path.data, line, __VA_ARGS__)
-#define report_tweak_error_without_line(file, format, ...) printf("[Error]: %.*s: " format "\n", (u32) file->file_path.count, file->file_path.data, __VA_ARGS__)
-#define report_tweak_warning(file, line, format, ...) printf("[Warning]: %.*s:%" PRId64 ": " format "\n", (u32) file->file_path.count, file->file_path.data, line, __VA_ARGS__)
-#define report_tweak_warning_without_line(file, format, ...) printf("[Warning]: %.*s: " format "\n", (u32) file->file_path.count, file->file_path.data, __VA_ARGS__)
+#define report_tweak_error(file, line, format, ...) printf("[Error]: %.*s:%" PRId64 ": " format "\n", (u32) file->file_path.count, file->file_path.data, line, ##__VA_ARGS__)
+#define report_tweak_error_without_line(file, format, ...) printf("[Error]: %.*s: " format "\n", (u32) file->file_path.count, file->file_path.data, ##__VA_ARGS__)
+#define report_tweak_warning(file, line, format, ...) printf("[Warning]: %.*s:%" PRId64 ": " format "\n", (u32) file->file_path.count, file->file_path.data, line, ##__VA_ARGS__)
+#define report_tweak_warning_without_line(file, format, ...) printf("[Warning]: %.*s: " format "\n", (u32) file->file_path.count, file->file_path.data, ##__VA_ARGS__)
 
 static
 Tweak_Service *find_tweak_service(Tweak_File *file, string name, s64 line) {
@@ -70,6 +70,9 @@ void set_tweak_variable_from_string(Tweak_File *file, Tweak_Variable *variable, 
     b8 success = true;
 
     switch(variable->type) {
+    case TWEAK_VARIABLE_Void:
+        break;
+        
     case TWEAK_VARIABLE_U8:
         *(u8 *) variable->pointer = (u8) string_to_int(_string, &success);
         break;
@@ -111,6 +114,9 @@ void set_tweak_variable_from_string(Tweak_File *file, Tweak_Variable *variable, 
 static
 void print_tweak_variable_value(Ascii_Writer *writer, Tweak_Variable *variable) {
     switch(variable->type) {
+    case TWEAK_VARIABLE_Void:
+        break;
+
     case TWEAK_VARIABLE_U8:
         writer->write_u8(*(u8 *) variable->pointer);
         break;

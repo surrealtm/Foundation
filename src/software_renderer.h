@@ -4,8 +4,8 @@
 #include "string_type.h"
 #include "error.h"
 
-enum Glyph_Set;
-enum Text_Alignment;
+enum Glyph_Set : u8;
+enum Text_Alignment : u8;
 
 struct Window;
 struct Font;

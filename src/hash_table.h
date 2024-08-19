@@ -171,8 +171,8 @@ struct Probed_Hash_Table {
 #endif
 };
 
-u64 fnv1a_64(const void *data, u64 size);
-u64 murmur_64a(u64 key);
+static inline u64 fnv1a_64(const void *data, u64 size);
+static inline u64 murmur_64a(u64 key);
 
 // Because C++ is a terrible language, we need to supply the template definitions in the header file for
 // instantiation to work correctly... This feels horrible but still better than just inlining the code I guess.

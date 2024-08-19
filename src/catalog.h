@@ -9,11 +9,11 @@
 #define INITIAL_CATALOG_SIZE 128
 
 #ifndef CATALOG_LOG_INFO
-# define CATALOG_LOG_INFO(message, ...) printf(message "\n", __VA_ARGS__)
+# define CATALOG_LOG_INFO(message, ...) printf(message "\n", ##__VA_ARGS__)
 #endif
 
 #ifndef CATALOG_LOG_ERROR
-# define CATALOG_LOG_ERROR(message, ...) printf(message "\n", __VA_ARGS__)
+# define CATALOG_LOG_ERROR(message, ...) printf(message "\n", ##__VA_ARGS__)
 #endif
 
 template<typename Asset, typename Asset_Parameters = u8> // Asset_Parameters cannot be void (or we'll get compilation errors, so u8 kind of acts like there aren't any parameters...)

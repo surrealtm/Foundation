@@ -4,7 +4,7 @@
 #include "string_type.h"
 #include "error.h"
 
-enum Text_Alignment {
+enum Text_Alignment : u8 {
     /* Horizontal Alignment */
     TEXT_ALIGNMENT_Left     = 0x1,
     TEXT_ALIGNMENT_Centered = 0x2,
@@ -18,7 +18,7 @@ enum Text_Alignment {
 
 BITWISE(Text_Alignment);
 
-enum Glyph_Set {
+enum Glyph_Set : u8 {
     GLYPH_SET_None  = 0x0,
     GLYPH_SET_Ascii = 0x1,
     GLYPH_SET_Extended_Ascii = 0x2,

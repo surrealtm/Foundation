@@ -128,8 +128,8 @@ UI_Hash ui_hash(UI *ui, string label) {
         --parent_index;
     }
 
-    UI_Hash prime  = 1099511628211;
-    UI_Hash offset = 14695981039346656037;
+    UI_Hash prime  = 1099511628211ULL;
+    UI_Hash offset = 14695981039346656037ULL;
 
     UI_Hash hash = offset + seed;
 

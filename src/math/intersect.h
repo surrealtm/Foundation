@@ -45,42 +45,6 @@ b8 point_inside_triangle(const v2<T> &point, const v2<T> &p0, const v2<T> &p1, c
 template<typename T>
 void calculate_barycentric_coefficients(const v3<T> &p0, const v3<T> &p1, const v3<T> &p2, const v3<T> &point, T *u, T *v, T *w);
 
-
-//
-// I do not want to include all that template definition mess in this header file, so instead I'm just
-// providing the explicit instantiations here, since all these procedures should only ever be used with
-// floating point numbers anyway. I hate this so much...
-//
-
-template f32 calculate_triangle_area(const v3f&, const v3f&, const v3f&);
-template f64 calculate_triangle_area(const v3d&, const v3d&, const v3d&);
-
-template b8 ray_plane_intersection(const v3f&, const v3f&, const v3f&, const v3f&, f32*);
-template b8 ray_plane_intersection(const v3d&, const v3d&, const v3d&, const v3d&, f64*);
-
-template b8 ray_double_sided_plane_intersection(const v3f&, const v3f&, const v3f&, const v3f&, f32*);
-template b8 ray_double_sided_plane_intersection(const v3d&, const v3d&, const v3d&, const v3d&, f64*);
-
-template f32 point_plane_distance_signed(const v3f&, const v3f&, const v3f&);
-template f64 point_plane_distance_signed(const v3d&, const v3d&, const v3d&);
-
-template v3f project_point_onto_triangle(const v3f&, const v3f&, const v3f&, const v3f&);
-template v3d project_point_onto_triangle(const v3d&, const v3d&, const v3d&, const v3d&);
-
-template Triangle_Intersection_Result<f32> ray_triangle_intersection(const v3f&, const v3f&, const v3f&, const v3f&, const v3f&);
-template Triangle_Intersection_Result<f64> ray_triangle_intersection(const v3d&, const v3d&, const v3d&, const v3d&, const v3d&);
-
-template Triangle_Intersection_Result<f32> ray_double_sided_triangle_intersection(const v3f&, const v3f&, const v3f&, const v3f&, const v3f&);
-template Triangle_Intersection_Result<f64> ray_double_sided_triangle_intersection(const v3d&, const v3d&, const v3d&, const v3d&, const v3d&);
-
-template b8 ray_triangle_intersection(const v3f&, const v3f&, const v3f&, const v3f&, const v3f&, f32*);
-template b8 ray_triangle_intersection(const v3d&, const v3d&, const v3d&, const v3d&, const v3d&, f64*);
-
-template b8 ray_double_sided_triangle_intersection(const v3f&, const v3f&, const v3f&, const v3f&, const v3f&, f32*);
-template b8 ray_double_sided_triangle_intersection(const v3d&, const v3d&, const v3d&, const v3d&, const v3d&, f64*);
-
-template b8 point_inside_triangle(const v2f&, const v2f&, const v2f&, const v2f&);
-template b8 point_inside_triangle(const v2d&, const v2d&, const v2d&, const v2d&);
-
-template void calculate_barycentric_coefficients(const v3f&, const v3f&, const v3f&, const v3f&, f32*, f32*, f32*);
-template void calculate_barycentric_coefficients(const v3d&, const v3d&, const v3d&, const v3d&, f64*, f64*, f64*);
+// Because C++ is a terrible language, we need to supply the template definitions in the header file for
+// instantiation to work correctly... This feels horrible but still better than just inlining the code I guess.
+#include "intersect.inl"

@@ -230,7 +230,8 @@ void kill_thread(Thread *thread) {
     if(thread->state != THREAD_STATE_Terminated && thread->state != THREAD_STATE_Detached) {
         thread->state = THREAD_STATE_Terminating;
         pthread_cancel(state->id);
-        pthread_join(state->id);
+        void *return_value;
+        pthread_join(state->id, &return_value);
         thread->state = THREAD_STATE_Terminated;
         this_call_destroyed_thread = true;
     }
@@ -447,7 +448,7 @@ u8 atomic_compare_exchange(u8 volatile *dst, u8 desired, u8 expected) {
 s64 atomic_compare_exchange(s64 volatile *dst, s64 desired, s64 expected) {
 #if FOUNDATION_WIN32
     return _InterlockedCompareExchange64((LONG64 volatile *) dst, desired, expected);
-#elif FOUNDATION_LINSX
+#elif FOUNDATION_LINUX
     return __sync_val_compare_and_swap(dst, desired, expected);
 #endif
 }
@@ -455,7 +456,7 @@ s64 atomic_compare_exchange(s64 volatile *dst, s64 desired, s64 expected) {
 s32 atomic_compare_exchange(s32 volatile *dst, s32 desired, s32 expected) {
 #if FOUNDATION_WIN32
     return _InterlockedCompareExchange((LONG volatile *) dst, desired, expected);
-#elif FOUNDATION_LINSX
+#elif FOUNDATION_LINUX
     return __sync_val_compare_and_swap(dst, desired, expected);
 #endif
 }
@@ -463,7 +464,7 @@ s32 atomic_compare_exchange(s32 volatile *dst, s32 desired, s32 expected) {
 s16 atomic_compare_exchange(s16 volatile *dst, s16 desired, s16 expected) {
 #if FOUNDATION_WIN32
     return _InterlockedCompareExchange16((SHORT volatile *) dst, desired, expected);
-#elif FOUNDATION_LINSX
+#elif FOUNDATION_LINUX
     return __sync_val_compare_and_swap(dst, desired, expected);
 #endif
 }
@@ -471,7 +472,7 @@ s16 atomic_compare_exchange(s16 volatile *dst, s16 desired, s16 expected) {
 s8 atomic_compare_exchange(s8 volatile *dst, s8 desired, s8 expected) {
 #if FOUNDATION_WIN32
     return _InterlockedCompareExchange8((CHAR volatile *) dst, desired, expected);
-#elif FOUNDATION_LINSX
+#elif FOUNDATION_LINUX
     return __sync_val_compare_and_swap(dst, desired, expected);
 #endif
 }

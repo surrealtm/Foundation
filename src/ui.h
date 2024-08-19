@@ -44,7 +44,7 @@ typedef void(*UI_Custom_Draw_Callback)(void *, UI_Element *, void *); // user_po
 #define UI_SIZE_TRANSITION_SPEED  (1.f / UI_SIZE_TRANSITION_TIME) // Speed at which a size transition animates to fulfill the transition time
 #define UI_DEACTIVE_ALPHA_DENOMINATOR 3 // The alpha value of all colors is divided by this value whenever the UI is in deactivated mode.
 
-#define UI_FORMAT_STRING(ui, format, ...) mprint(&ui->allocator, format, __VA_ARGS__)
+#define UI_FORMAT_STRING(ui, format, ...) mprint(&ui->allocator, format, ##__VA_ARGS__)
 
 enum UI_Window_Flags {
     UI_WINDOW_Default             = 0x0,

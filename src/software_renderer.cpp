@@ -317,6 +317,10 @@ Draw_Command *make_triangle_draw_command(s32 vertex_count) {
 static
 void destroy_draw_command(Draw_Command *command) {
     switch(command->kind) {
+    case DRAW_COMMAND_Nothing:
+    case DRAW_COMMAND_Clear:
+        break;
+        
     case DRAW_COMMAND_Draw:
         state.frame_allocator->deallocate(command->draw.vertices);    
         break;
@@ -363,29 +367,32 @@ void draw_triangle(Draw_Command *cmd, Draw_Vertex *v0, Draw_Vertex *v1, Draw_Ver
 static
 void execute_draw_command(Draw_Command *cmd) {
     switch(cmd->kind) {
-        case DRAW_COMMAND_Clear: {
-            u8 channels = channels_per_pixel[cmd->frame_buffer->format];
-            u8 color_array[4];
-            color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_R]] = cmd->clear.color.r;
-            color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_G]] = cmd->clear.color.g;
-            color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_B]] = cmd->clear.color.b;
-            color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_A]] = cmd->clear.color.a;
+    case DRAW_COMMAND_Nothing:
+        break;
+
+    case DRAW_COMMAND_Clear: {
+        u8 channels = channels_per_pixel[cmd->frame_buffer->format];
+        u8 color_array[4];
+        color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_R]] = cmd->clear.color.r;
+        color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_G]] = cmd->clear.color.g;
+        color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_B]] = cmd->clear.color.b;
+        color_array[channel_indices[cmd->frame_buffer->format][CHANNEL_A]] = cmd->clear.color.a;
             
-            Draw_AABB aabb = intersect_aabb(cmd->scissors, cmd->frame_buffer->w, cmd->frame_buffer->h);
+        Draw_AABB aabb = intersect_aabb(cmd->scissors, cmd->frame_buffer->w, cmd->frame_buffer->h);
             
-            for(f32 y = aabb.min.y; y <= aabb.max.y; y += 1) {
-                for(f32 x = aabb.min.x; x <= aabb.max.x; x += 1) {
-                    u8 *pixel = get_pixel_in_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y);
-                    memcpy(pixel, color_array, channels);
-                }
+        for(f32 y = aabb.min.y; y <= aabb.max.y; y += 1) {
+            for(f32 x = aabb.min.x; x <= aabb.max.x; x += 1) {
+                u8 *pixel = get_pixel_in_frame_buffer(cmd->frame_buffer, (s32) x, (s32) y);
+                memcpy(pixel, color_array, channels);
             }
-        } break;
+        }
+    } break;
         
-        case DRAW_COMMAND_Draw: {
-            for(s64 i = 0; i < cmd->draw.vertex_count; i += 3) {
-                draw_triangle(cmd, &cmd->draw.vertices[i], &cmd->draw.vertices[i + 1], &cmd->draw.vertices[i + 2]);
-            }
-        } break;
+    case DRAW_COMMAND_Draw: {
+        for(s64 i = 0; i < cmd->draw.vertex_count; i += 3) {
+            draw_triangle(cmd, &cmd->draw.vertices[i], &cmd->draw.vertices[i + 1], &cmd->draw.vertices[i + 2]);
+        }
+    } break;
     }
 }
 

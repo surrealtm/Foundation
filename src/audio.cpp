@@ -193,6 +193,11 @@ void win32_release_audio_buffer(Audio_Mixer *mixer, u32 frames_to_output) {
     win32->render_client->ReleaseBuffer(frames_to_output, 0);
 }
 
+#elif FOUNDATION_LINUX
+
+#define LEFT_AUDIO_CHANNEL  0
+#define RIGHT_AUDIO_CHANNEL 1
+
 #endif
 
 
@@ -204,7 +209,8 @@ u64 get_size_in_bytes_per_frame(Audio_Buffer_Format format, u8 channels) {
     u64 size_in_bytes;
 
     switch(format) {
-    case AUDIO_BUFFER_FORMAT_Pcm16: size_in_bytes = sizeof(s16); break;
+    case AUDIO_BUFFER_FORMAT_Unknown: size_in_bytes = 0; break;
+    case AUDIO_BUFFER_FORMAT_Pcm16:   size_in_bytes = sizeof(s16); break;
     case AUDIO_BUFFER_FORMAT_Float32: size_in_bytes = sizeof(f32); break;
     }
     
@@ -223,6 +229,10 @@ f32 query_audio_buffer(Audio_Buffer *buffer, u64 frame, u64 channel) {
     u64 sample = frame * buffer->channels + min(channel, buffer->channels - 1);
     
     switch(buffer->format) {
+    case AUDIO_BUFFER_FORMAT_Unknown:
+        result = 0.f;
+        break;
+
     case AUDIO_BUFFER_FORMAT_Pcm16: {
         s16 *ptr = (s16 *) buffer->data;
         result = -(f32) ((f32) ptr[sample] / (f32) MIN_S16);
