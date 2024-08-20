@@ -46,6 +46,9 @@ u32 internal_worker_thread(Job_Worker *worker) {
                 continue;
             }
 
+            // This needs to happen before popping the queue, so that get_number_of_incomplete_jobs() does not catch us in the moment between popping the queue to 0 
+            // and not officially running this job.
+            worker->state.store(JOB_WORKER_Running_Job);
             job = worker->system->job_queue.pop_first();
             unlock(&worker->system->job_queue_mutex);
         }
@@ -53,7 +56,6 @@ u32 internal_worker_thread(Job_Worker *worker) {
         //
         // Actually run the job.
         //
-        worker->state.store(JOB_WORKER_Running_Job);
         job.procedure_pointer(job.user_pointer);
 
 #if FOUNDATION_DEVELOPER
@@ -95,6 +97,7 @@ void create_job_system(Job_System *system, s64 worker_count, s64 thread_local_te
 #endif
 
         system->workers[i].thread = create_thread((Thread_Entry_Point) internal_worker_thread, &system->workers[i], false); // internal_worker_thread doesn't take 'void *' as user pointer.
+        set_thread_name(&system->workers[i].thread, "Worker_Thread");
     }
 }
 
@@ -124,11 +127,7 @@ void destroy_job_system(Job_System *system, Job_System_Shutdown_Mode shutdown_mo
         case JOB_SYSTEM_Wait_On_All_Jobs:
             join_thread(&system->workers[i].thread);
             break;
-            
-        case JOB_SYSTEM_Detach_Workers:
-            detach_thread(&system->workers[i].thread);
-            break;
-            
+
         case JOB_SYSTEM_Kill_Workers:
             kill_thread(&system->workers[i].thread);
             break;    
@@ -171,7 +170,7 @@ s64 get_number_of_incomplete_jobs(Job_System *system) {
     s64 running_jobs = 0;
 
     for(s64 i = 0; i < system->worker_count; ++i) {
-        if(system->workers[i].state.compare(JOB_WORKER_Running_Job)) {
+        if(system->workers[i].state.compare(JOB_WORKER_Running_Job) || system->workers[i].state.compare(JOB_WORKER_Initializing)) { // We should not shut down the job system before all threads have been initialized... This might happen if there is only a very small number of very quick jobs.
             ++running_jobs;
         }
     }

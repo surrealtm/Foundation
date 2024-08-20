@@ -44,6 +44,7 @@ void suspend_thread(Thread *thread);
 void resume_thread(Thread *thread);
 void thread_wait_if_suspended(Thread *thread);
 void thread_sleep(f32 seconds);
+void set_thread_name(Thread *thread, const char *name);
 u32 thread_get_id();
 
 

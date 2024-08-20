@@ -16,10 +16,20 @@ struct Mutex_Win32_State {
     CRITICAL_SECTION handle;
 };
 
+const DWORD MS_VC_EXCEPTION = 0x406D1388;
+
+typedef struct tagTHREADNAME_INFO {
+    DWORD dwType; // Must be 0x1000.
+    LPCSTR szName; // Pointer to name (in user addr space).
+    DWORD dwThreadID; // Thread ID (-1=caller thread).
+    DWORD dwFlags; // Reserved for future use, must be zero.
+} THREADNAME_INFO;
+
 static_assert(sizeof(Thread_Win32_State) <= sizeof(Thread::platform_data), "Thread_Win32_State is bigger than expected.");
 
 static_assert(sizeof(Mutex_Win32_State) <= sizeof(Mutex::platform_data), "Mutex_Win32_State is bigger than expected.");
 
+static
 void __thread_internal_cleanup(Thread_Win32_State *state) {
     if(!state->setup) return;
     DeleteCriticalSection(&state->mutex);
@@ -323,6 +333,27 @@ void thread_sleep(f32 seconds) {
     Sleep((DWORD) (seconds * 1000.0f));
 #elif FOUNDATION_LINUX
     usleep((useconds_t) (seconds * 1000000.0f));
+#endif
+}
+
+void set_thread_name(Thread *thread, const char *name) {
+#if FOUNDATION_WIN32
+    Thread_Win32_State *state = (Thread_Win32_State *) thread->platform_data;
+    if(!state->setup) return;
+    
+    // Yes, apparently they are serious about this...
+    THREADNAME_INFO info;
+    info.dwType     = 0x1000;
+    info.szName     = name;
+    info.dwThreadID = GetThreadId(state->handle);
+    info.dwFlags    = 0;
+
+    __try {
+        RaiseException(MS_VC_EXCEPTION, 0, sizeof(info) / sizeof(ULONG_PTR), (ULONG_PTR*)&info);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {}
+#elif FOUNDATION_LINUX
+    Thread_Linux_State *state = (Thread_Linux_State *) thread->platform_data;
+    pthread_setname_np(state->id, name);
 #endif
 }
 
