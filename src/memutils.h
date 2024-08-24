@@ -289,8 +289,8 @@ struct Resizable_Block_Array {
 
     T &operator[](s64 index);
 
-	Iterator begin() { return Iterator{this, this->first, 0}; }
-	Iterator end()   { return Iterator{this, this->last,  this->count - (this->block_count - 1) * block_capacity}; }
+	Iterator begin() { return Iterator{ this, this->first, 0 }; }
+	Iterator end()   { return Iterator{ this, this->last,  this->count > 0 ? this->count - (this->block_count - 1) * block_capacity : 0 }; }
 };
 
 template<typename T>
