@@ -115,6 +115,53 @@ void Concatenator::add_wide_string(const wchar_t *value) {
 }
 
 
+void Concatenator::modify_1b(u64 offset, u8 b) {
+    //
+    // :Modify
+    // When modifying more than 1 byte, the concatenator needs to be careful that values might
+    // cross Block borders. As an example, if an 8 byte pointer is added using add_8b(), then
+    // the first two bytes might be in Block A (which is then full), the rest is spilled into
+    // Block B, which requires additional checks when modifying a larger value.
+    //
+    
+    Block *block = &this->first;
+    u64 block_position = 0;
+    while(offset > block_position + block->count) {
+        block = block->next;
+        block_position += block->count;
+    }
+    
+    u64 position_in_block = offset - block_position;
+    block->data[position_in_block] = b;
+}
+
+void Concatenator::modify_2b(u64 offset, u16 b) {
+    u8 *ptr = (u8 *) &b; // :Modify
+    this->modify_1b(offset + 0, ptr[0]);
+    this->modify_1b(offset + 1, ptr[1]);
+}
+
+void Concatenator::modify_4b(u64 offset, u32 b) {
+    u8 *ptr = (u8 *) &b; // :Modify
+    this->modify_1b(offset + 0, ptr[0]);
+    this->modify_1b(offset + 1, ptr[1]);
+    this->modify_1b(offset + 2, ptr[2]);
+    this->modify_1b(offset + 3, ptr[3]);
+}
+
+void Concatenator::modify_8b(u64 offset, u64 b) {
+    u8 *ptr = (u8 *) &b; // :Modify
+    this->modify_1b(offset + 0, ptr[0]);
+    this->modify_1b(offset + 1, ptr[1]);
+    this->modify_1b(offset + 2, ptr[2]);
+    this->modify_1b(offset + 3, ptr[3]);
+    this->modify_1b(offset + 4, ptr[4]);
+    this->modify_1b(offset + 5, ptr[5]);
+    this->modify_1b(offset + 6, ptr[6]);
+    this->modify_1b(offset + 7, ptr[7]);
+}
+
+
 void *Concatenator::mark() {
     assert(this->last != null);
     return &this->last[this->last->count];
@@ -122,7 +169,7 @@ void *Concatenator::mark() {
 
 void Concatenator::setup_block(Block *block) {
     block->capacity = this->block_size;
-    block->data     = this->allocator->allocate(this->block_size);
+    block->data     = (u8 *) this->allocator->allocate(this->block_size);
     block->count    = 0;
     block->next     = null;
 

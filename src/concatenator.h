@@ -8,7 +8,7 @@ struct Allocator;
 struct Concatenator {
     struct Block {
         Block *next;
-        void *data;
+        u8 *data;
         u64 capacity;
         u64 count;
     };
@@ -34,10 +34,15 @@ struct Concatenator {
     void add_2b_unchecked(u16 b);
     void add_4b_unchecked(u32 b);
     void add_8b_unchecked(u64 b);
-
+    
     void add_string(string value);
     void add_string_as_wide(string value);
     void add_wide_string(const wchar_t *value);
+
+    void modify_1b(u64 offset, u8 b);
+    void modify_2b(u64 offset, u16 b);
+    void modify_4b(u64 offset, u32 b);
+    void modify_8b(u64 offset, u64 b);
     
     void *mark();
     
