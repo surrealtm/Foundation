@@ -49,7 +49,7 @@ void Concatenator::add(const void *bytes, u64 count) {
         s64 batch = min(count, this->last->capacity - this->last->count);
         memcpy(&((u8 *) this->last->data)[this->last->count], &((u8 *) bytes)[offset], batch);
         this->last->count += batch;
-        offset += count;
+        offset += batch;
     }
 
     this->total_count += count;
@@ -125,13 +125,13 @@ void Concatenator::modify_1b(u64 offset, u8 b) {
     //
     
     Block *block = &this->first;
-    u64 block_position = 0;
-    while(offset > block_position + block->count) {
+    u64 total_position = 0;
+    while(offset > total_position + block->count) {
+        total_position += block->count;
         block = block->next;
-        block_position += block->count;
     }
     
-    u64 position_in_block = offset - block_position;
+    u64 position_in_block = offset - total_position;
     block->data[position_in_block] = b;
 }
 
@@ -173,11 +173,9 @@ void Concatenator::setup_block(Block *block) {
     block->count    = 0;
     block->next     = null;
 
-    if(this->last) {
-        this->last->next = block;
-    } else {
-        this->last = block;
-    }
+    if(this->last) this->last->next = block;
+
+    this->last = block;
 }
 
 void Concatenator::append_block() {
