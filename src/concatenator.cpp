@@ -125,13 +125,13 @@ void Concatenator::modify_1b(u64 offset, u8 b) {
     //
     
     Block *block = &this->first;
-    u64 total_position = 0;
-    while(offset > total_position + block->count) {
-        total_position += block->count;
+    u64 block_start = 0;
+    while(block_start + block->count <= offset) {
+        block_start += block->count;
         block = block->next;
     }
     
-    u64 position_in_block = offset - total_position;
+    u64 position_in_block = offset - block_start;
     block->data[position_in_block] = b;
 }
 
