@@ -46,7 +46,7 @@ void Concatenator::add(const void *bytes, u64 count) {
     while(offset < count) {
         if(this->last->count == this->last->capacity) this->append_block();
         
-        s64 batch = min(count, this->last->capacity - this->last->count);
+        s64 batch = min(count - offset, this->last->capacity - this->last->count);
         memcpy(&((u8 *) this->last->data)[this->last->count], &((u8 *) bytes)[offset], batch);
         this->last->count += batch;
         offset += batch;
