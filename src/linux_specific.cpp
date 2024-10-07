@@ -1,6 +1,7 @@
 #include "os_specific.h"
 #include "memutils.h"
 
+#include <stdarg.h>
 #include <stdlib.h>
 #include <linux/limits.h>
 #include <sys/mman.h>
@@ -412,7 +413,7 @@ File_Information os_get_file_information(string file_path) {
 
 /* ------------------------------------------------ File Paths ------------------------------------------------ */
 
-b8 os_looks_like_absolute_path(string file_path) {
+b8 os_looks_like_absolute_file_path(string file_path) {
     return file_path.count > 0 && file_path[0] == '/';
 }
 
@@ -599,6 +600,28 @@ u64 os_get_cpu_cycle() {
 
 
 
+/* ----------------------------------------------- System Calls ----------------------------------------------- */
+
+s32 os_system_call(const char *executable, const char *arguments[], s64 argument_count) {
+    const char **complete_arguments = (const char **) Default_Allocator->allocate(sizeof(char *) * (argument_count + 1)); // @@Leak
+
+    complete_arguments[0] = executable;
+    for(s64 i = 0; i < argument_count; ++i) complete_arguments[i + 1] = arguments[i];
+    complete_arguments[argument_count + 1] = 0;
+    
+    pid_t pid = 0;
+    if(posix_spawnp(&pid, executable, NULL, NULL, (char * const *) complete_arguments, __environ) != 0) {
+        return -1;
+    }
+
+    int exit_code;
+    waitpid(pid, &exit_code, 0);
+
+    return exit_code;
+}
+
+
+
 /* ----------------------------------------------- Stack Trace ----------------------------------------------- */
 
 Stack_Trace os_get_stack_trace() {
@@ -646,7 +669,7 @@ void os_free_stack_trace(Stack_Trace *trace) {
 /* --------------------------------------------- Bit Manipulation --------------------------------------------- */
 
 u64 os_highest_bit_set(u64 value) {
-    return __builtin_clzll(value);
+    return 64 - __builtin_clzll(value);
 }
 
 u64 os_lowest_bit_set(u64 value) {
