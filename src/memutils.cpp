@@ -192,7 +192,7 @@ u64 heap_query_allocation_size(void * /*data = null */, void *pointer) {
 
 /* ----------------------------------------------- Memory Arena ----------------------------------------------- */
 
-void Memory_Arena::create(u64 reserved, u64 requested_commit_size) {
+void Memory_Arena::create(u64 reserved, u64 requested_commit_size, b8 executable) {
 	assert(this->base == null);
 	assert(reserved != 0);
 	
@@ -202,12 +202,14 @@ void Memory_Arena::create(u64 reserved, u64 requested_commit_size) {
 		this->reserved    = align_to(reserved, this->page_size, u64);
 		this->committed   = 0;
 		this->size        = 0;
+        this->executable  = executable;
 	} else {
 		this->page_size   = 0;
 		this->commit_size = 0;
 		this->reserved    = 0;
 		this->committed   = 0;
 		this->size        = 0;
+        this->executable  = executable;
 	}
 }
 
@@ -221,6 +223,7 @@ void Memory_Arena::destroy() {
 	this->committed   = 0;
 	this->page_size   = 0;
 	this->commit_size = 0;
+    this->executable  = false;
 }
 
 void Memory_Arena::reset() {
@@ -241,7 +244,7 @@ void *Memory_Arena::push(u64 size) {
 		assert(commit_size >= size);
         
 		if(this->committed + commit_size <= this->reserved) {
-			if(os_commit_memory((char *) this->base + this->committed, commit_size)) {
+			if(os_commit_memory((char *) this->base + this->committed, commit_size, this->executable)) {
 				this->committed += commit_size;
 			} else {
 				foundation_error("The Memory_Arena failed to commit memory (%" PRIu64 "b requested).", commit_size);

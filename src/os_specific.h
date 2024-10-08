@@ -49,7 +49,7 @@ u64 os_get_page_size();
 u64 os_get_committed_region_size(void *base);
 void *os_reserve_memory(u64 reserved_size);
 void os_free_memory(void *base, u64 reserved_size);
-b8 os_commit_memory(void *base, u64 commit_size);
+b8 os_commit_memory(void *base, u64 commit_size, b8 executable);
 void os_decommit_memory(void *base, u64 decommit_size);
 
 u64 os_get_working_set_size();
@@ -135,8 +135,8 @@ u64 os_get_cpu_cycle();
 
 /* ----------------------------------------------- System Calls ----------------------------------------------- */
 
-s32 os_system_call(char *executable, char *arguments[], s64 argument_count);
-s32 os_system_call_wide_string(wchar_t *command_line); // Only supported on windows...
+s32 os_system_call(const char *executable, const char *arguments[], s64 argument_count);
+s32 os_system_call_wide_string(const wchar_t *command_line); // Only supported on windows...
 
 
 

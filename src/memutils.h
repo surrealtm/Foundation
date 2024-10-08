@@ -108,8 +108,9 @@ struct Memory_Arena {
 	u64 committed   = 0;
 	u64 reserved    = 0;
 	u64 size        = 0;
-	
-	void create(u64 reserved, u64 requested_commit_size = 0);
+    b8 executable   = false;
+    
+	void create(u64 reserved, u64 requested_commit_size = 0, b8 executable = false);
 	void destroy();
 	void reset(); // Completely clears out this arena
 

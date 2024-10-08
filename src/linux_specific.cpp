@@ -260,11 +260,11 @@ void os_free_memory(void *base, u64 reserved_size) {
     munmap(base, reserved_size);
 }
 
-b8 os_commit_memory(void *base, u64 commit_size) {
+b8 os_commit_memory(void *base, u64 commit_size, b8 executable) {
     assert(base != null);
     assert(commit_size != null);
 
-    int result = mprotect(base, commit_size, PROT_READ | PROT_WRITE);
+    int result = mprotect(base, commit_size, executable ? (PROT_EXEC | PROT_READ | PROT_WRITE) : (PROT_READ | PROT_WRITE));
 
     if(result != 0) {
         foundation_error("Failed to commit %" PRIu64 " bytes of memory.", commit_size);

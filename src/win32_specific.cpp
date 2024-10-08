@@ -253,11 +253,11 @@ void os_free_memory(void *base, u64 reserved_size) {
 	}
 }
 
-b8 os_commit_memory(void *address, u64 commit_size) {
+b8 os_commit_memory(void *address, u64 commit_size, b8 executable) {
 	assert(address != null);
 	assert(commit_size != 0);
 
-	void *result = VirtualAlloc(address, commit_size, MEM_COMMIT, PAGE_READWRITE);
+	void *result = VirtualAlloc(address, commit_size, MEM_COMMIT, executable ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE);
 
 	if(!result) {
 		char *error = win32_last_error_to_string();
@@ -626,7 +626,7 @@ u64 os_get_cpu_cycle() {
 /* ----------------------------------------------- System Calls ----------------------------------------------- */
 
 static
-char *win32_system_call_string(char *executable, char *arguments[], s64 argument_count) {
+char *win32_system_call_string(const char *executable, const char *arguments[], s64 argument_count) {
     String_Builder builder;
     builder.create(Default_Allocator);
     builder.append_string(executable);
@@ -637,8 +637,8 @@ char *win32_system_call_string(char *executable, char *arguments[], s64 argument
     return builder.finish_as_cstring();
 }
 
-s32 os_system_call(char *executable, char *arguments[], s64 argument_count) {
-    char *command_line = win32_system_call_string(executable, arguments, argument_count);
+s32 os_system_call(const char *executable, const char *arguments[], s64 argument_count) {
+    char *command_line = win32_system_call_string(executable, arguments, argument_count); // @@Leak
     
     PROCESS_INFORMATION  pi = { 0 };
     STARTUPINFOA start_info = { 0 };
@@ -659,12 +659,12 @@ s32 os_system_call(char *executable, char *arguments[], s64 argument_count) {
 
 }
 
-s32 os_system_call_wide_string(wchar_t *command_line) {
+s32 os_system_call_wide_string(const wchar_t *command_line) {
     PROCESS_INFORMATION  pi = { 0 };
     STARTUPINFOW start_info = { 0 };
     start_info.cb = sizeof(STARTUPINFO);
 
-    if(!CreateProcessW(null, command_line, null, null, true, 0, null, null, &start_info, &pi)) {
+    if(!CreateProcessW(null, (LPWSTR) command_line, null, null, true, 0, null, null, &start_info, &pi)) {
         return -1;
     }
 
