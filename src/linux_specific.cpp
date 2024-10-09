@@ -159,6 +159,20 @@ b8 os_load_and_run_dynamic_library(string file_path, string procedure, void *arg
     return false;
 }
 
+b8 os_can_access_pointer(void *pointer) {
+    char local_buffer[8];
+
+    struct iovec local, remote;
+    local.iov_base = &local_buffer;
+    local.iov_len  = sizeof(local_buffer);
+
+    remote.iov_base = pointer;
+    remote.iov_len  = sizeof(local_buffer);
+
+    size_t read = process_vm_readv(getpid(), &local, 1, &remote, 1, 0);   
+    return read != -1;
+}
+
 s32 os_get_number_of_hardware_threads() {
     return sysconf(_SC_NPROCESSORS_ONLN);
 }

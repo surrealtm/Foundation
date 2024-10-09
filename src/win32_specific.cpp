@@ -114,6 +114,16 @@ b8 os_load_and_run_dynamic_library(string file_path, string procedure, void *arg
     return procedure_pointer != null;
 }
 
+b8 os_can_access_pointer(void *pointer) {
+    MEMORY_BASIC_INFORMATION mbi = { 0 };
+
+    bool bad_pointer = true;
+
+    if(VirtualQuery(pointer, &mbi, sizeof(mbi))) bad_pointer = (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) != 0;
+
+    return !bad_pointer;
+}
+
 s32 os_get_number_of_hardware_threads() {
     SYSTEM_INFO system_info;
     GetSystemInfo(&system_info);
