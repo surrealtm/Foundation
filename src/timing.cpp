@@ -1,7 +1,13 @@
-#include "timing.h"
-#include "memutils.h"
-#include "os_specific.h"
-#include "threads.h"
+#if FOUNDATION_TELEMETRY_TRACY
+
+#elif FOUNDATION_TELEMETRY
+
+# include "timing.h"
+# include "memutils.h"
+# include "os_specific.h"
+# include "threads.h"
+
+
 
 /* ----------------------------------------- Internal Implementation ----------------------------------------- */
 
@@ -36,7 +42,7 @@ struct _tm_Timeline_Entry {
     s64 cycle_start;
     s64 cycle_end;
 
-    u8 color_index;
+    u32 color;
 };
 
 struct _tm_Summary_Entry {
@@ -49,13 +55,6 @@ struct _tm_Summary_Entry {
     Hardware_Time total_exclusive_hwtime;
     s64 total_inclusive_cycles;
     s64 count;
-};
-
-struct _tm_Color {
-    u8 r, g, b;
-
-    _tm_Color() : r(100), g(100), b(200) {};
-    _tm_Color(u8 r, u8 g, u8 b) : r(r), g(g), b(b) {};
 };
 
 struct _tm_Thread_State {
@@ -81,8 +80,6 @@ struct _tm_State {
     s64 summary_table_size = 0;
 
     Resizable_Array<_tm_Summary_Entry*> sorted_summary;
-
-    _tm_Color colors[__TM_MAX_COLORS];
 
     Hardware_Time total_hwtime_start = 0;
     Hardware_Time total_hwtime_end = 0;
@@ -421,9 +418,6 @@ void _tmInternalBuildSortedSummary(Timing_Output_Sorting sorting) {
 
 /* -------------------------------------------- API Implementation -------------------------------------------- */
 
-void _tmSetColor(int color_index, u8 r, u8 g, u8 b) {
-    _tm_state.colors[color_index] = { r, g, b };
-}
 
 void _tmReset() {
     if(_tm_state.setup) {
@@ -475,7 +469,7 @@ void _tmDestroy() {
     }
 }
 
-void _tmEnter(const char *procedure_name, const char *source_string, int color_index) {   
+void _tmEnter(const char *procedure_name, const char *source_string, u32 color) {   
 #if __TM_TRACK_OVERHEAD
     s64 overhead_start = os_get_hardware_time();
 #endif
@@ -539,7 +533,7 @@ void _tmEnter(const char *procedure_name, const char *source_string, int color_i
     entry->next_index        = MAX_S64;
     entry->first_child_index = MAX_S64;
     entry->last_child_index  = MAX_S64;
-    entry->color_index       = color_index >= 0 ? (u8) color_index : (__TM_MAX_COLORS - 1);
+    entry->color             = color;
     entry->hwtime_end        = 0;
     entry->hwtime_start      = os_get_hardware_time();
     entry->cycle_start       = os_get_cpu_cycle();
@@ -736,9 +730,9 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
             destination->start_in_nanoseconds = (s64) os_convert_hardware_time(source->hwtime_start - _tm_state.total_hwtime_start, Nanoseconds);
             destination->end_in_nanoseconds   = (s64) os_convert_hardware_time(source->hwtime_end   - _tm_state.total_hwtime_start, Nanoseconds);
             destination->depth                = _tmInternalCalculateStackDepth(thread, source);
-            destination->r = _tm_state.colors[source->color_index].r;
-            destination->g = _tm_state.colors[source->color_index].g;
-            destination->b = _tm_state.colors[source->color_index].b;
+            destination->r = (u8) ((source->color & 0x00ff0000) >> 16);
+            destination->g = (u8) ((source->color & 0x0000ff00) >> 8);
+            destination->b = (u8) ((source->color & 0x000000ff) >> 0);
         }
     }
 
@@ -763,3 +757,5 @@ void tmFreeData(Timing_Data *data) {
     data->summary = null;
     data->summary_count = 0;
 }
+
+#endif
