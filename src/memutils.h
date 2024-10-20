@@ -147,13 +147,13 @@ struct Memory_Pool {
 	// be maintained as a list over all free / active blocks.
 	struct Block {
 		u64 offset_to_next; // Offset in bytes to the next Block header.
+        u64 offset_to_next_free; // Offset in bytes to the next Block header that is currently free.
 		u64 size_in_bytes : 63; // Size in bytes of the usable data section of this block. Since the arena may be used by other things, this may not correspond to the offset to the next block.
-		u64 used : 1; // Set to false once a block is freed, so that it may be merged or reused.
-	
+		u64 used : 1; // Set to false once a block is freed, so that it may be merged or reused.	
 		u64 original_allocation_size; // The size_in_bytes of a block is not necessarily the "user"-requested size, e.g. for alignment or when merging blocks. This "user" size however is required for reallocation (copying the old data), as well as for allocator statistics.
-		u64 __padding; // The block header must be 16 byte aligned.
 
 		Block *next();
+        Block *next_free();
 		void *data();
 		b8 is_continuous_with(Block *block);
 		void merge_with(Block *block);
@@ -215,6 +215,7 @@ struct Resizable_Array {
 	void clear();
 	void clear_without_deallocation(); // If using this on a temp arena, etc.
     void reserve(s64 count);
+    void reserve_exact(s64 count);
     void add(T const &data);
     void insert(s64 index, T const &data);
 	void remove(s64 index);
@@ -309,7 +310,7 @@ struct Linked_List {
         Iterator &operator++() { this->pointer = this->pointer->next; return *this; }
         
         T &operator*()  { return this->pointer->data; }
-		T *operator->() { return this->pointer->data; }
+		T *operator->() { return &this->pointer->data; }
     };
 
 	Allocator *allocator = Default_Allocator;

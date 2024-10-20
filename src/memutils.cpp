@@ -320,6 +320,12 @@ Memory_Pool::Block *Memory_Pool::Block::next() {
 	return (Block *) (((char *) this) + this->offset_to_next);
 }
 
+Memory_Pool::Block *Memory_Pool::Block::next_free() {
+	if(this->offset_to_next_free == 0) return null;
+    
+	return (Block *) (((char *) this) + this->offset_to_next);
+}
+
 void *Memory_Pool::Block::data() {
 	return ((char *) this) + sizeof(Memory_Pool::Block);
 }
@@ -357,7 +363,7 @@ void *Memory_Pool::push(u64 size) {
 	Block *unused_block = this->first_block;
     
 	while(unused_block != null && (unused_block->used || unused_block->size_in_bytes < size)) {
-		unused_block = unused_block->next();
+		unused_block = unused_block->next_free();
 	}
     
 	void *data = null;
@@ -383,11 +389,13 @@ void *Memory_Pool::push(u64 size) {
             }
             
             split_block->original_allocation_size = -1;
-			split_block->size_in_bytes  = split_size;
-			split_block->used           = false;
-            
-			unused_block->offset_to_next = (u64) split_block - (u64) unused_block;
-			unused_block->size_in_bytes  = reused_size;
+            split_block->offset_to_next_free      = (u64) unused_block + unused_block->offset_to_next_free - (u64) split_block;
+			split_block->size_in_bytes            = split_size;
+			split_block->used                     = false;
+
+			unused_block->offset_to_next      = (u64) split_block - (u64) unused_block;
+            unused_block->offset_to_next_free = (u64) split_block - (u64) unused_block;
+			unused_block->size_in_bytes       = reused_size;
             
 			if(this->last_block == unused_block) this->last_block = split_block;
 		}
@@ -400,11 +408,8 @@ void *Memory_Pool::push(u64 size) {
 		//
 		// Allocators guarantee zero initialization on allocate().
 		//
-		
-		memset(unused_block->data(), 0, size);
-        
-		unused_block->original_allocation_size = size;
-        
+		memset(unused_block->data(), 0, size);        
+		unused_block->original_allocation_size = size;        
 		data = unused_block->data();
 	} else {
 		//
@@ -425,9 +430,10 @@ void *Memory_Pool::push(u64 size) {
 			u64 padding = this->arena->ensure_alignment(16);
 			assert(size < 0x7fffffffffffffef); // Make sure adding the padding won't overflow the size.
 			this->last_block->size_in_bytes += padding;
-		} else
+		} else {
 			this->arena->ensure_alignment(16);
-		
+        }
+            
 		void *pointer = this->arena->push(sizeof(Memory_Pool::Block) + size);
         
 		Block *block = (Block *) pointer;
@@ -459,9 +465,11 @@ void Memory_Pool::release(void *pointer) {
 	//
 	// Find the block that corresponds to this pointer.
 	//
+    Block *previous_previous_block = null;
 	Block *previous_block = null;
 	Block *block = this->first_block;
 	while(block && block->data() < pointer) {
+        previous_previous_block = previous_block;
 		previous_block = block;
 		block = block->next();
 	}
@@ -495,6 +503,8 @@ void Memory_Pool::release(void *pointer) {
 		if(next == this->last_block) this->last_block = block;
 		block->merge_with(next);
 	}
+
+    previous_previous_block->offset_to_next_free = (u64) block - (u64) previous_previous_block;
 }
 
 void *Memory_Pool::reallocate(void *old_pointer, u64 new_size) {

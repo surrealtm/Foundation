@@ -10,10 +10,10 @@
 template<typename T>
 void Resizable_Array<T>::maybe_grow(b8 force) {
     if(!this->data) {
-        this->allocated = Resizable_Array::INITIAL_SIZE;
+        if(this->allocated == 0) this->allocated = Resizable_Array::INITIAL_SIZE;
         this->data      = (T *) this->allocator->allocate(this->allocated * sizeof(T));
     } else if(force || this->count == this->allocated) {
-        this->allocated *= 2;
+        if(!force) this->allocated *= 2;
 		
         if(!this->allocator->_reallocate_procedure) {
             // Not all allocators actually provide a reallocation strategy (e.g. Memory Arenas). In that case,
@@ -75,7 +75,14 @@ void Resizable_Array<T>::reserve(s64 count) {
     if(this->allocated == 0) this->allocated = Resizable_Array::INITIAL_SIZE;
     s64 least_size = this->allocated + count;
     while(this->allocated < least_size) this->allocated *= 2;
-    this->maybe_grow(true);    
+    if(count > 0) this->maybe_grow(true);    
+}
+
+template<typename T>
+void Resizable_Array<T>::reserve_exact(s64 count) {
+    assert(count >= 0);
+    this->allocated = this->allocated + count;
+    if(count > 0) this->maybe_grow(true);
 }
 
 template<typename T>
@@ -162,7 +169,7 @@ template<typename T>
 Resizable_Array<T> Resizable_Array<T>::copy(Allocator *allocator) {
     Resizable_Array<T> result;
     result.allocator = allocator;
-    result.reserve(this->count);
+    result.reserve_exact(this->count);
     for(s64 i = 0; i < this->count; ++i) result.add(this->data[i]);
     return result;
 }
