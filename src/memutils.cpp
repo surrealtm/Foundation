@@ -504,7 +504,7 @@ void Memory_Pool::release(void *pointer) {
 		block->merge_with(next);
 	}
 
-    previous_previous_block->offset_to_next_free = (u64) block - (u64) previous_previous_block;
+    if(previous_previous_block) previous_previous_block->offset_to_next_free = (u64) block - (u64) previous_previous_block;
 }
 
 void *Memory_Pool::reallocate(void *old_pointer, u64 new_size) {

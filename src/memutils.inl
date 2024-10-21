@@ -140,6 +140,15 @@ void Resizable_Array<T>::remove_value_pointer(T *value) {
 }
 
 template<typename T>
+b8 Resizable_Array<T>::contains(T const &value) {
+    for(s64 i = 0; i < this->count; ++i) {
+        if(this->data[i] == value) return true;
+    }
+
+    return false;
+}
+
+template<typename T>
 T *Resizable_Array<T>::push() {
     this->maybe_grow();
     T *pointer = &this->data[this->count];
@@ -375,6 +384,19 @@ void Resizable_Block_Array<T, block_capacity>::remove_value_pointer(T *pointer) 
 }
 
 template<typename T, s64 block_capacity>
+b8 Resizable_Block_Array<T, block_capacity>::contains(T const &value) {
+    for(s64 i = 0; i < this->count; ++i) {
+        s64 index_in_block;
+        Block *block = this->find_block(this->count, &index_in_block);
+        if(block->data[index_in_block] == value) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+template<typename T, s64 block_capacity>
 T *Resizable_Block_Array<T, block_capacity>::push() {
     this->add(T());
     return &this->operator[](this->count - 1);
@@ -535,6 +557,18 @@ void Linked_List<T>::remove(s64 index) {
     }
 
     this->remove_node(node);
+}
+
+template<typename T>
+b8 Linked_List<T>::contains(T const &value) {
+    Linked_List_Node<T> *node = this->head;
+
+    while(node) {
+        if(node->data == value) return true;
+        node = node->next;
+    }
+
+    return false;
 }
 
 template<typename T>

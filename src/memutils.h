@@ -222,6 +222,7 @@ struct Resizable_Array {
 	void remove_range(s64 first_to_remove, s64 last_to_remove);
     void remove_value(T const &value);
     void remove_value_pointer(T *pointer);
+    b8 contains(T const &value);
     T *push();
 	T pop();
     T pop_first();
@@ -284,6 +285,7 @@ struct Resizable_Block_Array {
     void remove_range(s64 first, s64 last);
     void remove_value(T const &value);
     void remove_value_pointer(T  *pointer);
+    b8 contains(T const &value);
     T *push();
     void pop();
     void pop_first();
@@ -327,6 +329,7 @@ struct Linked_List {
 	void remove_value(T const &value);
 	void remove_value_pointer(T *value_pointer);
 	void remove(s64 index);
+    b8 contains(T const &value);
 	T *push();
 	T pop();
     T pop_first();
