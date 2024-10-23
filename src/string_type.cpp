@@ -412,7 +412,7 @@ s64 string_to_int(string input, b8 *success) {
     //
     // Ignore leading zeros.
     //
-    while(number_start < input.count && input[number_start] == '0') ++number_start;
+    while(number_start < input.count && (input[number_start] == '0' || input[number_start] == '_')) ++number_start;
 
     //
     // Parse each digit and sum the result together.
@@ -425,6 +425,9 @@ s64 string_to_int(string input, b8 *success) {
 
     while(valid && character_index < character_count) {
         character = input[input.count - character_index - 1];
+        ++character_index;
+
+        if(character == '_') continue;
 
         switch(radix) {
         case 2:
@@ -463,7 +466,6 @@ s64 string_to_int(string input, b8 *success) {
         b8 addcarry_overflow = _addcarry_u64(0, result, character_decimal_value, &result);
         u64 charpower_overflow;
         character_power = _mulx_u64(character_power, radix, &charpower_overflow);
-        ++character_index;
 
         if(addcarry_overflow || charpower_overflow) {
             valid = false;
@@ -500,7 +502,7 @@ f64 string_to_double(string input, b8 *success) {
     //
     // Ignore leading zeros.
     //
-    while(number_start < input.count && input[number_start] == '0') ++number_start;
+    while(number_start < input.count && (input[number_start] == '0' || input[number_start] == '_')) ++number_start;
 
     //
     // Find the dot seperating the whole from the fractional part.
@@ -517,6 +519,15 @@ f64 string_to_double(string input, b8 *success) {
 
     while(character_index + number_start < whole_part_size) {
         character = input[whole_part_size - character_index - 1];
+        ++character_index;
+
+        if(character == '_') continue;
+        
+        if(character < '0' || character > '9') {
+            valid = false;
+            continue;
+        }
+        
         character_decimal_value = (f64) (character - '0') * character_power;
 
         feclearexcept(FE_ALL_EXCEPT);
@@ -524,7 +535,6 @@ f64 string_to_double(string input, b8 *success) {
         if(fetestexcept(FE_OVERFLOW)) valid = false;
 
         character_power = character_power * radix;
-        ++character_index;
     }
 
     if(dot_index != -1) {
@@ -536,14 +546,22 @@ f64 string_to_double(string input, b8 *success) {
 
         while(character_index < input.count) {
             character = input[character_index];
+            ++character_index;
+            
             character_decimal_value = (f64) (character - '0') * character_power;
+
+            if(character == '_') continue;
+        
+            if(character < '0' || character > '9') {
+                valid = false;
+                continue;
+            }
 
             feclearexcept(FE_ALL_EXCEPT);
             result += character_decimal_value;
             if(fetestexcept(FE_OVERFLOW)) valid = false;
 
             character_power = character_power / radix;
-            ++character_index;
         }
     }
 
