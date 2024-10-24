@@ -683,7 +683,7 @@ void os_free_stack_trace(Stack_Trace *trace) {
 /* --------------------------------------------- Bit Manipulation --------------------------------------------- */
 
 u64 os_highest_bit_set(u64 value) {
-    return 64 - __builtin_clzll(value);
+    return 63 - __builtin_clzll(value);
 }
 
 u64 os_lowest_bit_set(u64 value) {
