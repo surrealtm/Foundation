@@ -974,10 +974,10 @@ string mprint(Allocator *allocator, const char *format, ...) {
     s64 count = vsnprintf(null, 0, format, list0);
     va_end(list0);
 
-    string result = allocate_string(allocator, count);
+    string result = allocate_string(allocator, count + 1);
     va_list list1;
     va_start(list1, format);
-    vsnprintf((char *) result.data, result.count + 1, format, list1); // Don't do the terminating null character!
+    vsnprintf((char *) result.data, result.count + 1, format, list1);
     va_end(list1);
 
     return result;

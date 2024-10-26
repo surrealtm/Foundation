@@ -772,14 +772,14 @@ void os_free_stack_trace(Stack_Trace *trace) {
 
 u64 os_highest_bit_set(u64 value) {
     u32 highest_bit = 0;
-    if(!_BitScanForward64(&highest_bit, value))
+    if(!_BitScanReverse64(&highest_bit, value))
         return 0; // BitScanForward returns 0 if the value is 0
     return highest_bit;
 }
 
 u64 os_lowest_bit_set(u64 value) {
     u32 lowest_bit = 0;
-    if(!_BitScanReverse64(&lowest_bit, value))
+    if(!_BitScanForward64(&lowest_bit, value))
         return 0; // BitScanReverse returns 0 if the value is 0
     return lowest_bit;
 }
