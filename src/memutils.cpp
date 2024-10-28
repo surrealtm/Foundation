@@ -314,18 +314,6 @@ Allocator Memory_Arena::allocator() {
 
 /* ----------------------------------------------- Memory Pool ----------------------------------------------- */
 
-Memory_Pool::Block *Memory_Pool::Block::next() {
-	if(this->offset_to_next == 0) return null;
-    
-	return (Block *) (((char *) this) + this->offset_to_next);
-}
-
-Memory_Pool::Block *Memory_Pool::Block::next_free() {
-	if(this->offset_to_next_free == 0) return null;
-    
-	return (Block *) (((char *) this) + this->offset_to_next);
-}
-
 void *Memory_Pool::Block::data() {
 	return ((char *) this) + sizeof(Memory_Pool::Block);
 }
@@ -334,36 +322,70 @@ b8 Memory_Pool::Block::is_continuous_with(Block *block) {
 	return (((char *) this->data()) + this->size_in_bytes) == (char *) block;
 }
 
-void Memory_Pool::Block::merge_with(Block *block) {
-	if(block->offset_to_next) {
-		this->offset_to_next = (u64) block->next() - (u64) this;
+void Memory_Pool::Block::merge_with(Block *src) {
+	if(src->next) {
+		this->next = src->next;
 	} else {
-		this->offset_to_next = 0;
+		this->next = null;
 	}
+
+    if(src->next_free) {
+        this->next_free = src->next_free;
+    } else {
+        this->next_free = null;
+    }
     
-	this->size_in_bytes += block->size_in_bytes + sizeof(Memory_Pool::Block);
+	this->size_in_bytes = this->size_in_bytes + src->size_in_bytes + sizeof(Memory_Pool::Block);
+}
+
+Memory_Pool::Block *Memory_Pool::Block::split(u64 split_position, u64 split_size) {
+    Block *split_block = (Block *) split_position;
+    if(this->next) {
+        split_block->next = this->next;
+    } else {
+        split_block->next = null;
+    }
+
+    if(this->next_free) {
+        split_block->next_free = this->next_free;
+    } else {
+        split_block->next_free = null;
+    }
+
+    split_block->original_allocation_size = 0;
+    split_block->size_in_bytes = split_size;
+    split_block->used = false;
+
+    this->next = split_block;
+    this->next_free = split_block;
+
+    return split_block;
 }
 
 void Memory_Pool::create(Memory_Arena *arena) {
 	this->arena = arena;
 	this->first_block = null;
+    this->last_block = null;
 }
 
 void Memory_Pool::destroy() {
 	this->first_block = null;
+    this->last_block = null;
 }
 
-void *Memory_Pool::push(u64 size) {
-	assert(size > 0 && size <= 0x7fffffffffffffff); // Make sure we only require 63 bits for the size, or else our Block struct cannot properly encode it.
+void *Memory_Pool::acquire(u64 size) {
+	assert(size > 0, "Invalid requested memory pool size.");
     
 	//
 	// Query the Memory Pool for an inactive block that can be reused for this
 	// allocation.
 	//
 	Block *unused_block = this->first_block;
+    if(unused_block && unused_block->used) unused_block = unused_block->next_free;
     
-	while(unused_block != null && (unused_block->used || unused_block->size_in_bytes < size)) {
-		unused_block = unused_block->next_free();
+	while(unused_block != null && unused_block->size_in_bytes < size) {
+        assert(!unused_block->used, "Degenerated Memory Pool Freelist"); // Make sure we didn't degenerate somewhere
+		unused_block = unused_block->next_free;
 	}
     
 	void *data = null;
@@ -374,29 +396,14 @@ void *Memory_Pool::push(u64 size) {
 		//
 		u64 reused_size = align_to(size, 16, u64);
 		
-		if(unused_block->size_in_bytes >= reused_size + Memory_Pool::min_payload_size_to_split + sizeof(Memory_Pool::Block)) {
+		if(unused_block->size_in_bytes >= reused_size + Memory_Pool::MIN_PAYLOAD_SIZE_TO_SPLIT + sizeof(Memory_Pool::Block)) {
 			//
 			// Split the existing block into two parts, and only use the first one.
 			//
-			u64 split_size  = unused_block->size_in_bytes - reused_size - sizeof(Memory_Pool::Block);
-			u64 split_start = align_to((u64) unused_block->data() + size, 16, u64);
-            
-			Block *split_block = (Block *) split_start;
-			if(unused_block->offset_to_next) {
-				split_block->offset_to_next = (u64) unused_block + unused_block->offset_to_next - split_start;
-			} else {
-				split_block->offset_to_next = 0;
-            }
-            
-            split_block->original_allocation_size = -1;
-            split_block->offset_to_next_free      = (u64) unused_block + unused_block->offset_to_next_free - (u64) split_block;
-			split_block->size_in_bytes            = split_size;
-			split_block->used                     = false;
-
-			unused_block->offset_to_next      = (u64) split_block - (u64) unused_block;
-            unused_block->offset_to_next_free = (u64) split_block - (u64) unused_block;
-			unused_block->size_in_bytes       = reused_size;
-            
+			u64 split_size     = unused_block->size_in_bytes - reused_size - sizeof(Memory_Pool::Block);
+			u64 split_position = align_to((u64) unused_block->data() + size, 16, u64);
+            Block *split_block = unused_block->split(split_position, split_size);
+            unused_block->size_in_bytes = reused_size;            
 			if(this->last_block == unused_block) this->last_block = split_block;
 		}
 		
@@ -404,13 +411,25 @@ void *Memory_Pool::push(u64 size) {
 		// Mark this block as used now.
 		//
 		unused_block->used = true;
+        unused_block->original_allocation_size = size;
+
+        //
+        // All previous blocks that point to this block as being unused need to update their next_free pointer.
+        // These can be multiple, so there probably isn't a smart way of doing this.
+        //
+        {
+            Block *block = first_block;
+            while(block < unused_block) {
+                if(block->next_free == unused_block)    block->next_free = unused_block->next_free;
+                block = block->next;
+            }
+        }
         
 		//
 		// Allocators guarantee zero initialization on allocate().
 		//
-		memset(unused_block->data(), 0, size);        
-		unused_block->original_allocation_size = size;        
 		data = unused_block->data();
+		memset(data, 0, size);        
 	} else {
 		//
 		// The Memory Pool does not have any unused block that could be reused for
@@ -425,35 +444,33 @@ void *Memory_Pool::push(u64 size) {
 		// size_in_bytes of the previous block if we know that the only push on the 
 		// arena was us.
 		//
-		if(this->last_block != null &&
-           (u64) this->last_block->data() + this->last_block->size_in_bytes == (u64) this->arena->base + this->arena->size) {
+		if(this->last_block != null && (u64) this->last_block->data() + this->last_block->size_in_bytes == (u64) this->arena->base + this->arena->size) {
 			u64 padding = this->arena->ensure_alignment(16);
-			assert(size < 0x7fffffffffffffef); // Make sure adding the padding won't overflow the size.
 			this->last_block->size_in_bytes += padding;
 		} else {
 			this->arena->ensure_alignment(16);
         }
             
-		void *pointer = this->arena->push(sizeof(Memory_Pool::Block) + size);
-        
-		Block *block = (Block *) pointer;
-		block->offset_to_next = 0;
-		block->size_in_bytes  = size;
-		block->used           = true;
-		block->original_allocation_size = size;
+		Block *block = (Block *) this->arena->push(sizeof(Memory_Pool::Block) + size);
+
+        if(block != null) { // In case the memory arena runs out of space.
+            block->next          = null;
+			block->next_free     = null;
+            block->original_allocation_size = size;
+            block->size_in_bytes = size;
+            block->used          = true;
 		
-		if(this->last_block) {
-			assert(this->first_block != null);
-			assert(this->last_block->offset_to_next == 0);
-			this->last_block->offset_to_next = (u64) block - (u64)this->last_block;
-			this->last_block = block;
-		} else {
-			this->first_block = block;
-			this->last_block = block;
-		}
+            if(this->last_block) {
+                this->last_block->next = block;
+                this->last_block = block;
+            } else {
+                this->first_block = block;
+                this->last_block = block;
+            }
         
-		data = block->data();
-	}
+            data = block->data();
+        }
+    }
     
 	return data;
 }
@@ -463,111 +480,100 @@ void Memory_Pool::release(void *pointer) {
 	if(!pointer) return;
     
 	//
-	// Find the block that corresponds to this pointer.
+	// Find the block that corresponds to this pointer. Unfortunately we need to iterate here to find the
+    // previous block.
 	//
-    Block *previous_previous_block = null;
 	Block *previous_block = null;
-	Block *block = this->first_block;
-	while(block && block->data() < pointer) {
-        previous_previous_block = previous_block;
-		previous_block = block;
-		block = block->next();
+	Block *freed_block = this->first_block;
+
+	while(freed_block && freed_block->data() < pointer) {
+		previous_block = freed_block;
+		freed_block = freed_block->next;
 	}
     
-	if(!block || block->data() != pointer) {
-		// The pointer is invalid, it does not correspond to a block.
-		foundation_error("Attempted to release pointer from Memory_Pool which does not correspond to a block.");
-		return;
-	}
+    // The pointer does not correspond to a block, so this is an invalid call.
+	if(!freed_block || freed_block->data() != pointer) return;
     
 	//
 	// Release this block. If possible, merge with the previous and the next block
 	// so that the block list stays as small as possible.
 	//
-	block->used = false;
+	freed_block->used = false;
 	
-	if(previous_block && !previous_block->used && previous_block->is_continuous_with(block)) {
-		//
-		// Merge with the previous block.
-		//
-		if(block == this->last_block) this->last_block = previous_block;
-		previous_block->merge_with(block);
-		block = previous_block;
-	}
-    
-	Block *next = block->next();
-	if(next && !next->used && block->is_continuous_with(next)) {
-		//
-		// Merge with the next block.
-		//
-		if(next == this->last_block) this->last_block = block;
-		block->merge_with(next);
+    //
+    // Attempt to merge with the previous block
+    //
+	if(previous_block && !previous_block->used && previous_block->is_continuous_with(freed_block)) {
+		previous_block->merge_with(freed_block);
+		freed_block = previous_block;
 	}
 
-    if(previous_previous_block) previous_previous_block->offset_to_next_free = (u64) block - (u64) previous_previous_block;
+    //
+    // Attempt to merge with the next block
+    //
+	Block *next = freed_block->next;
+	if(next && !next->used && freed_block->is_continuous_with(next)) {
+		freed_block->merge_with(next);
+	}
+
+    //
+    // Update all next_free pointers of previous blocks that either did not have one at all, or one that comes
+    // after this freed block.
+    //
+    Block *block = first_block;
+    while(block < freed_block) {
+        if(!block->next_free || block->next_free > freed_block) block->next_free = freed_block;
+        block = block->next;
+    }
 }
 
-void *Memory_Pool::reallocate(void *old_pointer, u64 new_size) {
+void *Memory_Pool::reacquire(void *old_pointer, u64 new_size) {
+    // @Speed:
     // This is definitely not a very smart reallocation technique, but it has to do for now.
     // In the future, it would make sense to only actually allocate a new block if the new size is bigger than
     // the old one. If the new size is smaller, the current block could be split to free up space.
-    u64 old_size = this->query_allocation_size(old_pointer);
-    void *new_pointer = this->push(new_size);
-    
+    u64 old_size      = this->query_size(old_pointer);
+    void *new_pointer = this->acquire(new_size);    
     memmove(new_pointer, old_pointer, min(old_size, new_size));
     this->release(old_pointer);
     return new_pointer;
 }
 
-u64 Memory_Pool::query_allocation_size(void *pointer) {
-	//
-	// This is required for reallocation!
-	//
+u64 Memory_Pool::query_size(void *pointer) {
 	Block *block = this->first_block;
 	while(block && block->data() < pointer) {
-		block = block->next();
+		block = block->next;
 	}
     
-	if(block == null) return 0;
-    
-	assert(block != null && block->data() == pointer);
-	assert(block->used);
+	if(block == null || block->data() != pointer) return 0;
     
 	return block->original_allocation_size;
 }
 
 void Memory_Pool::debug_print(u32 indent) {
-	printf("%-*s=== Memory Pool ===\n", indent, "");
+    printf("------------------------------ MEMORY POOL ------------------------------\n");
+    Block *block = first_block;
+
+    s64 index = 0;
+    while(block) {
+        block = block->next;
+
+        printf("  > Block %" PRId64 " (0x%p): %" PRIu64 "b, used: %" PRIu64 ", next_free: 0x%p.\n", index, block, block->size_in_bytes, block->used, block->next_free);
+        
+        ++index;
+    }
     
-	printf("%-*s  Underlying Arena:\n", indent, "");
-	this->arena->debug_print(indent + 4);
-    
-	printf("%-*s  Pool Blocks:\n", indent, "");
-    
-	if(this->first_block) {
-		u64 index = 0;
-		Block *block = this->first_block;
-		while(block) {
-			assert((u8 *) block >= this->arena->base && (u8 *) block < (u8 *) this->arena->base + this->arena->size);
-			s64 offset_in_arena = (s64) block - (s64) this->arena->base;
-			printf("%-*s    > %" PRIu64 ": %" PRIu64 "b (Original: %" PRIu64 "b), %s. (Offset inside arena: %" PRIu64 "b, offset to next block: %" PRIu64 "b).\n", indent, "", index, block->size_in_bytes, block->original_allocation_size, block->used ? "Used" : "Free", offset_in_arena, block->offset_to_next); // An original allocation size of (u64) -1 means that this is a split_block (look into the memory pool's push procedure).
-			block = block->next();
-			++index;
-		}
-	} else
-		printf("%-*s    (Empty Pool).\n", indent, "");
-    
-	printf("%-*s=== Memory Pool ===\n", indent, "");
+    printf("------------------------------ MEMORY POOL ------------------------------\n");
 }
 
 Allocator Memory_Pool::allocator() {
 	Allocator allocator = {
 		this, 
-		[](void *data, u64 size)      -> void* { return ((Memory_Pool *) data)->push(size); },
+		[](void *data, u64 size)      -> void* { return ((Memory_Pool *) data)->acquire(size); },
 		[](void *data, void *pointer) -> void  { return ((Memory_Pool *) data)->release(pointer); },
-		[](void *data, void *old_pointer, u64 new_size) -> void * { return ((Memory_Pool*) data)->reallocate(old_pointer, new_size); },
+		[](void *data, void *old_pointer, u64 new_size) -> void * { return ((Memory_Pool*) data)->reacquire(old_pointer, new_size); },
 		[](void *data) -> void { ((Memory_Pool*) data)->destroy(); },
-		[](void *data, void *pointer) -> u64   { return ((Memory_Pool *) data)->query_allocation_size(pointer); } 
+		[](void *data, void *pointer) -> u64   { return ((Memory_Pool *) data)->query_size(pointer); } 
 	};
     
 	return allocator;

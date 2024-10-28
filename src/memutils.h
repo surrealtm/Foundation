@@ -143,25 +143,26 @@ struct Memory_Arena {
  * A memory pool guarantees zero-initialized memory to be returned on push.
  */
 struct Memory_Pool {
-	// This is the block header that gets inlined in an allocation block, to
-	// be maintained as a list over all free / active blocks.
+    static const u64 MIN_PAYLOAD_SIZE_TO_SPLIT = 32; // The minimum data size in bytes for a block to make sense, meaning we don't split a block if the "left-over" data size is so small, that making a new block would not make sense
+
+    // This is the block header that gets inlined in an allocation block, to
+	// be maintained as a list over all used / unused blocks.
 	struct Block {
-		u64 offset_to_next; // Offset in bytes to the next Block header.
-        u64 offset_to_next_free; // Offset in bytes to the next Block header that is currently free.
+        // @Cleanup: Use absolute pointers here...
+		Block *next;
+        Block *next_free;
 		u64 size_in_bytes : 63; // Size in bytes of the usable data section of this block. Since the arena may be used by other things, this may not correspond to the offset to the next block.
 		u64 used : 1; // Set to false once a block is freed, so that it may be merged or reused.	
 		u64 original_allocation_size; // The size_in_bytes of a block is not necessarily the "user"-requested size, e.g. for alignment or when merging blocks. This "user" size however is required for reallocation (copying the old data), as well as for allocator statistics.
 
-		Block *next();
-        Block *next_free();
 		void *data();
 		b8 is_continuous_with(Block *block);
 		void merge_with(Block *block);
+        Block *split(u64 split_position, u64 split_size);
 	};
 
-	static const u64 min_payload_size_to_split = 32; // The minimum data size in bytes for a block to make sense, meaning we won't split a block if the "left-over" data size is so small, that making a new block would not make sense.
 	static_assert(sizeof(Memory_Pool::Block) % 16 == 0, "The Memory Pool Block was expected to be 16 byte aligned.");
-	static_assert(Memory_Pool::min_payload_size_to_split >= sizeof(Memory_Pool::Block), "The aligned_block_size of the Memory_Pool is too little.");
+	static_assert(Memory_Pool::MIN_PAYLOAD_SIZE_TO_SPLIT >= sizeof(Memory_Pool::Block), "The aligned_block_size of the Memory_Pool is too little.");
 
 	Memory_Arena *arena = null;
 	Block *first_block  = null;
@@ -177,11 +178,11 @@ struct Memory_Pool {
 	// the first place.
 	void destroy();
 
-	void *push(u64 size);
+	void *acquire(u64 size);
 	void release(void *pointer);
-	void *reallocate(void *old_pointer, u64 new_size);
+	void *reacquire(void *old_pointer, u64 new_size);
 
-	u64 query_allocation_size(void *pointer);
+	u64 query_size(void *pointer);
 
 	void debug_print(u32 indent = 0);
 
