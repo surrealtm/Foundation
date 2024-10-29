@@ -284,7 +284,6 @@ b8 os_commit_memory(void *base, u64 commit_size, b8 executable) {
         foundation_error("Failed to commit %" PRIu64 " bytes of memory.", commit_size);
     }
 
-    memset(base, 0, commit_size); // Windows guarantees the committed pages to be zero-initialized, so we want to mimick that on linux. (This was ported from the compiler, so I'm assuming this is actually needed...)
     return result == 0;
 }
 

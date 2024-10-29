@@ -128,8 +128,6 @@ void *heap_allocate(void * /*data = null */, u64 size) {
     pointer = malloc(size);
 #endif
 
-    memset(pointer, 0, size);
-
     return pointer;
 }
 
@@ -430,7 +428,6 @@ void *Memory_Pool::acquire(u64 size) {
         // Allocators guarantee zero initialization on allocate().
         //
         data = unused_block->data();
-        memset(data, 0, size);
     } else {
         //
         // The Memory Pool does not have any unused block that could be reused for
