@@ -959,6 +959,8 @@ char *String_Builder::finish_as_cstring() {
         block = next_block;
     }
 
+    result[offset] = 0;
+
     this->first = { 0 };
     this->current = null;
     this->total_count = 0;
