@@ -143,12 +143,12 @@ struct Memory_Arena {
  * A memory pool guarantees zero-initialized memory to be returned on push.
  */
 struct Memory_Pool {
-    static const u64 MIN_PAYLOAD_SIZE_TO_SPLIT = 32; // The minimum data size in bytes for a block to make sense, meaning we don't split a block if the "left-over" data size is so small, that making a new block would not make sense
-
+    static const u64 MIN_PAYLOAD_TO_SPLIT = 32; // The minimum data size in bytes for a block to make sense, meaning we don't split a block if the "left-over" data size is so small, that making a new block would not make sense
+    static const u64 SKIP_LIST_CAPACITY = 512;
+    
     // This is the block header that gets inlined in an allocation block, to
 	// be maintained as a list over all used / unused blocks.
 	struct Block {
-        // @Cleanup: Use absolute pointers here...
 		Block *next;
         Block *next_free;
 		u64 size_in_bytes : 63; // Size in bytes of the usable data section of this block. Since the arena may be used by other things, this may not correspond to the offset to the next block.
@@ -158,16 +158,20 @@ struct Memory_Pool {
 		void *data();
 		b8 is_continuous_with(Block *block);
 		void merge_with(Block *block);
-        Block *split(u64 split_position, u64 split_size);
+        Block *split(u64 input_size_in_bytes);
 	};
 
 	static_assert(sizeof(Memory_Pool::Block) % 16 == 0, "The Memory Pool Block was expected to be 16 byte aligned.");
-	static_assert(Memory_Pool::MIN_PAYLOAD_SIZE_TO_SPLIT >= sizeof(Memory_Pool::Block), "The aligned_block_size of the Memory_Pool is too little.");
+	static_assert(Memory_Pool::MIN_PAYLOAD_TO_SPLIT >= sizeof(Memory_Pool::Block), "The aligned_block_size of the Memory_Pool is too little.");
 
 	Memory_Arena *arena = null;
 	Block *first_block  = null;
 	Block *last_block   = null;
-
+    Block *skip_list[SKIP_LIST_CAPACITY];
+    s64 block_count;
+    s64 skip_list_count;
+    s64 skip_list_built_for_block_count;
+    
 	// Sets up an empty memory pool. Since a memory pool shares the arena, it is not the responsibility
 	// of the pool to manage the arena.
 	void create(Memory_Arena *arena);
@@ -181,13 +185,18 @@ struct Memory_Pool {
 	void *acquire(u64 size);
 	void release(void *pointer);
 	void *reacquire(void *old_pointer, u64 new_size);
-
 	u64 query_size(void *pointer);
-
-	void debug_print(u32 indent = 0);
-
+    
 	// Sets up and returns an allocator based on this memory pool.
 	Allocator allocator();
+
+    /* Implementation */
+    void maybe_rebuild_entire_skip_list();
+    s64 search_skip_list_for_index(Memory_Pool::Block *block_pointer, b8 return_previous);
+    Memory_Pool::Block *search_skip_list(Memory_Pool::Block *block_pointer, b8 return_previous);
+    void maybe_replace_skip_list_entry(Memory_Pool::Block *to_replace, Memory_Pool::Block *replace_with);
+    void insert_into_free_list(Memory_Pool::Block *freed_block);
+    void replace_free_list_entry(Memory_Pool::Block *to_replace, Memory_Pool::Block *replace_with);    
 };
 
 template<typename T>

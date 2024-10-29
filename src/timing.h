@@ -23,6 +23,7 @@
 //
 // Tracy profiler.
 // YOU MUST ALSO DEFINE TRACY_ENABLE (AND POTENTIALLY TRACY_NO_EXIT) IN THE SOLUTION FILE
+// This unfortunately overrides assert, and there is nothing I can do about it...
 //
 
 # include "tracy/tracy/Tracy.hpp"
