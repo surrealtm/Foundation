@@ -663,7 +663,7 @@ void Memory_Pool::maybe_replace_skip_list_entry(Memory_Pool::Block *to_replace, 
 
     if(this->search_skip_list_for_index(replace_with, false) != -1) {
         // Avoid duplicates in the skip list
-        if(i + 1 < this->skip_list_count) memcpy(&this->skip_list[i], &this->skip_list[i + 1], (this->skip_list_count - i - 1) * sizeof(Block));
+        if(i + 1 < this->skip_list_count) memmove(&this->skip_list[i], &this->skip_list[i + 1], (this->skip_list_count - i - 1) * sizeof(Block*));
         --this->skip_list_count;
     } else {
         this->skip_list[i] = replace_with;

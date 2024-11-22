@@ -616,7 +616,7 @@ u64 os_get_cpu_cycle() {
 /* ----------------------------------------------- System Calls ----------------------------------------------- */
 
 s32 os_system_call(const char *executable, const char *arguments[], s64 argument_count) {
-    const char **complete_arguments = (const char **) Default_Allocator->allocate(sizeof(char *) * (argument_count + 1)); // @@Leak
+    const char **complete_arguments = (const char **) Default_Allocator->allocate(sizeof(char *) * (argument_count + 2)); // @@Leak
 
     complete_arguments[0] = executable;
     for(s64 i = 0; i < argument_count; ++i) complete_arguments[i + 1] = arguments[i];

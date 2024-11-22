@@ -380,16 +380,13 @@ b8 os_delete_directory(string file_path) {
     cstring[file_path.count + 0] = 0;
     cstring[file_path.count + 1] = 0;
     
-    SHFILEOPSTRUCTA file_operation;
+    SHFILEOPSTRUCTA file_operation = { 0 };
     file_operation.hwnd   = null;
     file_operation.wFunc  = FO_DELETE;
     file_operation.pFrom  = cstring;
     file_operation.pTo    = null;
     file_operation.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
 
-    // @Cleanup: This just randomly fails sometimes with the weirdest return values...
-    // I am not sure what the fuck is happening here, so maybe we need to find something else man.
-	//  ^ The above message was copied from the prometheus module, not sure...
 	u32 result = SHFileOperationA(&file_operation);
 
 	Default_Allocator->deallocate(cstring);
