@@ -8,6 +8,7 @@
 #include <dbghelp.h> // For stack walking
 #include <shellscalingapi.h> // For DPI awareness.
 #include <audioclient.h>
+#include <intrin.h> // For lzcnt
 
 
 
@@ -779,6 +780,16 @@ u64 os_lowest_bit_set(u64 value) {
     if(!_BitScanForward64(&lowest_bit, value))
         return 0; // BitScanReverse returns 0 if the value is 0
     return lowest_bit;
+}
+
+u64 os_count_leading_zeros(u64 value) {
+    return __lzcnt64(value);
+}
+
+u64 os_count_trailing_zeros(u64 value) {
+    unsigned long result;
+    _BitScanReverse64(&result, value);
+    return result - 1;
 }
 
 b8 os_value_fits_in_bits(u64 value, u64 available_bits, b8 sign) {
