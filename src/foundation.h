@@ -3,6 +3,7 @@
 #define NOMINMAX
 
 #include <math.h>   // For ceil, pow...
+#include <float.h>
 #include <stdio.h>  // For printf
 #include <memory.h> // For memset, memcpy...
 
@@ -177,6 +178,7 @@ enum Time_Unit {
 enum Radix {
 	RADIX_Floating_Point = 0,
 	RADIX_Binary         = 2,
+    RADIX_Octal          = 8,
 	RADIX_Decimal        = 10,
 	RADIX_Hexadecimal    = 16,
     RADIX_COUNT,

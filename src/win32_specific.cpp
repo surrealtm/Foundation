@@ -783,13 +783,19 @@ u64 os_lowest_bit_set(u64 value) {
 }
 
 u64 os_count_leading_zeros(u64 value) {
-    return __lzcnt64(value);
+    unsigned long result;
+    _BitScanReverse64(&result, value);
+    return 63 - result;
 }
 
 u64 os_count_trailing_zeros(u64 value) {
     unsigned long result;
-    _BitScanReverse64(&result, value);
-    return result - 1;
+    _BitScanForward64(&result, value);
+    return result;
+}
+
+u64 os_count_bits_set(u64 value) {
+    return __popcnt64(value);
 }
 
 b8 os_value_fits_in_bits(u64 value, u64 available_bits, b8 sign) {

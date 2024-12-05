@@ -697,6 +697,10 @@ u64 os_count_trailing_zeros(u64 value) {
     return __builtin_ctzll(value);
 }
 
+u64 os_count_bits_set(u64 value) {
+    return __builtin_popcountll(value);
+}
+
 b8 os_value_fits_in_bits(u64 value, u64 available_bits, b8 sign) {
     if(value == 0 || available_bits == 64) return true;
 
