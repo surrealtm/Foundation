@@ -354,7 +354,7 @@ b8 os_create_directory(string file_path) {
     s64 parent_folder_end = os_search_path_for_directory_slash_reverse(file_path);
     if(parent_folder_end != -1) {
         string parent_folder = substring_view(file_path, 0, parent_folder_end);
-        if(!os_create_directory(parent_folder)) return false;
+        if(!os_directory_exists(parent_folder) && !os_create_directory(parent_folder)) return false;
     }
         
     char *cstring = to_cstring(Default_Allocator, file_path);
