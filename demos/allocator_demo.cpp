@@ -4,312 +4,209 @@
 
 #include <random>
 
-#define LOG_FILE "ela.txt"_s
-#define LOG_WIDTH 640
+struct Ela {
+    // nocheckin: The problem is that when merging blocks together, they may have to go into a seperate bin, which
+    // we don't do right now...
+    static const s64 BIN_COUNT = 1;
 
-struct Debug_Printer {
-    Resizable_Array<string> lines;
+    struct Block {
+        static const s64 HEADER_SIZE = 16; // Ought to be 16-byte aligned...
 
-    void create(s64 line_count, s64 line_length) {
-        for(s64 i = 0; i < line_count; ++i) {
-            string _string = allocate_string(Default_Allocator, line_length);
-            for(s64 i = 0; i < line_length; ++i) {
-                _string.data[i] = ' ';            
-            }
-            
-            this->lines.add(_string);
-        }
-    }
+        // These are appended ahead of the payload
+        u64 block_size_in_bytes; // The actual size in bytes of the block
+        u64 user_size_in_bytes;  // The user requested (unaligned, unmerged) size in bytes  // nocheckin
 
-    s64 calculate_nodes_at_depth(s64 branch_factor, s64 depth) {
-        if(depth < 1) return 1;
-
-        s64 result = branch_factor;
-
-        for(s64 i = 1; i < depth; ++i) {
-            result *= branch_factor;
-        }
-
-        return result;
-    }
-
-    s64 calculate_width_per_node_at_depth(s64 branch_factor, s64 depth) {
-        s64 nodes_at_depth = this->calculate_nodes_at_depth(branch_factor, depth);
-        return (this->lines[0].count / nodes_at_depth);
-    }
-
-    s64 calculate_offset_for_node_at_depth(s64 branch_factor, s64 depth, s64 index_at_depth) {
-        return index_at_depth * this->calculate_width_per_node_at_depth(branch_factor, depth);
-    }
-
-    s64 calculate_line_at_depth(s64 depth) {
-        return depth * 2;
-    }
-
-    void insert(s64 branch_factor, s64 depth, s64 index_at_depth, string value) {
-        s64 width = this->calculate_width_per_node_at_depth(branch_factor, depth);
-        s64 left  = this->calculate_offset_for_node_at_depth(branch_factor, depth, index_at_depth);
-
-        assert(value.count <= width); // The debug printer is not wide enough for the tree
-
-        s64 line_index = this->calculate_line_at_depth(depth);
-        s64 offset_in_line = left + width / 2 - value.count / 2;
-
-        assert(line_index >= 0 && line_index < this->lines.count);
-        string &line = this->lines[line_index];
-        assert(offset_in_line >= 0 && offset_in_line + value.count <= line.count);
-
-        memcpy(&line.data[offset_in_line], value.data, value.count);
-    }
-
-    void flush(string file_path, b8 append) {
-        if(append) {
-            string header = allocate_string(Default_Allocator, this->lines[0].count + 4);
-            for(s64 i = 2; i < header.count - 2; ++i) header[i] = '-';
-            header[0] = '\n';
-            header[1] = '\n';
-            header[header.count - 2] = '\n';
-            header[header.count - 1] = '\n';
-            os_write_file(file_path, header, true);
-        } else {
-            os_delete_file(file_path);
-        }
-
-        for(string &line : this->lines) {
-            os_write_file(file_path, line, true);
-            os_write_file(file_path, "\n"_s, true);
-        }
-    }
-};
-
-struct Ela_Block {
-    void *user_pointer;
-    u32 size_in_bytes;
-    b8 used;
-};
-
-struct Ela_Tree {
-    static const s64 BRANCH_FACTOR = 4;
-    
-    struct Node {
-        Node *children[BRANCH_FACTOR];
-        Ela_Block entries[BRANCH_FACTOR - 1];
-        u8 child_count;
-        u8 entry_count;
-
-        void reset() {
-            this->child_count = 0;
-            this->entry_count = 0;
-        }
-
-        s64 find_lower_bound(void *user_pointer) {
-            s64 low = 0, high = this->entry_count - 1;
-
-            while(low <= high) {
-                s64 median = (low + high) / 2;
-                if(this->entries[median].user_pointer == user_pointer) {
-                    low = median;
-                    break;
-                } else if(this->entries[median].user_pointer < user_pointer) {
-                    low = median + 1;
-                } else {
-                    high = median - 1;
-                }
-            }
-
-            return low;
-        }
-
-        b8 is_leaf() {
-            return this->child_count == 0;
-        }
-
-        b8 should_be_split_before_insert() {
-            return this->entry_count + 1 == BRANCH_FACTOR; // We wouldn't be able to fit one more entry into this node
-        }
-
-        Node *split(Memory_Arena *arena, Node *parent_node, b8 parent_is_new_root, void *user_pointer) {
-            u8 median = this->entry_count / 2;
-
-            Node *right = (Node *) arena->push(sizeof(Node));
-            right->reset();
-
-            // If this isn't a leaf node, split the children between left and right now
-            if(this->child_count) {
-                assert(this->child_count == this->entry_count + 1);
-                right->child_count = this->child_count - median - 1;
-                memcpy(right->children, &this->children[median + 1], right->child_count * sizeof(Node * ));
-                this->child_count = median + 1;
-            }
-
-            // Split the entries between left and right node
-            right->entry_count = this->entry_count - median - 1;
-            memcpy(right->entries, &this->entries[median + 1], right->entry_count * sizeof(Ela_Block));
-            this->entry_count = median;
-
-            // Insert the median into the parent. If the parent is a new root, also insert the node.
-            s64 index_in_parent = parent_node->insert_entry(this->entries[median]);
-            assert(index_in_parent >= 0 && index_in_parent + 1 < BRANCH_FACTOR);
-            if(parent_is_new_root) parent_node->insert_child(index_in_parent + 0, this);
-            parent_node->insert_child(index_in_parent + 1, right);
-
-            return user_pointer > this->entries[median].user_pointer ? right : this;
-        }
-
-        Node *find_child(void *user_pointer) {
-            s64 lower_bound = this->find_lower_bound(user_pointer);
-            assert(lower_bound >= 0 && lower_bound < this->child_count);
-            return this->children[lower_bound];
-        }
-
-        s64 insert_entry(Ela_Block block) {
-            assert(this->entry_count + 1 <= BRANCH_FACTOR - 1);
-            s64 lower_bound = this->find_lower_bound(block.user_pointer);
-            assert(lower_bound >= 0 && lower_bound <= this->entry_count);
-            memmove(&this->entries[lower_bound + 1], &this->entries[lower_bound], (this->entry_count - lower_bound) * sizeof(Ela_Block));
-            this->entries[lower_bound] = block;
-            ++this->entry_count;
-            return lower_bound;
-        }
-
-        void insert_child(s64 index, Node *node) {
-            assert(index >= 0 && index < BRANCH_FACTOR && this->child_count + 1 <= BRANCH_FACTOR);
-            memmove(&this->children[index + 1], &this->children[index], (this->child_count - index) * sizeof(Node *));
-            this->children[index] = node;
-            ++this->child_count;
-        }
-
-        void debug_print(Debug_Printer *printer, s64 depth, s64 index_at_depth) {
-            // @Incomplete: Maybe implement showing the parent somehow, by drawing flat ---- to that position?
-    
-            String_Builder builder;
-            builder.create(Default_Allocator);
-            builder.append_char('[');
-            for(s64 i = 0; i < BRANCH_FACTOR - 1; ++i) {
-                if(i < this->entry_count) {
-                    builder.append_s64((s64) this->entries[i].user_pointer);
-                } else {
-                    builder.append_char('-');
-                }
-                
-                if(i + 1 < BRANCH_FACTOR - 1) builder.append_string("|");
-            }
-            builder.append_char(']');
-            
-            printer->insert(BRANCH_FACTOR, depth, index_at_depth, builder.finish());
-            
-            for(u8 i = 0; i < this->child_count; ++i) {
-                this->children[i]->debug_print(printer, depth + 1, index_at_depth * BRANCH_FACTOR + i);
-            }
-        }
+        // These live inside the payload when the block is freed. Since a
+        // payload is always aligned to 16 bytes, we can assume the payload
+        // is always at least 16 bytes large, allowing us to store these two
+        // pointers.
+        Block *next_free;
+        Block *previous_free;
     };
 
+    struct Bin {
+        Block *first;
+    };
+
+    static_assert(sizeof(Block) % 16 == 0, "A block must be 16 byte aligned.");
+
     Memory_Arena *arena;
-    Node *root;
-
-    void reset() {
-        this->root = (Node *) this->arena->push(sizeof(Node));
-        this->root->reset();
-    }
-
-    void add_block(void *user_pointer, u32 size_in_bytes, b8 used) {
-        Ela_Block block = { user_pointer, size_in_bytes, used };
-        
-        Node *parent_node = null;
-        Node *node = this->root;
-
-        while(true) {
-            if(node->should_be_split_before_insert()) {
-                b8 parent_is_new_root = parent_node == null;
-
-                if(parent_is_new_root) { // @Cleanup: Can we maybe make this prettier?
-                    parent_node = (Node *) arena->push(sizeof(Node));
-                    parent_node->reset();
-                }
-
-                node = node->split(this->arena, parent_node, parent_is_new_root, block.user_pointer);
-
-                if(parent_is_new_root) {
-                    this->root = parent_node;
-                }
-            }
-
-            if(node->is_leaf()) {
-                node->insert_entry(block);
-                break;
-            }
-
-            parent_node = node;
-            node = node->find_child(block.user_pointer);
-        }
-    }
-
-    s64 calculate_depth() {
-        s64 depth = 0;
-        
-        Node *node = this->root;
-        while(node) {
-            depth += 1;
-            node = node->is_leaf() ? null : node->children[0];
-        }
-
-        return depth;
-    }
-
-    void debug_print(string file_path, b8 append) {
-        Debug_Printer printer;
-        printer.create(printer.calculate_line_at_depth(this->calculate_depth()) + 1, LOG_WIDTH);
-        this->root->debug_print(&printer, 0, 0);
-        printer.flush(file_path, append);
-    }
-};
-
-static s64 COUNTER = 1;
-
-struct Ela {
-    Memory_Arena *arena;
-    Ela_Tree tree;
+    Bin bins[BIN_COUNT];
 
     void create(Memory_Arena *arena) {
         this->arena = arena;
-        this->tree.arena = arena;
-        this->tree.reset();
+        memset(this->bins, 0, sizeof(this->bins));
     }
 
-    void *acquire(u64 size_in_bytes) {
-        assert(size_in_bytes < MAX_U32);
+    void *acquire(u64 user_size_in_bytes) {
+        u64 aligned_size_in_bytes = (user_size_in_bytes + 0xf) & (~0xf); // Align to 16 bytes.
+        assert(aligned_size_in_bytes >= 16);
 
-        //void *user_pointer = this->arena->push(size_in_bytes);
-        void *user_pointer = (void *) COUNTER;
+        //
+        // Try to find a block in the free-list that can accomodate this allocation
+        //
+        Block **pointer_to_free_block = this->get_free_list_for_size(aligned_size_in_bytes);
         
-        this->tree.add_block(user_pointer, (u32) size_in_bytes, true);
-        this->debug_print(LOG_FILE, true);
+        while(*pointer_to_free_block) {
+            Block *free_block = *pointer_to_free_block;
 
-        ++COUNTER;
+            if(free_block->block_size_in_bytes >= aligned_size_in_bytes && free_block->block_size_in_bytes <= aligned_size_in_bytes + Block::HEADER_SIZE) {
+                // This existing free block is large enough to hold the new user payload, but small enough
+                // that splitting doesn't make sense. Therefore, just reuse the entire block.
+                free_block->user_size_in_bytes = user_size_in_bytes;
+                if(free_block->next_free) free_block->next_free->previous_free = free_block->previous_free;
+                *pointer_to_free_block = free_block->next_free;
 
-        return user_pointer;
+                return (void *) ((u64) free_block + Block::HEADER_SIZE);
+            } else if(free_block->block_size_in_bytes > aligned_size_in_bytes) {
+                // The existing block is so large that splitting it makes sense. Replace the free_block
+                // with a different block, which is located inside free_block's payload. We need to insert
+                // the split block into the free list here, as it may very well by in a different bin.
+                if(free_block->previous_free) free_block->previous_free->next_free = free_block->next_free;
+                if(free_block->next_free)     free_block->next_free->previous_free = free_block->previous_free;
+                *pointer_to_free_block = free_block->next_free;
+
+                Block *split_block = (Block *) ((u64) free_block + Block::HEADER_SIZE + aligned_size_in_bytes);
+                split_block->block_size_in_bytes = free_block->block_size_in_bytes - Block::HEADER_SIZE - aligned_size_in_bytes;
+                split_block->user_size_in_bytes  = 0;
+                this->insert_new_block_into_free_list(split_block);
+
+                free_block->block_size_in_bytes = aligned_size_in_bytes;
+                free_block->user_size_in_bytes  = user_size_in_bytes;
+                
+                return (void *) ((u64) free_block + Block::HEADER_SIZE);
+            } else {
+                pointer_to_free_block = &(*pointer_to_free_block)->next_free;
+            }
+        }
+
+        //
+        // Allocate a new block and return the user pointer
+        //
+        Block *block = (Block *) this->arena->push(Block::HEADER_SIZE + aligned_size_in_bytes);
+        block->block_size_in_bytes = aligned_size_in_bytes;
+        block->user_size_in_bytes  = user_size_in_bytes;
+        return (void *) ((u64) block + Block::HEADER_SIZE);
+    }
+
+    void *reacquire(void *old_pointer, u64 user_size_in_bytes) {
+        u64 aligned_size_in_bytes = (user_size_in_bytes + 0xf) & (~0xf); // Align to 16 bytes.
+        assert(aligned_size_in_bytes >= 16);
+
+        Block *block = (Block *) ((u64) old_pointer - Block::HEADER_SIZE);
+        
+        if(block->block_size_in_bytes >= aligned_size_in_bytes && block->block_size_in_bytes <= aligned_size_in_bytes + Block::HEADER_SIZE) {
+            // The size didn't change significantly, so don't change anything about the underlying
+            // block structure...
+            block->user_size_in_bytes = user_size_in_bytes;
+            return (void *) ((u64) block + Block::HEADER_SIZE);
+        } else if(block->block_size_in_bytes > aligned_size_in_bytes) {
+            // The new size is significantly smaller than the previous one, so split the existing
+            // block up. This avoids having to copy the existing data
+            Block *split_block = (Block *) ((u64) block + Block::HEADER_SIZE + aligned_size_in_bytes);
+            split_block->block_size_in_bytes = block->block_size_in_bytes - Block::HEADER_SIZE - aligned_size_in_bytes;
+            split_block->user_size_in_bytes  = 0;
+            this->insert_new_block_into_free_list(split_block);
+
+            block->block_size_in_bytes = aligned_size_in_bytes;
+            block->user_size_in_bytes  = user_size_in_bytes;
+            
+            return (void *) ((u64) block + Block::HEADER_SIZE);
+        } else if((u64) block + Block::HEADER_SIZE + block->block_size_in_bytes == (u64) this->arena->base + this->arena->size) {
+            // The new size is larger than the previous, but this block is the very last thing in
+            // the arena. In that case, we can just push the arena to get more space without
+            // having to do copy the existing data.
+            u64 aligned_addition = aligned_size_in_bytes - block->block_size_in_bytes;
+            this->arena->push(aligned_addition);
+            block->block_size_in_bytes += aligned_addition;
+            block->user_size_in_bytes   = user_size_in_bytes;
+            return (void *) ((u64) block + Block::HEADER_SIZE);
+        } else {
+            // The new size is larger than the previous, and we cannot abuse the layout of the
+            // pool in the arena, so we just have to allocate a new block, and then free the
+            // old one...
+            void *new_pointer = this->acquire(user_size_in_bytes);
+            memcpy(new_pointer, old_pointer, block->user_size_in_bytes);
+            this->release(old_pointer);
+            return new_pointer;
+        }
     }
 
     void release(void *pointer) {
-        // @Incomplete    
-    }
-    
-    void *reacquire(void *old_pointer, u64 new_size) {
-        // @Incomplete
-        return null;
+        Block *free_block = (Block *) ((u64) pointer - Block::HEADER_SIZE);
+        free_block->user_size_in_bytes = 0;
+        this->insert_new_block_into_free_list(free_block);
     }
 
     void destroy() {
-        // @Incomplete    
+        memset(this->bins, 0, sizeof(this->bins));
     }
     
     u64 query_size(void *pointer) {
-        // @Incomplete
-        return 0;
+        Block *block = (Block *) ((u64) pointer - Block::HEADER_SIZE);
+        return block->user_size_in_bytes;
     }
 
-    void debug_print(string file_path, b8 append) {
-        this->tree.debug_print(file_path, append);
+    void maybe_merge_blocks(Block *previous, Block *next) {
+        // Merge with the next block in the list
+        if((Block *) ((u64) previous + Block::HEADER_SIZE + previous->block_size_in_bytes) == next) {
+            previous->block_size_in_bytes += Block::HEADER_SIZE + next->block_size_in_bytes;
+            previous->next_free = next->next_free;
+            if(previous->next_free) previous->next_free->previous_free = previous;
+        }
+    }
+
+    void maybe_merge_block_with_neighbors(Block *block) {
+        if(block->next_free) maybe_merge_blocks(block, block->next_free);
+        if(block->previous_free) maybe_merge_blocks(block->previous_free, block);
+    }
+    
+    void insert_new_block_into_free_list(Block *free_block) {
+        Block **free_list = this->get_free_list_for_size(free_block->block_size_in_bytes);
+        
+        // Insert into the free list here at a sorted position, so that we can always guarantee merges...
+        if(*free_list == null) {
+            free_block->next_free = null;
+            free_block->previous_free = null;
+            *free_list = free_block;
+        } else if(free_block < *free_list) {
+            free_block->next_free = *free_list;
+            free_block->next_free->previous_free = free_block;
+            free_block->previous_free = null;
+            *free_list = free_block;
+            this->maybe_merge_block_with_neighbors(free_block);
+        } else {
+            Block *previous = *free_list;
+            while(previous->next_free != null && previous->next_free < free_block) {
+                previous = previous->next_free;
+            }
+            
+            free_block->next_free = previous->next_free;
+            if(free_block->next_free) free_block->next_free->previous_free = free_block;
+            free_block->previous_free = previous;
+            previous->next_free = free_block;
+            this->maybe_merge_block_with_neighbors(free_block);
+        }        
+    }
+
+    Block **get_free_list_for_size(u64 aligned_size_in_bytes) {
+        u64 transformed_size_in_bytes = min(aligned_size_in_bytes >> 4, (1 << BIN_COUNT) - 1); // The size is aligned to 16 bytes, so we cannot get smaller sizes than that... Therefore the smallest bin should be for allocations of size 16.
+        u64 index = os_highest_bit_set(transformed_size_in_bytes);
+        return &this->bins[index].first;
+    }
+
+    void debug_print_free_lists() {
+        for(s64 i = 0; i < BIN_COUNT; ++i) {
+            printf("Bin %" PRId64 ":\n  ", i);
+            
+            Block *block = this->bins[i].first;
+            while(block) {
+                printf(" %" PRIu64 " | ", block->block_size_in_bytes);
+                block = block->next_free;
+            }
+
+            printf("\n");
+        }
     }
 
     Allocator allocator() {
@@ -331,6 +228,7 @@ struct Ela {
 enum Action {
     ACTION_Allocation,
     ACTION_Deallocation,
+    ACTION_Reallocation,
 };
 
 enum Pattern {
@@ -339,7 +237,7 @@ enum Pattern {
     PATTERN_Random,
 };
 
-string PATTERN_NAMES[] = { "Build Up and Destroy"_s, "Random"_s };
+string PATTERN_NAMES[] = { "Only Allocations"_s, "Build Up and Destroy"_s, "Random"_s };
 
 #define MIN_ALLOCATION_SIZE 16
 #define MAX_ALLOCATION_SIZE 8129
@@ -347,37 +245,81 @@ string PATTERN_NAMES[] = { "Build Up and Destroy"_s, "Random"_s };
 
 static
 void do_allocations(Allocator *allocator, void **allocations, s64 count, Pattern pattern, string name) {
+    srand(548375543);
+    
     Hardware_Time start = os_get_hardware_time();
     
     s64 active_allocations = 0;
 
     for(s64 i = 0; i < count; ++i) {
-        Action action = ACTION_Allocation;
+        Action action;
+
+        switch(pattern) {
+        case PATTERN_Only_Allocations:
+            action = ACTION_Allocation;
+            break;
+
+        case PATTERN_Build_Up_And_Destroy:
+            action = (i * 2 <= count) ? ACTION_Allocation : ACTION_Deallocation;
+            break;
+
+        case PATTERN_Random: {
+            int index = rand() % 3;
+            switch(index) {
+            case 0: action = ACTION_Allocation; break;
+            case 1: action = ACTION_Deallocation; break;
+            case 2: action = ACTION_Reallocation; break;
+            }    
+        } break;
+        }
         
         switch(action) {
         case ACTION_Allocation:
             allocations[active_allocations] = allocator->allocate(RANDOM_ALLOCATION_SIZE());
+            *(s64 *) allocations[active_allocations] = active_allocations; // Touch the allocation to cause a potential page fault, to simulate "real" usage of the allocations... Otherwise the Memory Arena just goes brrrrr
+            ++active_allocations;
             break;
+
+        case ACTION_Deallocation: {
+            if(active_allocations == 0) break;
+            s64 index = rand() % active_allocations;
+            allocator->deallocate(allocations[index]);
+            memmove(&allocations[index], &allocations[index + 1], (active_allocations - index - 1) * sizeof(void *));
+            --active_allocations;
+        } break;
+
+        case ACTION_Reallocation: {
+            if(active_allocations == 0) break;
+            s64 index = rand() % active_allocations;
+            allocations[index] = allocator->reallocate(allocations[index], RANDOM_ALLOCATION_SIZE());
+            *(s64 *) allocations[index] = index; // Touch the allocation to cause a potential page fault, to simulate "real" usage of the allocations... Otherwise the Memory Arena just goes brrrrr
+        } break;
         }
     }
 
     Hardware_Time end = os_get_hardware_time();
     printf("%.*s for %.*s took %fms.\n", (u32) PATTERN_NAMES[pattern].count, PATTERN_NAMES[pattern].data, (u32) name.count, name.data, os_convert_hardware_time(end - start, Milliseconds));
 
+    printf(" >> Alive allocations: %" PRId64 ", Peak working set: %" PRId64 "\n", active_allocations, allocator->stats.peak_working_set);
+
     if(allocator->_reset_procedure) {
         allocator->reset();
     } else {
         for(s64 i = 0; i < active_allocations; ++i) {
-            allocator->deallocate(allocations[active_allocations]);
+            allocator->deallocate(allocations[i]);
         }
     }
 }
 
-int main() {
-    os_delete_file(LOG_FILE);
+static
+void debug_print_arena(Memory_Arena *arena, string name) {
+    f64 megabytes = convert_to_memory_unit(arena->committed, Megabytes);
+    printf(" >> %.*s: Committed %fmb\n", (u32) name.count, name.data, megabytes);
+}
 
+int main() {
     Memory_Arena underlying_arena;
-    underlying_arena.create(8 * ONE_GIGABYTE);
+    underlying_arena.create(8 * ONE_GIGABYTE, 128 * ONE_KILOBYTE);
     
     Memory_Pool underlying_pool;
     underlying_pool.create(&underlying_arena);
@@ -390,18 +332,29 @@ int main() {
     Allocator pool = underlying_pool.allocator();
     Allocator ela = underlying_ela.allocator();
 
-    const s64 count = 1000000;
-    const Pattern pattern = PATTERN_Only_Allocations;
+    const Pattern pattern = PATTERN_Random;
+    const s64 count = 100000;
     
     Resizable_Array<void *> allocations;
     allocations.reserve_exact(count);
 
     /*
     do_allocations(&arena, allocations.data, count, pattern, "Arena"_s);
-    do_allocations(&heap, allocations.data, count, pattern, "Heap"_s);
-    do_allocations(&pool, allocations.data, count, pattern, "Pool"_s);
+    debug_print_arena(&arena, "Arena"_s);
+    underlying_arena.reset();
     */
-    do_allocations(&ela, allocations.data, count, pattern, "Ela"_s);
+
+    /*
+    do_allocations(&pool, allocations.data, count, pattern, "Pool"_s);
+    debug_print_arena(underlying_pool.arena, "Pool"_s);
+    underlying_arena.reset();
+    */
+    
+    do_allocations(&heap, allocations.data,  count, pattern, "Heap"_s);
+
+    do_allocations(&ela, allocations.data,   count, pattern, "Ela"_s);
+    debug_print_arena(underlying_ela.arena, "ELA"_s);
+    underlying_ela.debug_print_free_lists();
 
     return 0;
 }
