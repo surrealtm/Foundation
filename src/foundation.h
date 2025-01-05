@@ -123,7 +123,7 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 #endif
 
 #define align_to(value, alignment, type) (alignment > 0 ? (type) (ceil((f64) (value) / (f64) (alignment)) * (alignment)) : 0)
-#define padding_to(value, alignment, type) ((type) (align_to((value), (alignment), type) - (value)))
+#define padding_to(value, alignment, type) (alignment > 0 ? (type) (align_to((value), (alignment), type) - (value)) : 0)
 
 #define min(lhs, rhs) ((lhs) < (rhs) ? (lhs) : (rhs))
 #define max(lhs, rhs) ((lhs) > (rhs) ? (lhs) : (rhs))

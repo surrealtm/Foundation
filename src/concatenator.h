@@ -25,6 +25,9 @@ struct Concatenator {
     void add(const void *bytes, u64 count);
     void add_unchecked(const void *bytes, u64 count);
 
+    void *reserve(u64 count, u8 alignment);
+    s64 absolute_pointer_to_offset(void *pointer);
+
     void add_1b(u8 b);
     void add_2b(u16 b);
     void add_4b(u32 b);
@@ -38,6 +41,8 @@ struct Concatenator {
     void add_string(string value);
     void add_string_as_wide(string value);
     void add_wide_string(const wchar_t *value);
+
+    void modify(u64 offset, const void *bytes, u64 count);
 
     void modify_1b(u64 offset, u8 b);
     void modify_2b(u64 offset, u16 b);

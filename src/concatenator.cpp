@@ -64,6 +64,44 @@ void Concatenator::add_unchecked(const void *bytes, u64 count) {
     this->total_count += count;
 }
 
+void *Concatenator::reserve(u64 count, u8 alignment) {
+    assert(count <= this->block_size);
+    
+    s64 required_padding = padding_to(this->total_count, alignment, s64);
+    
+    void *ptr;
+    
+    if(this->last->count + count + required_padding <= this->block_size) {
+        this->last->count += required_padding;
+        this->total_count += required_padding;
+        ptr = &this->last->data[this->last->count];
+    } else {
+        this->append_block();
+        this->last->count += required_padding;
+        this->total_count += required_padding;
+        ptr = &this->last->data[this->last->count];
+    }
+
+    this->last->count += count;
+    this->total_count += count;
+    
+    return ptr;
+}
+
+s64 Concatenator::absolute_pointer_to_offset(void *pointer) {
+    Block *block = &this->first;    
+    s64 block_offset = 0;
+    
+    while(block != null && pointer < block->data || pointer >= block->data + block->count) {
+        block_offset += block->count;
+        block = block->next;
+    }
+    
+    assert(block != null);
+    
+    return block_offset + (s64) ((u8 *) pointer - block->data);
+}
+
 
 void Concatenator::add_1b(u8 b) {
     this->add(&b, sizeof(u8));
@@ -114,6 +152,14 @@ void Concatenator::add_wide_string(const wchar_t *value) {
     this->add(value, length * sizeof(wchar_t));
 }
 
+
+void Concatenator::modify(u64 offset, const void *bytes, u64 count) {
+    // @@Speed: This could be sped up by copying as much as possible into one block, and then
+    // going into the next one... This is just lazy.
+    for(u64 i = 0; i < count; ++i) {
+        this->modify_1b(offset + i, ((u8 *) bytes)[i]);
+    }    
+}
 
 void Concatenator::modify_1b(u64 offset, u8 b) {
     //

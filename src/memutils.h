@@ -200,6 +200,20 @@ struct Memory_Pool {
 };
 
 template<typename T>
+struct Slice {
+    s64 count;
+    T *data;
+};
+
+template<typename T>
+Slice<T> allocate_slice(Allocator *allocator, s64 count) {
+    Slice<T> result;
+    result.count = count;
+    result.data  = (T *) allocator->allocate(result.count * sizeof(T));
+    return result;
+}
+
+template<typename T>
 struct Resizable_Array {
 	static const s64 INITIAL_SIZE = 128;
 	
