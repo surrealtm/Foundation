@@ -94,26 +94,16 @@ void do_allocations(Allocator *allocator, void **allocations, s64 count, Pattern
     }
 }
 
-static
-void debug_print_arena(Memory_Arena *arena, string name) {
-    f64 megabytes = convert_to_memory_unit(arena->committed, Megabytes);
-    printf(" >> %.*s: Committed %fmb\n", (u32) name.count, name.data, megabytes);
-}
-
 int main() {
     Memory_Arena underlying_arena;
     underlying_arena.create(8 * ONE_GIGABYTE, 128 * ONE_KILOBYTE);
     
     Memory_Pool underlying_pool;
-    underlying_pool.create(&underlying_arena);
-
-    Ela::Memory_Pool underlying_ela;
-    underlying_ela.create(8 * ONE_GIGABYTE, 128 * ONE_KILOBYTE);
+    underlying_pool.create(8 * ONE_GIGABYTE, 128 * ONE_KILOBYTE);
 
     Allocator arena = underlying_arena.allocator();
     Allocator heap = heap_allocator;
     Allocator pool = underlying_pool.allocator();
-    Allocator ela = underlying_ela.allocator();
 
     const Pattern pattern = PATTERN_Random;
     const s64 count = 1000000;
@@ -126,16 +116,9 @@ int main() {
     debug_print_arena(&arena, "Arena"_s);
     underlying_arena.reset();
     */
-
-    /*
-    do_allocations(&pool, allocations.data, count, pattern, "Pool"_s);
-    debug_print_arena(underlying_pool.arena, "Pool"_s);
-    underlying_arena.reset();
-    */
  
+    do_allocations(&pool, allocations.data, count, pattern, "Pool"_s);
     do_allocations(&heap, allocations.data,  count, pattern, "Heap"_s);
-
-    do_allocations(&ela, allocations.data,   count, pattern, "Ela"_s);
 
     return 0;
 }
