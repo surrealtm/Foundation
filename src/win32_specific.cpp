@@ -443,12 +443,51 @@ b8 os_looks_like_absolute_file_path(string file_path) {
 	return file_path.count > 2 && file_path[1] == ':' && (file_path[2] == '/' || file_path[2] == '\\');
 }
 
+string os_simplify_file_path(Allocator *allocator, string input) {
+    // We don't try to be smart here about calculating the actual size of the output first, and
+    // then filling it in, because that seems like too much effort for little benefit.
+    string output = allocate_string(allocator, input.count);
+    s64 offset_in_out = 0;
+
+    for(s64 offset_in_in = 0; offset_in_in < input.count;) {
+        if(offset_in_in + 1 < input.count && input[offset_in_in] == '.' && input[offset_in_in + 1] == '.') {
+            // An '..' entry undoes a previous directory in the path
+            b8 inside_current_segment = true;
+            while(offset_in_out > 0 && (output[offset_in_out] != '\\' || inside_current_segment)) {
+                if(output[offset_in_out] == '\\') inside_current_segment = false;
+                --offset_in_out;
+            }
+
+            offset_in_in += 2;
+        } else if(input[offset_in_in] == '/') {
+            // Replace all / with \ on windows
+            output[offset_in_out] = '\\';
+            ++offset_in_in;
+            ++offset_in_out;
+        } else {
+            output[offset_in_out] = input[offset_in_in];
+            ++offset_in_in;
+            ++offset_in_out;
+        }
+    }
+
+    output.count = offset_in_out;
+
+    return output;
+}
+
 string os_convert_to_absolute_file_path(Allocator *allocator, string file_path) {
     char *cstring = to_cstring(Default_Allocator, file_path);
+
+    // GetFullPathNameA requires enough space for a cstring (meaning: include space for the null terminator).
+    // Otherwise, it will just complain and not write the path properly.
+    // Therefore, we must always allocate space for the null-terminator, and then exclude that from the actual
+    // string content.
 	u32 buffer_size = GetFullPathNameA(cstring, 0, null, null);
-    string result = allocate_string(allocator, buffer_size - 1); // buffer_size includes the null terminator
+    string result = allocate_string(allocator, buffer_size);
     GetFullPathNameA(cstring, buffer_size, (LPSTR) result.data, null);
-	free_cstring(Default_Allocator, cstring);
+    result.count -= 1; // Now exclude the null terminator
+    free_cstring(Default_Allocator, cstring);
     return result;
 }
 

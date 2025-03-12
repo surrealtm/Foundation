@@ -83,7 +83,8 @@ File_Information os_get_file_information(string file_path);
 /* ------------------------------------------------ File Paths ------------------------------------------------ */
 
 b8 os_looks_like_absolute_file_path(string file_path);
-string os_convert_to_absolute_file_path(Allocator *allocator, string file_path);
+string os_simplify_file_path(Allocator *allocator, string file_path); // Try to resolve '/../' parts of a file path, unify file path delimiters.
+string os_convert_to_absolute_file_path(Allocator *allocator, string file_path); // Convert a relative file path to an absolute one.
 s64 os_search_path_for_directory_slash_reverse(string file_path);
 
 void os_set_working_directory(string file_path);

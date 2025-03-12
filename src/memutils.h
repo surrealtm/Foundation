@@ -145,7 +145,6 @@ struct Memory_Arena {
  The user-pointers are 16-byte aligned.
  */
 struct Memory_Pool {
-private:
     static const s64 BIN_COUNT     = 16;
     static const s64 HEADER_SIZE   = 8;
     static const s64 FOOTER_SIZE   = 8;
@@ -156,7 +155,7 @@ private:
 
     struct Block_Header {
         // The header for all blocks. We store the block_size_in_bytes for internal handling
-        // and the user size in bytes for allocator statistics...
+        // and the user_size_in_bytes for allocator statistics...
         u32 block_size_in_bytes;
         u32 user_size_in_bytes: 31;
         u32 status:              1;
@@ -202,8 +201,6 @@ private:
     inline void remove_block_from_free_list(Block_Header *free_block);
     Block_Header *maybe_coalesce_free_block(Block_Header *free_block);
 
-public:
-    
     void create(u64 reserved, u64 requested_commit_size = 0);
     void destroy();
     void reset();
@@ -225,8 +222,13 @@ struct Slice {
 template<typename T>
 Slice<T> allocate_slice(Allocator *allocator, s64 count) {
     Slice<T> result;
-    result.count = count;
-    result.data  = (T *) allocator->allocate(result.count * sizeof(T));
+    if(count) {
+        result.count = count;
+        result.data  = (T *) allocator->allocate(result.count * sizeof(T));
+    } else {
+        result.count = 0;
+        result.data  = null;
+    }
     return result;
 }
 

@@ -92,7 +92,7 @@ s64 Concatenator::absolute_pointer_to_offset(void *pointer) {
     Block *block = &this->first;    
     s64 block_offset = 0;
     
-    while(block != null && pointer < block->data || pointer >= block->data + block->count) {
+    while(block != null && (pointer < block->data || pointer >= block->data + block->count)) {
         block_offset += block->count;
         block = block->next;
     }

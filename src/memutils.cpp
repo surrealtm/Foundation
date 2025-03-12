@@ -382,8 +382,7 @@ s64 Memory_Pool::get_bin_index_for_size(u64 aligned_size_in_bytes) {
     // The size is aligned to 16 bytes, so we cannot get smaller sizes than that... Therefore
     // the smallest bin should be for allocations of size 16.
     u64 transformed_size_in_bytes = min(aligned_size_in_bytes >> 4, (1 << BIN_COUNT) - 1);
-    u64 index = os_highest_bit_set(transformed_size_in_bytes);
-    return index;
+    return os_highest_bit_set(transformed_size_in_bytes);
 }
 
 void Memory_Pool::insert_block_into_free_list(Memory_Pool::Block_Header *free_block) {

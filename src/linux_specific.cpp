@@ -364,14 +364,14 @@ b8 os_create_directory(string file_path) {
     s64 parent_folder_end = os_search_path_for_directory_slash_reverse(file_path);
     if(parent_folder_end != -1) {
         string parent_folder = substring_view(file_path, 0, parent_folder_end);
-        if(!os_create_directory(parent_folder)) return false;
+        if(!os_directory_exists(parent_folder) && !os_create_directory(parent_folder)) return false;
     }
-        
+    
     char *cstring = to_cstring(Default_Allocator, file_path);
-    b8 result = mkdir(cstring, 0700);
+    b8 success = mkdir(cstring, 0700) == 0;
     free_cstring(Default_Allocator, cstring);
 
-    return result;
+    return success;
 }
 
 b8 os_delete_file(string file_path) {
@@ -428,6 +428,34 @@ File_Information os_get_file_information(string file_path) {
 
 b8 os_looks_like_absolute_file_path(string file_path) {
     return file_path.count > 0 && file_path[0] == '/';
+}
+
+string os_simplify_file_path(Allocator *allocator, string input) {
+    // We don't try to be smart here about calculating the actual size of the output first, and
+    // then filling it in, because that seems like too much effort for little benefit.
+    string output = allocate_string(allocator, input.count);
+    s64 offset_in_out = 0;
+
+    for(s64 offset_in_in = 0; offset_in_in < input.count;) {
+        if(offset_in_in + 1 < input.count && input[offset_in_in] == '.' && input[offset_in_in + 1] == '.') {
+            // An '..' entry undoes a previous directory in the path
+            b8 inside_current_segment = true;
+            while(offset_in_out > 0 && (output[offset_in_out] != '/' || inside_current_segment)) {
+                if(output[offset_in_out] == '/') inside_current_segment = false;
+                --offset_in_out;
+            }
+
+            offset_in_in += 2;
+        } else {
+            output[offset_in_out] = input[offset_in_in];
+            ++offset_in_in;
+            ++offset_in_out;
+        }
+    }
+
+    output.count = offset_in_out;
+
+    return output;
 }
 
 string os_convert_to_absolute_file_path(Allocator *allocator, string relative_path) {

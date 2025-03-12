@@ -245,7 +245,6 @@ void Resizable_Block_Array<T, block_capacity>::move_entries(Block *src_block, s6
         
         memmove(&src_block->data[dst_index_in_block], &src_block->data[src_index_in_block], entries_staying_in_this_block * sizeof(T));
     } else if(dst_index_in_block < src_index_in_block) {
-        s64 entries_in_block               = this->calculate_block_entry_count(src_block);
         s64 entries_coming_from_this_block = block_capacity - src_index_in_block;
         
         memmove(&src_block->data[dst_index_in_block], &src_block->data[src_index_in_block], entries_coming_from_this_block * sizeof(T));
