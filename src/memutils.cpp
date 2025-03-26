@@ -507,7 +507,7 @@ void *Memory_Pool::reallocate(void *old_pointer, u64 new_user_size_in_bytes) {
     Block_Header *old_block = this->get_header_from_user_pointer(old_pointer);
     assert(old_block->status == BLOCK_IN_USE && this->block_boundaries_look_valid(old_block));
     
-    if(old_block->block_size_in_bytes >= new_aligned_size_in_bytes - METADATA_SIZE && old_block->block_size_in_bytes <= new_aligned_size_in_bytes + METADATA_SIZE) {
+    if(old_block->block_size_in_bytes >= new_aligned_size_in_bytes && old_block->block_size_in_bytes <= new_aligned_size_in_bytes + METADATA_SIZE) {
         // The size didn't change significantly, so don't change anything about the underlying
         // block structure...
         this->update_block_size_in_bytes(old_block, old_block->block_size_in_bytes, new_user_size_in_bytes);
