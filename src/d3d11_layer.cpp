@@ -1047,7 +1047,7 @@ void bind_frame_buffer(Frame_Buffer *frame_buffer) {
     if(frame_buffer->has_depth) d3d_context->OMSetDepthStencilState(frame_buffer->depth.state, 1);
 }
 
-void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b, f32 a, f32 depth) {
+void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b, f32 depth) {
     f32 color_array[4];
     color_array[0] = r;
     color_array[1] = g;
