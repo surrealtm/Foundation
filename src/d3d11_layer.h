@@ -303,6 +303,7 @@ void bind_frame_buffer(Frame_Buffer *frame_buffer);
 void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b, f32 depth = 1.f);
 void clear_frame_buffer_depth_stencil(Frame_Buffer *frame_buffer, f32 depth = 1.f);
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);
+void blit_frame_buffer(Texture *dst, Frame_Buffer *src);
 
 Texture texture_wrapper_for_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s64 index);
 Texture texture_wrapper_for_frame_buffer_depth_attachment(Frame_Buffer *frame_buffer);

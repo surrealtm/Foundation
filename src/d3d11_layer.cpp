@@ -553,7 +553,7 @@ Error_Code create_texture_from_memory(Texture *texture, u8 *buffer, s32 w, s32 h
     sampler_description.MinLOD         = 0.f;
     sampler_description.MaxLOD         = 0.f;
     
-    D3D11_CALL(d3d_device->CreateTexture2D(&texture_description, &subresource, &texture->handle));
+    D3D11_CALL(d3d_device->CreateTexture2D(&texture_description, buffer ? &subresource : null, &texture->handle));
     D3D11_CALL(d3d_device->CreateShaderResourceView(texture->handle, null, &texture->view));
     D3D11_CALL(d3d_device->CreateSamplerState(&sampler_description, &texture->sampler));
     
@@ -1096,6 +1096,11 @@ void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src) {
             d3d_context->ResolveSubresource(dst->depth.texture, 0, src->depth.texture, 0, (DXGI_FORMAT) dst->depth.format);
         }
     }
+}
+
+void blit_frame_buffer(Texture *dst, Frame_Buffer *src) {
+    foundation_assert(src->color_count == 1 && src->samples == 1);
+    d3d_context->CopyResource(dst->handle, src->colors[0].texture);
 }
 
 
