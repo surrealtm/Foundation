@@ -1,5 +1,7 @@
 #pragma once
 
+#include <foundation.h>
+
 #define PI 3.14159265359
 #define FPI 3.14159265359f
 
