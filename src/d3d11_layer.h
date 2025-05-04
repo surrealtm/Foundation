@@ -300,9 +300,10 @@ void resize_frame_buffer_depth_stencil_attachment(Frame_Buffer *frame_buffer, s3
 void resize_frame_buffer(Frame_Buffer *frame_buffer, s32 w, s32 h);
 void bind_frame_buffer_color_attachment_to_shader(Frame_Buffer *frame_buffer, s64 attachment_index, s64 index_in_shader);
 void bind_frame_buffer(Frame_Buffer *frame_buffer);
-void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b, f32 a = 255, f32 depth = 1.f);
+void clear_frame_buffer(Frame_Buffer *frame_buffer, f32 r, f32 g, f32 b, f32 depth = 1.f);
 void clear_frame_buffer_depth_stencil(Frame_Buffer *frame_buffer, f32 depth = 1.f);
 void blit_frame_buffer(Frame_Buffer *dst, Frame_Buffer *src);
+void blit_frame_buffer(Texture *dst, Frame_Buffer *src);
 
 Texture texture_wrapper_for_frame_buffer_color_attachment(Frame_Buffer *frame_buffer, s64 index);
 Texture texture_wrapper_for_frame_buffer_depth_attachment(Frame_Buffer *frame_buffer);

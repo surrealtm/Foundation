@@ -631,6 +631,25 @@ f64 os_convert_hardware_time(f64 time, Time_Unit unit) {
     return time / resolution_factor;    
 }
 
+void os_sleep_to_tick_rate(Hardware_Time tick_start, Hardware_Time tick_end, f64 tickrate) {
+    f64 actual_tick_time_nanoseconds = os_convert_hardware_time(tick_end - tick_start, Nanoseconds);
+    f64 expected_tick_time_nanoseconds = 1000000000.0 / tickrate;
+
+    if(actual_tick_time_nanoseconds < expected_tick_time_nanoseconds) {
+        s32 milliseconds = (s32) floor((expected_tick_time_nanoseconds - actual_tick_time_nanoseconds) / 1000000.0);
+        if(milliseconds > 1) {
+            usleep(milliseconds - 1);
+        }
+
+        tick_end = os_get_hardware_time();
+        actual_tick_time_nanoseconds = os_convert_hardware_time(tick_end - tick_start, Nanoseconds);
+        while(actual_tick_time_nanoseconds < expected_tick_time_nanoseconds) {
+            tick_end = os_get_hardware_time();
+            actual_tick_time_nanoseconds = os_convert_hardware_time(tick_end - tick_start, Nanoseconds);
+        }
+    }
+}
+
 void os_sleep(f64 seconds) {
     usleep((useconds_t) (seconds * 1000000.));
 }
