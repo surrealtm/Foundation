@@ -601,14 +601,14 @@ u8 *String_Builder::grow(s64 count) {
         // first node without an allocation to provide a fast code path for small
         // strings.
         this->current  = &this->first;
-        *this->current = { 0 };
+        *this->current = { };
     } else if(this->current->count + count > BLOCK_SIZE) {
         // The new data doesn't fit into the current block. We therefore need allocate
         // a new block, insert it into the linked list, and start using that.
         Block *block = (Block *) this->allocator->allocate(sizeof(Block));
         this->current->next = block;
         this->current       = block;
-        *this->current      = { 0 };
+        *this->current      = { };
     }
 
     u8 *pointer = &this->current->data[this->current->count];
@@ -817,7 +817,7 @@ void String_Builder::append_digit(u64 value) {
 
 void String_Builder::create(Allocator *allocator) {
     this->allocator   = allocator;
-    this->first       = { 0 };
+    this->first       = { };
     this->current     = null;
     this->total_count = 0;
 }
@@ -830,7 +830,7 @@ void String_Builder::destroy() {
         block = next_block;
     }
 
-    this->first       = { 0 };
+    this->first       = { };
     this->total_count = 0;
     this->current     = null;
 }
@@ -932,7 +932,7 @@ string String_Builder::finish() {
             block = next_block;
         }
 
-        this->first = { 0 };
+        this->first = { };
         this->current = null;
         this->total_count = 0;
 
@@ -961,7 +961,7 @@ char *String_Builder::finish_as_cstring() {
 
     result[offset] = 0;
 
-    this->first = { 0 };
+    this->first = { };
     this->current = null;
     this->total_count = 0;
     

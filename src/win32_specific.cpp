@@ -859,3 +859,17 @@ b8 os_value_fits_in_bits(u64 value, u64 available_bits, b8 sign) {
         return (_union._signed >= 0 && _union._unsigned <= highest) ||(_union._unsigned < 0 && -_union._signed <= lowest);
     }
 }
+
+b8 os_value_is_power_of_two(u64 value) {
+    u64 highest_bit = os_highest_bit_set(value);
+    return (value & ~(1ULL << highest_bit)) == 0ULL;
+}
+
+u64 os_next_power_of_two(u64 value) {
+    u64 highest_bit = os_highest_bit_set(value);
+    if((value & ~(1ULL << highest_bit)) != 0ULL) {
+        return 1ULL << (highest_bit + 1ULL);
+    } else {
+        return value;
+    }
+}

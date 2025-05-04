@@ -111,7 +111,7 @@ s64 linux_parse_int(string *line, b8 hex_as_default) {
 
 /* --------------------------------------------------- Misc --------------------------------------------------- */
 
-void os_message_box(string message) {
+void os_message_box(string /*message*/) {
     // Because Linux is a fucking shithole of an OS, there doesn't seem to be an easy way of creating a simple
     // message box like in windows. Instead, we'd need to construct and manually handle an entire fucking X11
     // window, which seems like wayyy too much effort...
@@ -155,7 +155,7 @@ void os_get_desktop_dpi(s32 *x, s32 *y) {
     *y = (s32) dpi;
 }
 
-b8 os_load_and_run_dynamic_library(string file_path, string procedure, void *argument) { // @Incomplete
+b8 os_load_and_run_dynamic_library(string /*file_path*/, string /*procedure*/, void */*argument*/) { // @Incomplete
     return false;
 }
 
@@ -169,7 +169,7 @@ b8 os_can_access_pointer(void *pointer) {
     remote.iov_base = pointer;
     remote.iov_len  = sizeof(local_buffer);
 
-    size_t read = process_vm_readv(getpid(), &local, 1, &remote, 1, 0);   
+    ssize_t read = process_vm_readv(getpid(), &local, 1, &remote, 1, 0);   
     return read != -1;
 }
 
@@ -248,7 +248,7 @@ u64 os_get_committed_region_size(void *base) {
         linux_eat_character(&line);
         u64 high = linux_parse_int(&line, true);
         
-        if((s64) base == low) {
+        if((u64) base == low) {
             size = high - low;
             break;
         }
@@ -688,6 +688,8 @@ Stack_Trace os_get_stack_trace() {
         ++frame_index;
     }
 
+    free(symbol_names);
+    
     return trace;
 #else
     return Stack_Trace();
@@ -751,4 +753,18 @@ b8 os_value_fits_in_bits(u64 value, u64 available_bits, b8 sign) {
         return (_union._signed >= 0 && _union._unsigned <= highest) ||(_union._unsigned < 0 && -_union._signed <= lowest);
     }
 
+}
+
+b8 os_value_is_power_of_two(u64 value) {
+    u64 highest_bit = os_highest_bit_set(value);
+    return (value & ~(1ULL << highest_bit)) == 0ULL;
+}
+
+u64 os_next_power_of_two(u64 value) {
+    u64 highest_bit = os_highest_bit_set(value);
+    if((value & ~(1ULL << highest_bit)) != 0ULL) {
+        return 1ULL << (highest_bit + 1ULL);
+    } else {
+        return value;
+    }
 }

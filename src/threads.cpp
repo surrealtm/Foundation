@@ -417,12 +417,12 @@ void create_semaphore(Semaphore *semaphore) {
     semaphore->counter = 0;
 }
 
-void destroy_semaphore(Semaphore *semaphore) {
+void destroy_semaphore(Semaphore *) {
 }
 
 void lock_shared(Semaphore *semaphore) {
     do {
-        if(semaphore->counter == -1) continue; // Exclusive lock, wait.
+        if(semaphore->counter == MAX_U64) continue; // Exclusive lock, wait.
 
         if(atomic_compare_exchange(&semaphore->counter, semaphore->counter + 1, semaphore->counter) >= 0) break;
     } while(true);

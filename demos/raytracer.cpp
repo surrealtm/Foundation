@@ -138,7 +138,7 @@ void set_viewport(Raytracer *tracer) {
     tracer->viewport.height_in_pixels = tracer->window.h;
     tracer->viewport.aspect_ratio     = (f32) tracer->viewport.width_in_pixels / (f32) tracer->viewport.height_in_pixels;
     tracer->viewport.depth            = 100.0f;
-    tracer->viewport.samples          = 1;
+    tracer->viewport.samples          = 50;
     tracer->viewport.max_bounces      = 10;
 }
 

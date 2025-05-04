@@ -168,3 +168,5 @@ u64 os_count_leading_zeros(u64 value);
 u64 os_count_trailing_zeros(u64 value);
 u64 os_count_bits_set(u64 value);
 b8 os_value_fits_in_bits(u64 value, u64 available_bits, b8 sign);
+b8 os_value_is_power_of_two(u64 value);
+u64 os_next_power_of_two(u64 value);

@@ -361,11 +361,13 @@ V *Probed_Hash_Table<K, V>::query(K const &k) {
     u64 preferred_slot = hash & this->bucket_mask;
     u64 current_slot   = preferred_slot;
 
-    while(this->buckets[current_slot].state != HASH_TABLE_ENTRY_Used || this->buckets[current_slot].hash != hash || !this->compare(this->buckets[current_slot].key, k)) {
+    while(this->buckets[current_slot].state != HASH_TABLE_ENTRY_Free && (this->buckets[current_slot].hash != hash || !this->compare(this->buckets[current_slot].key, k))) {
         current_slot = (current_slot + 1) & this->bucket_mask;
         
         if(current_slot == preferred_slot) return null;
-    }    
+    }
+    
+    if(this->buckets[current_slot].state == HASH_TABLE_ENTRY_Free) return null;
 
     return &this->buckets[current_slot].value;
 }

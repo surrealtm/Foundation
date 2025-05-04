@@ -179,6 +179,7 @@ u64 heap_query_allocation_size(void * /*data = null */, void *pointer) {
     u64 *_u64 = (u64 *) ((u64) pointer - extra_size);
     size = *_u64;
 #else
+    (void)pointer;
     foundation_error("FOUNDATION_ALLOCATOR_STATISTICS is off, heap_query_allocation_size is unsupported.");
     size = 0;
 #endif
@@ -302,7 +303,10 @@ Allocator Memory_Arena::allocator() {
         null,
         null,
         [](void *data) -> void { ((Memory_Arena *) data)->reset(); },
-        null,
+        null
+#if FOUNDATION_ALLOCATOR_STATISTICS
+        , {}, {}
+#endif
     };
 
     return allocator;
@@ -351,8 +355,7 @@ Memory_Pool::Block_Header *Memory_Pool::get_next_header_from_header(Memory_Pool:
 Memory_Pool::Block_Header *Memory_Pool::get_previous_header_from_header(Memory_Pool::Block_Header *header) {
     // Make sure we're not actually the last block in the arena...
     Block_Footer *previous_footer = (Block_Footer *) ((u64) header - FOOTER_SIZE);
-    Block_Header *previous_header = this->get_header_from_footer(previous_footer);
-    return ((u64) previous_header >= (u64) this->arena.base + 8) ? previous_header : null;
+    return ((u64) previous_footer >= (u64) this->arena.base + HEADER_SIZE) ? this->get_header_from_footer(previous_footer) : null;
 }
 
 Memory_Pool::Block_Header *Memory_Pool::split_block(Memory_Pool::Block_Header *existing, u64 existing_block_size_in_bytes, u64 existing_user_size_in_bytes) {
@@ -449,6 +452,7 @@ void Memory_Pool::destroy() {
 void Memory_Pool::reset() {
     this->arena.reset();
     memset(this->bins, 0, sizeof(this->bins));
+    this->arena.push(8); // We want user-payloads to be 16-byte aligned. The start of the arena is 16-byte aligned, but every header we push adds 8 bytes. This makes sure that the payload is always 16-byte aligned (as after the header comes the payload, and after that comes 8 bytes of footer)
 }
 
 void *Memory_Pool::allocate(u64 user_size_in_bytes) {
@@ -565,6 +569,9 @@ Allocator Memory_Pool::allocator() {
         [](void *data, void *old_pointer, u64 new_size) -> void * { return ((Memory_Pool *) data)->reallocate(old_pointer, new_size); },
         [](void *data) -> void { ((Memory_Pool *) data)->destroy(); },
         [](void *data, void *pointer) -> u64   { return ((Memory_Pool *) data)->query_size(pointer); }
+#if FOUNDATION_ALLOCATOR_STATISTICS
+        , {}, {}
+#endif
     };
 
     return allocator;
@@ -574,7 +581,12 @@ Allocator Memory_Pool::allocator() {
 
 /* -------------------------------------------- Builtin Allocators -------------------------------------------- */
 
+#if FOUNDATION_ALLOCATOR_STATISTICS
+Allocator heap_allocator = { null, heap_allocate, heap_deallocate, heap_reallocate, null, heap_query_allocation_size, {}, {} };
+#else
 Allocator heap_allocator = { null, heap_allocate, heap_deallocate, heap_reallocate, null, heap_query_allocation_size };
+#endif
+
 Allocator *Default_Allocator = &heap_allocator;
 
 thread_local Memory_Arena temp_arena;
@@ -653,22 +665,22 @@ f64 convert_to_memory_unit(s64 bytes, Memory_Unit target_unit) {
 
 #if FOUNDATION_ALLOCATOR_STATISTICS
 static
-void __allocation_callback(Allocator *allocator, const void *allocator_name, void *data, u64 size) {
+void __allocation_callback(Allocator */*allocator*/, const void *allocator_name, void *data, u64 size) {
     printf("[Allocation] %s : %" PRIu64 "b, 0x%016" PRIx64 "\n", (char *) allocator_name, size, (u64) data);
 }
 
 static
-void __deallocation_callback(Allocator *allocator, const void *allocator_name, void *data, u64 size) {
+void __deallocation_callback(Allocator */*allocator*/, const void *allocator_name, void *data, u64 size) {
     printf("[Deallocation] %s : %" PRIu64 "b, 0x%016" PRIx64 "\n", (char *) allocator_name, size, (u64) data);
 }
 
 static
-void __reallocation_callback(Allocator *allocator, const void *allocator_name, void *old_data, u64 old_size, void *new_data, u64 new_size) {
+void __reallocation_callback(Allocator */*allocator*/, const void *allocator_name, void *old_data, u64 old_size, void *new_data, u64 new_size) {
     printf("[Reallocation] %s : %" PRIu64 "b, 0x%016" PRIx64 " -> %" PRIu64 "b, 0x%016" PRIx64 "\n", (char *) allocator_name, old_size, (u64) old_data, new_size, (u64) new_data);
 }
 
 static
-void __clear_callback(Allocator *allocator, const void *allocator_name) {
+void __clear_callback(Allocator */*allocator*/, const void *allocator_name) {
     printf("[Clear] %s\n", (char *) allocator_name);
 }
 

@@ -210,7 +210,7 @@ void Concatenator::modify_8b(u64 offset, u64 b) {
 
 void *Concatenator::mark() {
     assert(this->last != null);
-    return &this->last[this->last->count];
+    return &this->last->data[this->last->count];
 }
 
 void Concatenator::setup_block(Block *block) {
