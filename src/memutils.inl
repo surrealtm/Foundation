@@ -104,7 +104,7 @@ void Resizable_Array<T>::insert(s64 index, T const &data) {
 template<typename T>
 void Resizable_Array<T>::remove(s64 index) {
     assert(index >= 0 && index < this->count);
-    memmove(&this->data[index], &this->data[index + 1], (this->count - index) * sizeof(T));
+    memmove(&this->data[index], &this->data[index + 1], (this->count - index - 1) * sizeof(T));
     --this->count;
     this->maybe_shrink();
 }
@@ -517,7 +517,8 @@ void Linked_List<T>::remove_node(Linked_List_Node<T> *node) {
         this->head = this->head->next;
     }
 
-    this->allocator->deallocate(node);
+    this->allocator->deallocate(node);
+
     
     --this->count;
 }
@@ -575,7 +576,8 @@ T *Linked_List<T>::push() {
     this->add(T{});
     return &this->tail->data;
 }
-
+
+
 template<typename T>
 T Linked_List<T>::pop() {
     assert(this->count > 0);

@@ -17,9 +17,11 @@
 #include <dirent.h>
 #include <time.h>
 #include <execinfo.h>
+#include <backtrace.h>
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/Xresource.h>
+#include <cxxabi.h>
 
 
 /* ---------------------------------------------- Linux Helpers ---------------------------------------------- */
@@ -631,25 +633,6 @@ f64 os_convert_hardware_time(f64 time, Time_Unit unit) {
     return time / resolution_factor;    
 }
 
-void os_sleep_to_tick_rate(Hardware_Time tick_start, Hardware_Time tick_end, f64 tickrate) {
-    f64 actual_tick_time_nanoseconds = os_convert_hardware_time(tick_end - tick_start, Nanoseconds);
-    f64 expected_tick_time_nanoseconds = 1000000000.0 / tickrate;
-
-    if(actual_tick_time_nanoseconds < expected_tick_time_nanoseconds) {
-        s32 milliseconds = (s32) floor((expected_tick_time_nanoseconds - actual_tick_time_nanoseconds) / 1000000.0);
-        if(milliseconds > 1) {
-            usleep(milliseconds - 1);
-        }
-
-        tick_end = os_get_hardware_time();
-        actual_tick_time_nanoseconds = os_convert_hardware_time(tick_end - tick_start, Nanoseconds);
-        while(actual_tick_time_nanoseconds < expected_tick_time_nanoseconds) {
-            tick_end = os_get_hardware_time();
-            actual_tick_time_nanoseconds = os_convert_hardware_time(tick_end - tick_start, Nanoseconds);
-        }
-    }
-}
-
 void os_sleep(f64 seconds) {
     usleep((useconds_t) (seconds * 1000000.));
 }
@@ -662,7 +645,7 @@ u64 os_get_cpu_cycle() {
 
 /* ----------------------------------------------- System Calls ----------------------------------------------- */
 
-s32 os_system_call(const char *executable, const char *arguments[], s64 argument_count) {
+s32 os_system_call(const char *executable, const char *arguments[], s64 argument_count, bool *found_application) {
     const char **complete_arguments = (const char **) Default_Allocator->allocate(sizeof(char *) * (argument_count + 2)); // @@Leak
 
     complete_arguments[0] = executable;
@@ -671,9 +654,12 @@ s32 os_system_call(const char *executable, const char *arguments[], s64 argument
     
     pid_t pid = 0;
     if(posix_spawnp(&pid, executable, NULL, NULL, (char * const *) complete_arguments, __environ) != 0) {
+        *found_application = false;
         return -1;
     }
 
+    *found_application = true;
+    
     int exit_code;
     waitpid(pid, &exit_code, 0);
 
@@ -684,44 +670,85 @@ s32 os_system_call(const char *executable, const char *arguments[], s64 argument
 
 /* ----------------------------------------------- Stack Trace ----------------------------------------------- */
 
-Stack_Trace os_get_stack_trace() {
-#if FOUNDATION_DEVELOPER
-    const s64 max_frames_to_capture = 256; // We don't know in advance how many frames there are going to be (and we don't want to iterate twice), so just preallocate a max number.
+static struct backtrace_state *bt_state;
 
+struct Bt_Callback_Data {
+    Allocator *allocator;
+    Stack_Trace *trace;
+};
 
-    void *return_addresses[max_frames_to_capture];
-    int frame_count = backtrace(return_addresses, max_frames_to_capture);
+static
+Stack_Frame *grow_stack_trace(Allocator *allocator, Stack_Trace *trace) {
+    auto old_trace = *trace;
 
-    char **symbol_names = backtrace_symbols(return_addresses, frame_count);
+    trace->frame_count += 1;
+    trace->frames = (Stack_Frame *) allocator->allocate(trace->frame_count * sizeof(Stack_Frame));
+    memcpy(trace->frames, old_trace.frames, old_trace.frame_count * sizeof(Stack_Frame));
 
-    Stack_Trace trace;
-    trace.frames = (Stack_Trace::Stack_Frame *) malloc(frame_count * sizeof(Stack_Trace::Stack_Frame));
-    trace.frame_count = frame_count - 1; // The first frame of backtrace() is os_get_stack_trace, which we obviously don't want.
+    if(allocator->_deallocate_procedure) allocator->deallocate(old_trace.frames);
 
-    s64 frame_index = 0;
-    for(s64 i = 1; i < frame_count; ++i) { // The first frame of backtrace() is os_get_stack_trace, which we obviously don't want.
-        // backtrace() only gives us one symbol name, so I guess that'll have to do here...
-        trace.frames[frame_index].name = (char *) malloc(strlen(symbol_names[i]) + 1);
-        strcpy(trace.frames[frame_index].name, symbol_names[i]);
-        trace.frames[frame_index].file = null;
-        ++frame_index;
-    }
-
-    free(symbol_names);
-    
-    return trace;
-#else
-    return Stack_Trace();
-#endif
+    return &trace->frames[trace->frame_count - 1];
 }
 
-void os_free_stack_trace(Stack_Trace *trace) {
-    for(s64 i = 0; i < trace->frame_count; ++i) {
-        free(trace->frames[i].name);
-        free(trace->frames[i].file);
+static
+void bt_error_callback(void *, const char *, s32) {
+}
+
+static
+s32 bt_full_callback(void *user_pointer, unsigned long, const char *filename, int lineno, const char *function) {
+    Bt_Callback_Data *data = (Bt_Callback_Data *) user_pointer;
+
+    Stack_Frame *frame = grow_stack_trace(data->allocator, data->trace);
+
+    if(filename) {
+        frame->source_file = copy_string(data->allocator, cstring_view(filename));
+    } else {
+        frame->source_file = string();
     }
 
-    free(trace->frames);
+    if(function) {
+        int status;
+        char *demangled_name = abi::__cxa_demangle(function, null, null, &status);
+        
+        if(status == 0) {
+            frame->description = copy_string(data->allocator, cstring_view(demangled_name));
+        } else {
+            frame->description = copy_string(data->allocator, cstring_view(function));
+        }
+        free(demangled_name);
+    } else {
+        frame->description = string();
+    }
+
+    frame->source_line = lineno;
+    return 0;
+}
+
+Stack_Trace os_get_stack_trace(Allocator *allocator, s64 skip) {
+    Stack_Trace trace = { null, 0 };
+
+    if(!bt_state) {
+        bt_state = backtrace_create_state(null, true, &bt_error_callback, null);
+    }
+
+    // @Incomplete
+    if(bt_state) {
+        Bt_Callback_Data data;
+        data.allocator = allocator;
+        data.trace = &trace;
+        backtrace_full(bt_state, skip + 1, bt_full_callback, bt_error_callback, &data);
+    }    
+    
+    return trace;
+}
+
+void os_free_stack_trace(Allocator *allocator, Stack_Trace *trace) {
+    for(s64 i = 0; i < trace->frame_count; ++i) {
+        deallocate_string(allocator, &trace->frames[i].description);
+        deallocate_string(allocator, &trace->frames[i].source_file);
+    }
+
+    allocator->deallocate(trace->frames);
     trace->frames = null;
     trace->frame_count = 0;
 }

@@ -153,12 +153,34 @@ void Concatenator::add_wide_string(const wchar_t *value) {
 }
 
 
+void Concatenator::clear_range(u64 offset, u64 count) {
+    assert(offset + count <= this->total_count);
+
+    u64 modified_bytes = 0;
+
+    while(modified_bytes < count) {
+        u64 position_in_block;
+        Block *block = this->find_block_for_offset(offset, &position_in_block);
+        u64 batch_size = min(count - modified_bytes, block->count - position_in_block);
+
+        memset(&block->data[position_in_block], 0, batch_size);
+        modified_bytes += batch_size;
+    }
+}
+
 void Concatenator::modify(u64 offset, const void *bytes, u64 count) {
-    // @@Speed: This could be sped up by copying as much as possible into one block, and then
-    // going into the next one... This is just lazy.
-    for(u64 i = 0; i < count; ++i) {
-        this->modify_1b(offset + i, ((u8 *) bytes)[i]);
-    }    
+    assert(offset + count <= this->total_count);
+
+    u64 modified_bytes = 0;
+    
+    while(modified_bytes < count) {
+        u64 position_in_block;
+        Block *block = this->find_block_for_offset(offset + modified_bytes, &position_in_block);
+        u64 batch_size = min(count - modified_bytes, block->count - position_in_block);
+        
+        memcpy(&block->data[position_in_block], &((char *) bytes)[modified_bytes], batch_size);
+        modified_bytes += batch_size;
+    }
 }
 
 void Concatenator::modify_1b(u64 offset, u8 b) {
@@ -169,15 +191,8 @@ void Concatenator::modify_1b(u64 offset, u8 b) {
     // the first two bytes might be in Block A (which is then full), the rest is spilled into
     // Block B, which requires additional checks when modifying a larger value.
     //
-    
-    Block *block = &this->first;
-    u64 block_start = 0;
-    while(block_start + block->count <= offset) {
-        block_start += block->count;
-        block = block->next;
-    }
-    
-    u64 position_in_block = offset - block_start;
+    u64 position_in_block;
+    Block *block = this->find_block_for_offset(offset, &position_in_block);
     block->data[position_in_block] = b;
 }
 
@@ -208,7 +223,7 @@ void Concatenator::modify_8b(u64 offset, u64 b) {
 }
 
 
-void *Concatenator::mark() {
+void *Concatenator::get_trailing_pointer() {
     assert(this->last != null);
     return &this->last->data[this->last->count];
 }
@@ -227,4 +242,18 @@ void Concatenator::setup_block(Block *block) {
 void Concatenator::append_block() {
     Block *block = (Block *) this->allocator->allocate(sizeof(Block));
     this->setup_block(block);
+}
+
+Concatenator::Block *Concatenator::find_block_for_offset(u64 offset, u64 *position_in_block) {
+    assert(offset < this->total_count);
+
+    Block *block = &this->first;
+    u64 block_start = 0;
+    while(block_start + block->count <= offset) {
+        block_start += block->count;
+        block = block->next;
+    }
+
+    *position_in_block = offset - block_start;
+    return block;
 }

@@ -42,6 +42,7 @@ struct Concatenator {
     void add_string_as_wide(string value);
     void add_wide_string(const wchar_t *value);
 
+    void clear_range(u64 offset, u64 count);
     void modify(u64 offset, const void *bytes, u64 count);
 
     void modify_1b(u64 offset, u8 b);
@@ -49,8 +50,9 @@ struct Concatenator {
     void modify_4b(u64 offset, u32 b);
     void modify_8b(u64 offset, u64 b);
     
-    void *mark();
+    void *get_trailing_pointer();
     
     void setup_block(Block *block);
     void append_block();
+    Block *find_block_for_offset(u64 offset, u64 *position_in_block);
 };

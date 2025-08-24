@@ -129,7 +129,6 @@ System_Time os_get_system_time();
 Hardware_Time os_get_hardware_time();
 f64 os_convert_hardware_time(Hardware_Time input, Time_Unit unit);
 f64 os_convert_hardware_time(f64 input, Time_Unit unit);
-void os_sleep_to_tick_rate(Hardware_Time tick_begin, Hardware_Time tick_end, f64 tickrate);
 void os_sleep(f64 seconds);
 
 u64 os_get_cpu_cycle();
@@ -138,26 +137,26 @@ u64 os_get_cpu_cycle();
 
 /* ----------------------------------------------- System Calls ----------------------------------------------- */
 
-s32 os_system_call(const char *executable, const char *arguments[], s64 argument_count);
-s32 os_system_call_wide_string(const wchar_t *command_line); // Only supported on windows...
+s32 os_system_call(const char *executable, const char *arguments[], s64 argument_count, bool *found_application);
+s32 os_system_call_wide_string(const wchar_t *command_line, bool *found_application); // Only supported on windows...
 
 
 
 /* ---------------------------------------------- Stack Walking ---------------------------------------------- */
 
-struct Stack_Trace {
-    struct Stack_Frame {
-        char *name;
-        char *file;
-        s64 line;
-    };
+struct Stack_Frame {
+    string source_file;
+    s64 source_line;
+    string description;
+};
 
+struct Stack_Trace {
     Stack_Frame *frames;
     s64 frame_count;
 };
 
-Stack_Trace os_get_stack_trace();
-void os_free_stack_trace(Stack_Trace *trace);
+Stack_Trace os_get_stack_trace(Allocator *allocator, s64 skip);
+void os_free_stack_trace(Allocator *allocator, Stack_Trace *trace);
 
 
 

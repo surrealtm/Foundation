@@ -39,21 +39,23 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
     printf("Expression: '%s'\n\n", assertion_text);
     
 #if FOUNDATION_DEVELOPER
-    Stack_Trace trace = os_get_stack_trace();
+    Stack_Trace trace = os_get_stack_trace(Default_Allocator, 1);
     
     printf("Stack Trace:\n");
     
-    for(s64 i = 1; i < trace.frame_count; ++i) { // The first frame would be this procedure, which we want to ignore.
-        if(trace.frames[i].file) { // Linux doesn't give us filenames...
-            printf("  %s, %s:%u\n", trace.frames[i].name, trace.frames[i].file, (u32) trace.frames[i].line);
+    for(s64 i = 0; i < trace.frame_count; ++i) {
+        auto &frame = trace.frames[i];
+        
+        if(frame.source_file.count) {
+            printf("  %.*s // %.*s:%u\n", (u32) frame.description.count, frame.description.data, (u32) frame.source_file.count, frame.source_file.data, (u32) frame.source_line);
         } else {
-            printf("  %s\n", trace.frames[i].name);
+            printf("  %.*s\n", (u32) trace.frames[i].description.count, trace.frames[i].description.data);
         }
     }
     
     printf("\n\n");
     
-    os_free_stack_trace(&trace);
+    os_free_stack_trace(Default_Allocator, &trace);
     
     if(message_length) {
         os_message_box(string_view((u8 *) message, message_length));

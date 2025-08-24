@@ -659,28 +659,10 @@ f64 os_convert_hardware_time(f64 time, Time_Unit unit) {
     return time / (f64) (__win32_performance_frequency.QuadPart) * resolution_factor;
 }
 
-void os_sleep_to_tick_rate(Hardware_Time tick_start, Hardware_Time tick_end, f64 tickrate) {
-    f64 actual_tick_time_nanoseconds = os_convert_hardware_time(tick_end - tick_start, Nanoseconds);
-    f64 expected_tick_time_nanoseconds = 1000000000.0 / tickrate;
-
-    if(actual_tick_time_nanoseconds < expected_tick_time_nanoseconds) {
-        s32 milliseconds = (s32) floor((expected_tick_time_nanoseconds - actual_tick_time_nanoseconds) / 1000000.0);
-        if(milliseconds > 1) {
-            Sleep(milliseconds - 1);
-        }
-
-        tick_end = os_get_hardware_time();
-        actual_tick_time_nanoseconds = os_convert_hardware_time(tick_end - tick_start, Nanoseconds);
-        while(actual_tick_time_nanoseconds < expected_tick_time_nanoseconds) {
-            tick_end = os_get_hardware_time();
-            actual_tick_time_nanoseconds = os_convert_hardware_time(tick_end - tick_start, Nanoseconds);
-        }
-    }
-}
-
 void os_sleep(f64 seconds) {
     Sleep((DWORD) round(seconds * 1000));
 }
+
 
 u64 os_get_cpu_cycle() {
 	return __rdtsc();
@@ -702,7 +684,7 @@ char *win32_system_call_string(const char *executable, const char *arguments[], 
     return builder.finish_as_cstring();
 }
 
-s32 os_system_call(const char *executable, const char *arguments[], s64 argument_count) {
+s32 os_system_call(const char *executable, const char *arguments[], s64 argument_count, bool *found_application) {
     char *command_line = win32_system_call_string(executable, arguments, argument_count); // @@Leak
     
     PROCESS_INFORMATION  pi = { 0 };
@@ -710,9 +692,12 @@ s32 os_system_call(const char *executable, const char *arguments[], s64 argument
     start_info.cb = sizeof(STARTUPINFO);
 
     if(!CreateProcessA(null, command_line, null, null, true, 0, null, null, &start_info, &pi)) {
+        *found_application = false;
         return -1;
     }
 
+    *found_application = true;
+    
     WaitForSingleObject(pi.hProcess, INFINITE);
 
     DWORD exit_code;
@@ -724,15 +709,18 @@ s32 os_system_call(const char *executable, const char *arguments[], s64 argument
 
 }
 
-s32 os_system_call_wide_string(const wchar_t *command_line) {
+s32 os_system_call_wide_string(const wchar_t *command_line, bool *found_application) {
     PROCESS_INFORMATION  pi = { 0 };
     STARTUPINFOW start_info = { 0 };
     start_info.cb = sizeof(STARTUPINFO);
 
     if(!CreateProcessW(null, (LPWSTR) command_line, null, null, true, 0, null, null, &start_info, &pi)) {
+        *found_application = false;
         return -1;
     }
 
+    *found_application = true;
+    
     WaitForSingleObject(pi.hProcess, INFINITE);
 
     DWORD exit_code;
@@ -747,24 +735,30 @@ s32 os_system_call_wide_string(const wchar_t *command_line) {
 
 /* ----------------------------------------------- Stack Trace ----------------------------------------------- */
 
-Stack_Trace os_get_stack_trace() {
-#if FOUNDATION_DEVELOPER
-    const s64 max_frames_to_capture = 256; // We don't know in advance how many frames there are going to be (and we don't want to iterate twice), so just preallocate a max number.
+static bool win32_syms_initialized = false;
 
-    //
-    // We don't use allocators here to have as little overhead as possible, and
-    // because we may actually have a stack overflow when calling this procedure
-    // inside an allocator callback...
-    //
+static
+Stack_Frame *grow_stack_trace(Allocator *allocator, Stack_Trace *trace) {
+    auto old_trace = *trace;
 
-    Stack_Trace trace;
-    trace.frames = (Stack_Trace::Stack_Frame *) malloc(max_frames_to_capture * sizeof(Stack_Trace::Stack_Frame));
-    trace.frame_count = 0;
+    trace->frame_count += 1;
+    trace->frames = (Stack_Frame *) allocator->allocate(trace->frame_count * sizeof(Stack_Frame));
+    memcpy(trace->frames, old_trace.frames, old_trace.frame_count * sizeof(Stack_Frame));
+
+    if(allocator->_deallocate_procedure) allocator->deallocate(old_trace.frames);
+
+    return &trace->frames[trace->frame_count - 1];
+}
+
+Stack_Trace os_get_stack_trace(Allocator *allocator, s64 skip) {
+    Stack_Trace trace = { 0 };
 
     HANDLE process = GetCurrentProcess();
     HANDLE thread = GetCurrentThread();
     
-    SymInitialize(process, null, true);
+    if(!win32_syms_initialized) {
+        win32_syms_initialized = SymInitialize(process, null, true);
+    }
 
     CONTEXT context;
     RtlCaptureContext(&context);
@@ -785,10 +779,9 @@ Stack_Trace os_get_stack_trace() {
     IMAGEHLP_LINE64 line;
     b8 is_self_frame = true;
     
-    while(trace.frame_count < max_frames_to_capture && StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread, &stack_frame, &context, null, SymFunctionTableAccess64, SymGetModuleBase64, null)) {
-        if(is_self_frame) {
-            // We don't care about the stack frame for 'os_get_stack_trace' itself.
-            is_self_frame = false;
+    while(StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread, &stack_frame, &context, null, SymFunctionTableAccess64, SymGetModuleBase64, null)) {
+        if(skip + 1 > 0) {
+            --skip;
             continue;
         }
 
@@ -796,27 +789,23 @@ Stack_Trace os_get_stack_trace() {
         DWORD line_displacement;
 
         if(SymGetSymFromAddr64(process, stack_frame.AddrPC.Offset, &symbol_displacement, symbol) && SymGetLineFromAddr64(process, stack_frame.AddrPC.Offset, &line_displacement, &line)) {
-            trace.frames[trace.frame_count].name = win32_copy_cstring(symbol->Name);
-            trace.frames[trace.frame_count].file = win32_copy_cstring(line.FileName);
-            trace.frames[trace.frame_count].line = line.LineNumber;
-            ++trace.frame_count;
+            Stack_Frame *frame = grow_stack_trace(allocator, &trace);
+            frame->description = copy_string(allocator, cstring_view(symbol->Name));
+            frame->source_file = copy_string(allocator, cstring_view(line.FileName));
+            frame->source_line = line.LineNumber;
         }
     }
 
-    SymCleanup(process);
     return trace;
-#else
-    return Stack_Trace();
-#endif
 }
 
-void os_free_stack_trace(Stack_Trace *trace) {
+void os_free_stack_trace(Allocator *allocator, Stack_Trace *trace) {
     for(s64 i = 0; i < trace->frame_count; ++i) {
-        free(trace->frames[i].name);
-        free(trace->frames[i].file);
+        deallocate_string(allocator, &trace->frames[i].description);
+        deallocate_string(allocator, &trace->frames[i].source_file);
     }
 
-    free(trace->frames);
+    allocator->deallocate(trace->frames);
     trace->frames = null;
     trace->frame_count = 0;
 }
