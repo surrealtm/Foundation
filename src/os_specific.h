@@ -126,9 +126,9 @@ struct System_Time {
 };
 
 System_Time os_get_system_time();
-Hardware_Time os_get_hardware_time();
-f64 os_convert_hardware_time(Hardware_Time input, Time_Unit unit);
-f64 os_convert_hardware_time(f64 input, Time_Unit unit);
+CPU_Time os_get_cpu_time();
+f64 os_convert_cpu_time(CPU_Time input, Time_Unit unit);
+f64 os_convert_cpu_time(f64 input, Time_Unit unit);
 void os_sleep(f64 seconds);
 
 u64 os_get_cpu_cycle();

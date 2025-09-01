@@ -7,7 +7,7 @@
 
 template<typename T>
 static
-void internal_quick_sort(T *array, Sort_Comparison_Result(*compare)(T *, T *), s64 low, s64 high) {
+void internal_quick_sort(T *array, s64 low, s64 high, Sort_Comparison_Result(*lambda)(T *, T *)) {
     if(low < 0 || low >= high) return;
 
     //
@@ -21,15 +21,17 @@ void internal_quick_sort(T *array, Sort_Comparison_Result(*compare)(T *, T *), s
     s64 gt = high;
 
     while(eq <= gt) {
-        if(compare(&array[eq], &pivot_element) < 0) {
-            // The value at the equal-index isn't actually equal to the pivot, swap it to be at the lesser-index.
-            // We now have one more 'lesser' value, and one less 'equal' value.
+        s64 comparison = lambda(&array[eq], &pivot_element);
+
+        if(comparison < 0) {
+            // The value at the equal-index isn't actually equal to the pivot, swap it to be at the 
+            // lesser-index. We now have one more 'lesser' value, and one less 'equal' value.
             sort_swap(&array[eq], &array[lt]);
             ++lt;
             ++eq;
-        } else if(compare(&array[eq], &pivot_element) > 0) {
-            // The value at the equal-index isn't actually equal to the pivot, swap it to be at the greater-index.
-            // We now have one more 'greater' value, and one less 'equal' value.
+        } else if(comparison > 0) {
+            // The value at the equal-index isn't actually equal to the pivot, swap it to be at the 
+            // greater-index. We now have one more 'greater' value, and one less 'equal' value.
             sort_swap(&array[eq], &array[gt]);
             --gt;
         } else {
@@ -41,11 +43,13 @@ void internal_quick_sort(T *array, Sort_Comparison_Result(*compare)(T *, T *), s
     //
     // Recurse the partitions
     //
-    internal_quick_sort(array, compare, low, lt - 1);
-    internal_quick_sort(array, compare, gt + 1, high);
+    internal_quick_sort(array, low, lt - 1, lambda);
+    internal_quick_sort(array, gt + 1, high, lambda);
 }
 
 template<typename T>
 void sort(T *array, s64 count, Sort_Comparison_Result(*compare)(T *, T *)) {
-    internal_quick_sort(array, compare, 0, count - 1);
+    internal_quick_sort(array, 0, count - 1, compare);
 }
+
+#undef sort_wrap

@@ -597,13 +597,13 @@ System_Time os_get_system_time() {
     return system_time;
 }
 
-Hardware_Time os_get_hardware_time() {
+CPU_Time os_get_cpu_time() {
     struct timespec time;
     clock_gettime(CLOCK_MONOTONIC, &time);
-    return (Hardware_Time) (time.tv_sec * 1e9 + time.tv_nsec);
+    return (CPU_Time) (time.tv_sec * 1e9 + time.tv_nsec);
 }
 
-f64 os_convert_hardware_time(Hardware_Time time, Time_Unit unit) {
+f64 os_convert_cpu_time(CPU_Time time, Time_Unit unit) {
     f64 resolution_factor;
 
     switch(unit) {
@@ -618,7 +618,7 @@ f64 os_convert_hardware_time(Hardware_Time time, Time_Unit unit) {
     return (f64) time / resolution_factor;
 }
 
-f64 os_convert_hardware_time(f64 time, Time_Unit unit) {
+f64 os_convert_cpu_time(f64 time, Time_Unit unit) {
     f64 resolution_factor;
 
     switch(unit) {

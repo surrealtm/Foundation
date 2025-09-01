@@ -55,7 +55,7 @@ typedef bool b8;
 
 #define null 0
 
-typedef s64 Hardware_Time;
+typedef s64 CPU_Time;
 
 constexpr s64 MAX_S64 =  9223372036854775807LL;
 constexpr s64 MIN_S64 = -9223372036854775807LL - 1LL;

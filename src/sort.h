@@ -2,7 +2,7 @@
 
 #include "foundation.h"
 
-enum Sort_Comparison_Result {
+enum Sort_Comparison_Result : s64 {
     SORT_Lhs_Is_Smaller = -1,
     SORT_Lhs_Equals_Rhs =  0,
     SORT_Lhs_Is_Bigger  = +1,

@@ -37,8 +37,8 @@ struct _tm_Timeline_Entry {
     char const *procedure_name;
     char const *source_string;
     string user_parameter{};
-    Hardware_Time hwtime_start;
-    Hardware_Time hwtime_end;
+    CPU_Time hwtime_start;
+    CPU_Time hwtime_end;
     s64 cycle_start;
     s64 cycle_end;
 
@@ -51,8 +51,8 @@ struct _tm_Summary_Entry {
     u64 hash;
     char const *procedure_name;
     char const *source_string;
-    Hardware_Time total_inclusive_hwtime;
-    Hardware_Time total_exclusive_hwtime;
+    CPU_Time total_inclusive_hwtime;
+    CPU_Time total_exclusive_hwtime;
     s64 total_inclusive_cycles;
     s64 count;
 };
@@ -65,7 +65,7 @@ struct _tm_Thread_State {
     s64 head_index = MAX_S64;
     s64 root_index = MAX_S64; // The current root function (the function without a parent in the profiling mechanism).
 
-    Hardware_Time total_overhead_hwtime;
+    CPU_Time total_overhead_hwtime;
 };
 
 struct _tm_State {
@@ -81,8 +81,8 @@ struct _tm_State {
 
     Resizable_Array<_tm_Summary_Entry*> sorted_summary;
 
-    Hardware_Time total_hwtime_start = 0;
-    Hardware_Time total_hwtime_end = 0;
+    CPU_Time total_hwtime_start = 0;
+    CPU_Time total_hwtime_end = 0;
 
     s64 total_cycle_start = 0;
     s64 total_cycle_end   = 0;
@@ -112,9 +112,9 @@ int _tmPrintPaddingTo(s64 target, s64 current) {
 }
 
 static
-Time_Unit _tmInternalGetBestTimeUnit(Hardware_Time hwtime) {
+Time_Unit _tmInternalGetBestTimeUnit(CPU_Time hwtime) {
     Time_Unit unit = Nanoseconds;
-    while(unit < Minutes && os_convert_hardware_time(hwtime, unit) >= 1000) unit = (Time_Unit) (unit + 1);
+    while(unit < Minutes && os_convert_cpu_time(hwtime, unit) >= 1000) unit = (Time_Unit) (unit + 1);
     return unit;
 }
 
@@ -123,10 +123,10 @@ Time_Unit _tmInternalGetBestTimeUnit(Hardware_Time hwtime) {
 /* ----------------------------------------- Thread Dependent Helpers ----------------------------------------- */
 
 static
-Hardware_Time _tmInternalCalculateHardwareTimeOfChildren(_tm_Thread_State *thread, _tm_Timeline_Entry *entry) {
+CPU_Time _tmInternalCalculateHardwareTimeOfChildren(_tm_Thread_State *thread, _tm_Timeline_Entry *entry) {
     if(entry->first_child_index == MAX_S64) return 0;
     
-    Hardware_Time result = 0;
+    CPU_Time result = 0;
 
     auto *child = &thread->timeline[entry->first_child_index];
     while(true) {
@@ -153,14 +153,14 @@ s64 _tmInternalCalculateStackDepth(_tm_Thread_State *thread, _tm_Timeline_Entry 
 static
 void _tmInternalPrintTimelineEntry(_tm_Thread_State *thread, _tm_Timeline_Entry *entry, u32 indentation) {
     while(true) {
-        Hardware_Time inclusive_hwtime = entry->hwtime_end - entry->hwtime_start;
-        Hardware_Time exclusive_hwtime = inclusive_hwtime - _tmInternalCalculateHardwareTimeOfChildren(thread, entry);
+        CPU_Time inclusive_hwtime = entry->hwtime_end - entry->hwtime_start;
+        CPU_Time exclusive_hwtime = inclusive_hwtime - _tmInternalCalculateHardwareTimeOfChildren(thread, entry);
 
         Time_Unit inclusive_unit = _tmInternalGetBestTimeUnit(inclusive_hwtime);
         Time_Unit exclusive_unit = _tmInternalGetBestTimeUnit(exclusive_hwtime);
         
-        f64 inclusive_time = os_convert_hardware_time(inclusive_hwtime, inclusive_unit);
-        f64 exclusive_time = os_convert_hardware_time(exclusive_hwtime, exclusive_unit);
+        f64 inclusive_time = os_convert_cpu_time(inclusive_hwtime, inclusive_unit);
+        f64 exclusive_time = os_convert_cpu_time(exclusive_hwtime, exclusive_unit);
 
         int line_size = 0;
         line_size += _tmPrintPaddingTo(__TM_PRINT_PROC_OFFSET, line_size);
@@ -193,11 +193,11 @@ void _tmInternalPrintSummaryEntry(_tm_Summary_Entry *entry) {
 
     Time_Unit inclusive_unit = _tmInternalGetBestTimeUnit(entry->total_inclusive_hwtime);
     Time_Unit exclusive_unit = _tmInternalGetBestTimeUnit(entry->total_exclusive_hwtime);
-    Time_Unit mtpc_unit      = _tmInternalGetBestTimeUnit((Hardware_Time) mhwtpc);
+    Time_Unit mtpc_unit      = _tmInternalGetBestTimeUnit((CPU_Time) mhwtpc);
                 
-    f64 inclusive_time = os_convert_hardware_time(entry->total_inclusive_hwtime, inclusive_unit);
-    f64 exclusive_time = os_convert_hardware_time(entry->total_exclusive_hwtime, exclusive_unit);
-    f64 mtpc_time      = os_convert_hardware_time(mhwtpc, mtpc_unit);
+    f64 inclusive_time = os_convert_cpu_time(entry->total_inclusive_hwtime, inclusive_unit);
+    f64 exclusive_time = os_convert_cpu_time(entry->total_exclusive_hwtime, exclusive_unit);
+    f64 mtpc_time      = os_convert_cpu_time(mhwtpc, mtpc_unit);
 
     int line_size = 0;
     line_size += _tmPrintPaddingTo(__TM_PRINT_PROC_OFFSET, line_size);
@@ -440,7 +440,7 @@ void _tmReset() {
         unlock(&_tm_state.thread_array_mutex);
     }
 
-    _tm_state.total_hwtime_start = os_get_hardware_time();
+    _tm_state.total_hwtime_start = os_get_cpu_time();
     _tm_state.total_cycle_start  = os_get_cpu_cycle();
 }
 
@@ -471,7 +471,7 @@ void _tmDestroy() {
 
 void _tmEnter(const char *procedure_name, const char *source_string, u32 color) {   
 #if __TM_TRACK_OVERHEAD
-    s64 overhead_start = os_get_hardware_time();
+    s64 overhead_start = os_get_cpu_time();
 #endif
 
     //
@@ -535,7 +535,7 @@ void _tmEnter(const char *procedure_name, const char *source_string, u32 color) 
     entry->last_child_index  = MAX_S64;
     entry->color             = color;
     entry->hwtime_end        = 0;
-    entry->hwtime_start      = os_get_hardware_time();
+    entry->hwtime_start      = os_get_cpu_time();
     entry->cycle_start       = os_get_cpu_cycle();
 
 #if __TM_TRACK_OVERHEAD
@@ -545,7 +545,7 @@ void _tmEnter(const char *procedure_name, const char *source_string, u32 color) 
 
 void _tmParameter(string parameter, b8 copy_to_internal) {
 #if __TM_TRACK_OVERHEAD
-    s64 overhead_start = os_get_hardware_time();
+    s64 overhead_start = os_get_cpu_time();
 #endif
 
     assert(_tm_thread->head_index != MAX_S64);
@@ -564,7 +564,7 @@ void _tmParameter(string parameter, b8 copy_to_internal) {
 
 void _tmExit() {
     s64 cycle_end = os_get_cpu_cycle();
-    Hardware_Time hw_end = os_get_hardware_time();
+    CPU_Time hw_end = os_get_cpu_time();
 
     assert(_tm_thread->head_index != MAX_S64);
     auto entry = &_tm_thread->timeline[_tm_thread->head_index];
@@ -574,12 +574,12 @@ void _tmExit() {
     _tm_thread->head_index = entry->parent_index;    
 
 #if __TM_TRACK_OVERHEAD
-    _tm_thread->total_overhead_hwtime += os_get_hardware_time() - hw_end;
+    _tm_thread->total_overhead_hwtime += os_get_cpu_time() - hw_end;
 #endif
 }
 
 void _tmFinish() {
-    _tm_state.total_hwtime_end = os_get_hardware_time();
+    _tm_state.total_hwtime_end = os_get_cpu_time();
 }
 
 
@@ -660,7 +660,7 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
 #if __TM_TRACK_OVERHEAD
     if(mode != TIMING_OUTPUT_None) {
         Time_Unit time_unit = _tmInternalGetBestTimeUnit(total_overhead_hwtime);
-        f64 time = os_convert_hardware_time(total_overhead_hwtime, time_unit);
+        f64 time = os_convert_cpu_time(total_overhead_hwtime, time_unit);
         
         f32 space;
         Memory_Unit space_unit = get_best_memory_unit(total_overhead_space, &space);
@@ -689,7 +689,7 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
     _tmInternalBuildSortedSummary(sorting);
     data.total_overhead_space_in_bytes += _tm_state.summary_table_size * sizeof(_tm_Summary_Entry) + _tm_state.sorted_summary.allocated * sizeof(_tm_Summary_Entry*);
     data.total_overhead_time_in_nanoseconds = 0;
-    data.total_time_in_nanoseconds = (s64) os_convert_hardware_time(_tm_state.total_hwtime_end - _tm_state.total_hwtime_start, Nanoseconds);
+    data.total_time_in_nanoseconds = (s64) os_convert_cpu_time(_tm_state.total_hwtime_end - _tm_state.total_hwtime_start, Nanoseconds);
     
     //
     // Build the exported summary data.
@@ -701,8 +701,8 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
         auto *source      = _tm_state.sorted_summary[i];
         auto *destination = &data.summary[i];
         destination->name                          = cstring_view(source->procedure_name);
-        destination->inclusive_time_in_nanoseconds = (s64) os_convert_hardware_time(source->total_inclusive_hwtime, Nanoseconds);
-        destination->exclusive_time_in_nanoseconds = (s64) os_convert_hardware_time(source->total_exclusive_hwtime, Nanoseconds);
+        destination->inclusive_time_in_nanoseconds = (s64) os_convert_cpu_time(source->total_inclusive_hwtime, Nanoseconds);
+        destination->exclusive_time_in_nanoseconds = (s64) os_convert_cpu_time(source->total_exclusive_hwtime, Nanoseconds);
         destination->count                         = source->count;
     }
 
@@ -719,7 +719,7 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
         data.timelines_entry_count[i] = thread->timeline.count;
         data.timelines[i] = (Timing_Timeline_Entry *) Default_Allocator->allocate(data.timelines_entry_count[i] * sizeof(Timing_Timeline_Entry));
 
-        data.total_overhead_time_in_nanoseconds += (s64) os_convert_hardware_time(thread->total_overhead_hwtime, Nanoseconds);
+        data.total_overhead_time_in_nanoseconds += (s64) os_convert_cpu_time(thread->total_overhead_hwtime, Nanoseconds);
         data.total_overhead_space_in_bytes += thread->timeline.allocated * sizeof(_tm_Timeline_Entry);
 
         for(s64 j = 0; j < data.timelines_entry_count[i]; ++j) {
@@ -727,8 +727,8 @@ Timing_Data tmData(Timing_Output_Sorting sorting) {
             Timing_Timeline_Entry *destination = &data.timelines[i][j];
         
             destination->name                 = cstring_view(source->procedure_name);
-            destination->start_in_nanoseconds = (s64) os_convert_hardware_time(source->hwtime_start - _tm_state.total_hwtime_start, Nanoseconds);
-            destination->end_in_nanoseconds   = (s64) os_convert_hardware_time(source->hwtime_end   - _tm_state.total_hwtime_start, Nanoseconds);
+            destination->start_in_nanoseconds = (s64) os_convert_cpu_time(source->hwtime_start - _tm_state.total_hwtime_start, Nanoseconds);
+            destination->end_in_nanoseconds   = (s64) os_convert_cpu_time(source->hwtime_end   - _tm_state.total_hwtime_start, Nanoseconds);
             destination->depth                = _tmInternalCalculateStackDepth(thread, source);
             destination->r = (u8) ((source->color & 0x00ff0000) >> 16);
             destination->g = (u8) ((source->color & 0x0000ff00) >> 8);

@@ -140,6 +140,15 @@ void Resizable_Array<T>::remove_value_pointer(T *value) {
 }
 
 template<typename T>
+s64 Resizable_Array<T>::index_of(T const &value) {
+    for(s64 i = 0; i < this->count; ++i) {
+        if(this->data[i] == value) return i;
+    }
+
+    return -1;
+}
+
+template<typename T>
 b8 Resizable_Array<T>::contains(T const &value) {
     for(s64 i = 0; i < this->count; ++i) {
         if(this->data[i] == value) return true;

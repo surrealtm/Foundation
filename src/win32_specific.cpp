@@ -619,13 +619,13 @@ System_Time os_get_system_time() {
     return system;
 }
 
-Hardware_Time os_get_hardware_time() {
+CPU_Time os_get_cpu_time() {
     LARGE_INTEGER counter;
     QueryPerformanceCounter(&counter);
     return counter.QuadPart;
 }
 
-f64 os_convert_hardware_time(Hardware_Time time, Time_Unit unit) {
+f64 os_convert_cpu_time(CPU_Time time, Time_Unit unit) {
     if(!__win32_performance_frequency_set) __win32_performance_frequency_set = QueryPerformanceFrequency(&__win32_performance_frequency);
 
     f64 resolution_factor;
@@ -642,7 +642,7 @@ f64 os_convert_hardware_time(Hardware_Time time, Time_Unit unit) {
     return (f64) time / (f64) (__win32_performance_frequency.QuadPart) * resolution_factor;
 }
 
-f64 os_convert_hardware_time(f64 time, Time_Unit unit) {
+f64 os_convert_cpu_time(f64 time, Time_Unit unit) {
     if(!__win32_performance_frequency_set) __win32_performance_frequency_set = QueryPerformanceFrequency(&__win32_performance_frequency);
 
     f64 resolution_factor;
