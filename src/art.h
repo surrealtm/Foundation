@@ -61,7 +61,14 @@ struct Adaptive_Radix_Tree {
 
     Art_Node *destroy_recursive(Art_Node *node);
     u8 span(T const &key, u8 span_index);
-    u8 span_count(T const &key);
+    u8 span_count();
+
+    template<typename Node>
+    Node *allocate_node() {
+        Node *pointer = (Node *) this->allocator->allocate(sizeof(Node));
+        *pointer = Node();
+        return pointer;
+    };
 };
 
 // Because C++ is a terrible language, we need to supply the template definitions in the header file for

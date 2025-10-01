@@ -464,10 +464,10 @@ s64 string_to_int(string input, b8 *success) {
         character_decimal_value = character_decimal_value * character_power;
 
         b8 addcarry_overflow = _addcarry_u64(0, result, character_decimal_value, &result);
-        u64 charpower_overflow;
-        character_power = _mulx_u64(character_power, radix, &charpower_overflow);
-
-        if(addcarry_overflow || charpower_overflow) {
+        u64 previous_character_power = character_power; // Really stupid way of detecting an overflow in the multiplication that doesn't require special instructions
+        character_power *= radix;
+        
+        if(addcarry_overflow || (previous_character_power > character_power && character_index + 1 < character_count)) {
             valid = false;
             break;
         }

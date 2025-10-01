@@ -1,5 +1,10 @@
 #include "os_specific.h"
-#include <intrin.h>
+
+#if FOUNDATION_WIN32
+# include <intrin.h> // For _addcarry_u64...
+#elif FOUNDATION_LINUX
+# include <immintrin.h> // For _addcarry_u64...
+#endif
 
 static inline
 u8 art_flip_sign(u8 span) {
@@ -42,7 +47,7 @@ u8 art_node16_insert_lower_bound(Art_Node16 *node16, u8 span) {
 
 template<typename T>
 void Adaptive_Radix_Tree<T>::create() {
-    this->root = this->allocator->New<Art_Leaf>();
+    this->root = this->allocate_node<Art_Leaf>();
 }
 
 template<typename T>
@@ -55,7 +60,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
     Art_Node **node_ptr = &this->root;
     Art_Node *node;
     u8 span_index = 0;
-    u8 span_count = this->span_count(key);
+    const u8 span_count = this->span_count();
     
     while(span_index < span_count && (node = *node_ptr) != null) {
         u8 span = this->span(key, span_index);
@@ -65,7 +70,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
         case ART_Leaf: {
             // Replace this leaf node with a node4 and then continue inserting into that new node.
             Art_Leaf *leaf = (Art_Leaf *) node;
-            Art_Node4 *node4 = this->allocator->New<Art_Node4>();
+            Art_Node4 *node4 = this->allocate_node<Art_Node4>();
             this->allocator->deallocate(leaf);
             *node_ptr = node4;
         } break;
@@ -85,7 +90,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
 
             // If the node has no more capacity, resize it to a node16 and continue inserting into that new node.
             if(node4->count == 4) {
-                Art_Node16 *node16 = this->allocator->New<Art_Node16>();
+                Art_Node16 *node16 = this->allocate_node<Art_Node16>();
                 node16->count = node4->count;
                 for(u8 i = 0; i < node4->count; ++i) {
                     node16->keys[i]     = art_flip_sign(node4->keys[i]);
@@ -102,7 +107,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
             memmove(&node4->keys[child_index + 1], &node4->keys[child_index], (4 - child_index - 1) * sizeof(u8));
             memmove(&node4->children[child_index + 1], &node4->children[child_index], (4 - child_index - 1) * sizeof(Art_Node *));
             node4->keys[child_index] = span;
-            node4->children[child_index] = is_last_span ? (Art_Node *) this->allocator->New<Art_Leaf>() : (Art_Node *) this->allocator->New<Art_Node4>();
+            node4->children[child_index] = is_last_span ? (Art_Node *) this->allocate_node<Art_Leaf>() : (Art_Node *) this->allocate_node<Art_Node4>();
             node_ptr = &node4->children[child_index];
             ++node4->count;
             ++span_index;
@@ -125,7 +130,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
 
             // If the node has no more capacity, resize it to a node48 and continue inserting into that new node.
             if(node16->count == 16) {
-                Art_Node48 *node48 = this->allocator->New<Art_Node48>();
+                Art_Node48 *node48 = this->allocate_node<Art_Node48>();
                 memset(node48->indirection, 0xff, sizeof(node48->indirection));
                 node48->count = node16->count;
                 for(u8 i = 0; i < node16->count; ++i) {
@@ -143,7 +148,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
             memmove(&node16->keys[child_index + 1], &node16->keys[child_index], (16 - child_index - 1) * sizeof(u8));
             memmove(&node16->children[child_index + 1], &node16->children[child_index], (16 - child_index - 1) * sizeof(Art_Node *));
             node16->keys[child_index] = span;
-            node16->children[child_index] = is_last_span ? (Art_Node *) this->allocator->New<Art_Leaf>() : (Art_Node *) this->allocator->New<Art_Node4>();
+            node16->children[child_index] = is_last_span ? (Art_Node *) this->allocate_node<Art_Leaf>() : (Art_Node *) this->allocate_node<Art_Node4>();
             node_ptr = &node16->children[child_index];
             ++node16->count;
             ++span_index;
@@ -161,7 +166,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
 
             // If the node has no more capacity, resize it to a node256 and continue inserting into that new node.
             if(node48->count == 48) {
-                Art_Node256 *node256 = this->allocator->New<Art_Node256>();
+                Art_Node256 *node256 = this->allocate_node<Art_Node256>();
                 for(u16 i = 0; i < 256; ++i) {
                     if(node48->indirection[i] != 0xff)
                         node256->children[i] = node48->children[node48->indirection[i]];
@@ -176,7 +181,7 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
 
             // Insert into the node48
             node48->indirection[span] = node48->count;
-            node48->children[node48->count] = is_last_span ? (Art_Node *) this->allocator->New<Art_Leaf>() : (Art_Node *) this->allocator->New<Art_Node4>();
+            node48->children[node48->count] = is_last_span ? (Art_Node *) this->allocate_node<Art_Leaf>() : (Art_Node *) this->allocate_node<Art_Node4>();
             node_ptr = &node48->children[node48->count];
             ++node48->count;
             ++span_index;
@@ -185,12 +190,17 @@ b8 Adaptive_Radix_Tree<T>::add(T const &key) {
         case ART_Node256: {
             Art_Node256 *node256 = (Art_Node256 *) node;
             if(node256->children[span] == null) {
-                node256->children[span] = is_last_span ? (Art_Node *) this->allocator->New<Art_Leaf>() : (Art_Node *) this->allocator->New<Art_Node4>();
+                node256->children[span] = is_last_span ? (Art_Node *) this->allocate_node<Art_Leaf>() : (Art_Node *) this->allocate_node<Art_Node4>();
             }
 
             node_ptr = &node256->children[span];
             ++span_index;
         } break;
+
+        default:
+            foundation_error("Encountered an invalid node kind in the ART.");
+            node = null;
+            break;
         }
     }
 
@@ -201,7 +211,7 @@ template<typename T>
 b8 Adaptive_Radix_Tree<T>::query(T const &key) {
     Art_Node *node = this->root;
     u8 span_index = 0;
-    u8 span_count = this->span_count(key);
+    const u8 span_count = this->span_count();
     
     while(span_index < span_count && node != null) {
         u8 span = this->span(key, span_index);
@@ -299,6 +309,6 @@ u8 Adaptive_Radix_Tree<T>::span(T const &key, u8 span_index) {
 }
 
 template<typename T>
-u8 Adaptive_Radix_Tree<T>::span_count(T const &key) {
+u8 Adaptive_Radix_Tree<T>::span_count() {
     return sizeof(T) / sizeof(u8);
 }
