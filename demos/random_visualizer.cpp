@@ -7,7 +7,7 @@
 #define BUCKET_COUNT (65536)
 #define BATCH_COUNT  4096
 
-#define LOGARITHMIC_SCALE true
+#define LOGARITHMIC_SCALE faöse
 
 #define UNIFORM      0
 #define NORMAL       1
@@ -15,13 +15,14 @@
 #define EXPONENTIAL  3
 #define INVERSE      4
 
-#define DISTRIBUTION INVERSE
+#define DISTRIBUTION UNIFORM
 
 int main() {
     Window window;
     create_window(&window, "Hello Windows"_s);
     show_window(&window);
     os_enable_high_resolution_clock();
+    create_temp_allocator(4 * ONE_MEGABYTE);
 
     create_software_renderer(&window);
     
@@ -36,8 +37,10 @@ int main() {
     memset(buckets, 0, BUCKET_COUNT * sizeof(f32));
 
     while(!window.should_close) {
-        Hardware_Time frame_start = os_get_hardware_time();
+        CPU_Time frame_start = os_get_cpu_time();
         update_window(&window);
+
+        u64 temp_mark = mark_temp_allocator();
 
         // Update the random representation
         {
@@ -112,7 +115,9 @@ int main() {
             swap_buffers(&frame_buffer);
         }
         
-        Hardware_Time frame_end = os_get_hardware_time();
+        release_temp_allocator(temp_mark);
+
+        CPU_Time frame_end = os_get_cpu_time();
         window_ensure_frame_time(frame_start, frame_end, 60);
     }
 

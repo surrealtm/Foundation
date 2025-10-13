@@ -318,7 +318,7 @@ b8 update_text_input(Text_Input *input, Window *window, Font *font) {
                 anything_changed = true;
             }
             
-            input->time_of_last_input = os_get_hardware_time();
+            input->time_of_last_input = os_get_cpu_time();
         }
     }
     
@@ -345,7 +345,7 @@ b8 update_text_input(Text_Input *input, Window *window, Font *font) {
             input->selection_end_x   = 0.f;
         }
         
-        f32 seconds_since_last_input = (f32) os_convert_hardware_time(os_get_hardware_time() - input->time_of_last_input, Seconds);
+        f32 seconds_since_last_input = (f32) os_convert_cpu_time(os_get_cpu_time() - input->time_of_last_input, Seconds);
         if(seconds_since_last_input < 5.f) {
             input->cursor_alpha_zero_to_one = cosf(seconds_since_last_input * 3.14159f * 2.f) * 0.5f + 0.5f;
         } else {
@@ -368,19 +368,19 @@ void clear_text_input(Text_Input *input) {
     input->cursor_alpha_zero_to_one = 1.f;
     input->selection_start_x        = 0.f;
     input->selection_end_x          = 0.f;
-    input->time_of_last_input       = os_get_hardware_time();
+    input->time_of_last_input       = os_get_cpu_time();
 }
 
 void toggle_text_input_activeness(Text_Input *input, b8 active) {
     input->active_this_frame = active;
-    input->time_of_last_input = os_get_hardware_time();
+    input->time_of_last_input = os_get_cpu_time();
 }
 
 void set_text_input_string(Text_Input *input, string string) {
     // Don't clear out the rendering data here, that seems to look better.
     input->count              = 0;
     input->cursor             = 0;
-    input->time_of_last_input = os_get_hardware_time();
+    input->time_of_last_input = os_get_cpu_time();
     clear_selection(input);
     insert_text(input, string);
 }

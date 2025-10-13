@@ -731,7 +731,6 @@ Stack_Trace os_get_stack_trace(Allocator *allocator, s64 skip) {
         bt_state = backtrace_create_state(null, true, &bt_error_callback, null);
     }
 
-    // @Incomplete
     if(bt_state) {
         Bt_Callback_Data data;
         data.allocator = allocator;

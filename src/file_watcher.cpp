@@ -44,9 +44,9 @@ Resizable_Array<string> File_Watcher::update(Allocator *result_allocator) {
     Resizable_Array<string> result{};
     result.allocator = result_allocator;
     
-    Hardware_Time now = os_get_hardware_time();
+    CPU_Time now = os_get_cpu_time();
     
-    if(os_convert_hardware_time(now - this->last_check_time, Seconds) >= this->check_interval_in_seconds) {
+    if(os_convert_cpu_time(now - this->last_check_time, Seconds) >= this->check_interval_in_seconds) {
         //
         // Update all file entries, and add them to the result if they have changed.
         //

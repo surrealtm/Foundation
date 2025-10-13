@@ -1217,11 +1217,11 @@ void send_ping_packet(Virtual_Connection *connection) {
 }
 
 b8 wait_until_connection_established(Virtual_Connection *connection, f32 timeout_in_seconds) {
-    Hardware_Time start = os_get_hardware_time();
+    CPU_Time start = os_get_cpu_time();
 
     b8 success = false;
     
-    while(timeout_in_seconds <= 0.f || os_convert_hardware_time(os_get_hardware_time() - start, Seconds) < timeout_in_seconds) {
+    while(timeout_in_seconds <= 0.f || os_convert_cpu_time(os_get_cpu_time() - start, Seconds) < timeout_in_seconds) {
         if(read_packet(connection)) {
             update_virtual_connection_information_for_packet(connection, &connection->incoming_packet.header);
 

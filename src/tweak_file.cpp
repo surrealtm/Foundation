@@ -317,7 +317,7 @@ b8 read_tweak_file(Tweak_File *file) {
     //
     File_Information information = os_get_file_information(file->file_path);
     file->last_modification_time = information.last_modification_time;
-    file->last_hot_reload_check  = os_get_hardware_time();
+    file->last_hot_reload_check  = os_get_cpu_time();
 
     return global_success;
 }
@@ -353,10 +353,10 @@ void write_tweak_file(Tweak_File *file) {
 }
 
 b8 maybe_reload_tweak_file(Tweak_File *file) {
-    Hardware_Time now = os_get_hardware_time();
+    CPU_Time now = os_get_cpu_time();
     b8 reloaded = false;
 
-    if(os_convert_hardware_time(now - file->last_hot_reload_check, Seconds) > file->hot_reload_check_interval) {
+    if(os_convert_cpu_time(now - file->last_hot_reload_check, Seconds) > file->hot_reload_check_interval) {
         File_Information disk_info = os_get_file_information(file->file_path);
         if(disk_info.valid && disk_info.last_modification_time > file->last_modification_time) {
             reloaded = read_tweak_file(file);

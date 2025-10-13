@@ -905,7 +905,7 @@ b8 create_window(Window *window, string title, s32 x, s32 y, s32 w, s32 h, Windo
     window->raw_mouse_delta_y      = 0;
     window->mouse_wheel_turns      = 0;
     window->text_input_event_count = 0;
-    window->time_of_last_update    = os_get_hardware_time();
+    window->time_of_last_update    = os_get_cpu_time();
 
 #if FOUNDATION_WIN32
     return win32_create_window(window, title, x, y, w, h, flags);
@@ -918,8 +918,8 @@ void update_window(Window *window) {
     //
     // Calculate the frame time.
     //
-    Hardware_Time update_time = os_get_hardware_time();
-    window->frame_time = (f32) os_convert_hardware_time(update_time - window->time_of_last_update, Seconds);
+    CPU_Time update_time = os_get_cpu_time();
+    window->frame_time = (f32) os_convert_cpu_time(update_time - window->time_of_last_update, Seconds);
     window->time_of_last_update = update_time;
 
     //
@@ -1243,7 +1243,7 @@ void window_sleep(f32 seconds) {
 }
 
 void window_ensure_frame_time(s64 frame_start, s64 frame_end, f32 requested_fps) {
-    f64 frame_time_nanoseconds = os_convert_hardware_time(frame_end - frame_start, Nanoseconds);
+    f64 frame_time_nanoseconds = os_convert_cpu_time(frame_end - frame_start, Nanoseconds);
     f64 expected_frame_time_nanoseconds = 1000000000 / requested_fps;
 
     if(frame_time_nanoseconds < expected_frame_time_nanoseconds) {
@@ -1256,11 +1256,11 @@ void window_ensure_frame_time(s64 frame_start, s64 frame_end, f32 requested_fps)
 #endif
         }
 
-        frame_end = os_get_hardware_time();
-        frame_time_nanoseconds = os_convert_hardware_time(frame_end - frame_start, Nanoseconds);
+        frame_end = os_get_cpu_time();
+        frame_time_nanoseconds = os_convert_cpu_time(frame_end - frame_start, Nanoseconds);
         while(frame_time_nanoseconds < expected_frame_time_nanoseconds) {
-            frame_end = os_get_hardware_time();
-            frame_time_nanoseconds = os_convert_hardware_time(frame_end - frame_start, Nanoseconds);
+            frame_end = os_get_cpu_time();
+            frame_time_nanoseconds = os_convert_cpu_time(frame_end - frame_start, Nanoseconds);
         }
     }
 }
