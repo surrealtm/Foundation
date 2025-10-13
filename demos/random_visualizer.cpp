@@ -4,8 +4,10 @@
 #include "random.h"
 #include "memutils.h"
 
-#define BUCKET_COUNT (65536)
-#define BATCH_COUNT  4096
+#include <stdlib.h>
+
+#define BUCKET_COUNT (4)
+#define BATCH_COUNT  1
 
 #define LOGARITHMIC_SCALE faöse
 
@@ -14,6 +16,7 @@
 #define LINEAR       2
 #define EXPONENTIAL  3
 #define INVERSE      4
+#define STDRAND      5
 
 #define DISTRIBUTION UNIFORM
 
@@ -55,11 +58,13 @@ int main() {
                 f32 value = generator.random_f32_exponential_distribution(2.5f);               
 #elif DISTRIBUTION == INVERSE
                 f32 value = generator.random_f32_inverse_distribution();
+#elif DISTRIBUTION == STDRAND
+                f32 value = (f32) rand() / (f32) RAND_MAX;
 #endif
 
-                if(value < 0.f || value > 1.f) continue; // Might happen for the normal distribution, ignore these (so that we don't get garbage for the first and last bucket)
+                if(value < 0.f || value >= 1.f) continue; // Might happen for the normal distribution, ignore these (so that we don't get garbage for the first and last bucket)
                 
-                s64 bucket_index = clamp((s32) ceilf(value * (BUCKET_COUNT - 1)), 0, BUCKET_COUNT - 1);
+                s64 bucket_index = clamp((s64) floorf(value * BUCKET_COUNT), 0, BUCKET_COUNT - 1);
                 buckets[bucket_index] += 1.f;
 
                 max_bucket_value = max(max_bucket_value, buckets[bucket_index]);
@@ -84,27 +89,25 @@ int main() {
             f32 inverse_max_value = 1.f / max_bucket_value;
             f32 inverse_max_value_log = 1.f / (logf(10.f) * logf(max_bucket_value));
 
-            for(s32 x = 0; x < width; ++x) {
-#if LOGARITHMIC_SCALE
-                scale *= 1.01f;
-#else
-                scale += 1;
-#endif
+            f32 bucket_width = max(1, (f32) width / (f32) BUCKET_COUNT);
 
-                u64 bucket_index = (u64) roundf(scale) - 1;
+            for(s32 x = 0; x < width; ++x) {
+                u64 bucket_index = (u64) roundf(scale - 1);
 
                 if(bucket_index >= BUCKET_COUNT) break;
 
                 f32 value = buckets[bucket_index];
-
+                
 #if LOGARITHMIC_SCALE
                 value = logf(value + 1.f) * inverse_max_value_log;
+                scale *= 1.01f;
 #else
                 value = value * inverse_max_value;
+                scale += 1;
 #endif
 
-                s32 bucket_x0 = x0 + x;
-                s32 bucket_x1 = x0 + x + 1;
+                s32 bucket_x0 = x0 + x * bucket_width;
+                s32 bucket_x1 = bucket_x0 + bucket_width;
                 s32 bucket_y0 = y1 - (s32) (value * height);
                 s32 bucket_y1 = y1;
 
