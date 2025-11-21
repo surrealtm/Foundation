@@ -1,48 +1,14 @@
 #pragma once
 
-#include "foundation.h"
-#include "string_type.h"
+#define TM_DEFAULT_COLOR (0xffffffff)
 
-#define TM_DEFAULT_COLOR (-1)
+#if FOUNDATION_TELEMETRY_BUILTIN
 
-#if !FOUNDATION_TELEMETRY && !FOUNDATION_TELEMETRY_TRACY
-//
-// No profiler
-//
+/* ----------------------------------------- Builtin Profiler ---------------------------------------- */
 
-# define tmBegin()
-# define tmFunction(color)
-# define tmZone(name, color)
-# define tmEnter(name, color)
-# define tmParameter(parameter, copy)
-# define tmExit()
-# define tmFinish()
-# define tmDestroy()
-
-#elif FOUNDATION_TELEMETRY_TRACY
-//
-// Tracy profiler.
-// YOU MUST ALSO DEFINE TRACY_ENABLE (AND POTENTIALLY TRACY_NO_EXIT) IN THE SOLUTION FILE
-// This unfortunately overrides assert, and there is nothing I can do about it...
-//
-
-# include "tracy/tracy/Tracy.hpp"
-# include "tracy/tracy/TracyC.h"
-
-# define tmBegin()                    FrameMarkStart()
-# define tmFunction(color)            ZoneScopedC(color)
-# define tmZone(name, color)          ZoneScopedNC(name, color)
-# define tmEnter(name, color)         TracyCZoneC(__tracy__zone, color, true)
-# define tmParameter(parameter, copy) ZoneText((const char *) parameter.data, parameter.count)
-# define tmExit()                     TracyCZoneEnd(__tracy__zone)
-# define tmFinish()                   FrameMarkEnd()
-# define tmDestroy()
-
-
-#else
-//
-// Builtin profiler
-//
+# if FOUNDATION_TELEMETRY_TRACY
+#  error "Please specify either FOUNDATION_TELMETRY_TRACY or FOUNDATION_TELEMTRY_BUILTIN, not both"
+# endif
 
 # define tmBegin()                    _tmReset()
 # define tmFunction(color)            _tmEnter(__FUNCTION__, __FILE__ ":" STRINGIFY(__LINE__), color); defer { _tmExit(); }
@@ -53,9 +19,8 @@
 # define tmFinish()                   _tmFinish()
 # define tmDestroy()                  _tmDestroy()
 
-//
-// Flags to modify the default output behaviour into the console.
-//
+#include "foundation.h"
+#include "string_type.h"
 
 enum Timing_Output_Mode {
     TIMING_OUTPUT_None     = 0x0,
@@ -70,11 +35,6 @@ enum Timing_Output_Sorting {
     TIMING_OUTPUT_Sort_By_Inclusive = 0x2,
     TIMING_OUTPUT_Sort_By_Exclusive = 0x3,
 };
-
-
-//
-// Structs to export timing data into other applications.
-//
 
 struct Timing_Timeline_Entry {
     string name;
@@ -103,11 +63,6 @@ struct Timing_Data {
     s64 total_overhead_space_in_bytes;
 };
 
-
-//
-// Timing API. You should probably use the macros provided above.
-//
-
 void _tmReset();
 void _tmDestroy();
 void _tmEnter(const char *procedure_name, const char *source_string, u32 color);
@@ -118,5 +73,42 @@ void _tmFinish();
 void tmPrintToConsole(Timing_Output_Mode mode = TIMING_OUTPUT_None, Timing_Output_Sorting sorting = TIMING_OUTPUT_Sort_By_Inclusive);
 Timing_Data tmData(Timing_Output_Sorting sorting = TIMING_OUTPUT_Sort_By_Inclusive);
 void tmFreeData(Timing_Data *data);
+
+#elif FOUNDATION_TELEMETRY_TRACY
+
+/* ------------------------------------------ Tracy Profiler ----------------------------------------- */
+
+# if FOUNDATION_TELEMETRY_BUILTIN
+#  error "Please specify either FOUNDATION_TELMETRY_TRACY or FOUNDATION_TELEMTRY_BUILTIN, not both"
+# endif
+
+# define TRACY_ENABLE
+# define TRACY_NO_EXIT
+
+# include "tracy/tracy/Tracy.hpp"
+# include "tracy/tracy/TracyC.h"
+
+# define tmBegin()                    FrameMarkStart()
+# define tmFunction(color)            ZoneScopedC(color)
+# define tmZone(name, color)          ZoneScopedNC(name, color)
+# define tmEnter(name, color)         TracyCZoneC(__tracy__zone, color, true)
+# define tmParameter(parameter, copy) ZoneText((const char *) parameter.data, parameter.count)
+# define tmExit()                     TracyCZoneEnd(__tracy__zone)
+# define tmFinish()                   FrameMarkEnd()
+# define tmDestroy()
+
+
+#else
+
+/* ------------------------------------------- No Profiler ------------------------------------------- */
+
+# define tmBegin()
+# define tmFunction(color)
+# define tmZone(name, color)
+# define tmEnter(name, color)
+# define tmParameter(parameter, copy)
+# define tmExit()
+# define tmFinish()
+# define tmDestroy()
 
 #endif

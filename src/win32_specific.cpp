@@ -499,6 +499,14 @@ s64 os_search_path_for_directory_slash_reverse(string file_path) {
     return -1;
 }
 
+string os_concatenate_file_paths(Allocator *allocator, string lhs, string rhs) {
+    string result = { lhs.count + rhs.count + 1, (u8 *) allocator->allocate(lhs.count + rhs.count + 1) };
+    memcpy(&result.data[0], lhs.data, lhs.count);
+    result.data[lhs.count] = '\\';
+    memcpy(&result.data[lhs.count + 1], rhs.data, rhs.count);
+    return result;
+}
+
 
 void os_set_working_directory(string file_path) {
     char *cstring = to_cstring(Default_Allocator, file_path);

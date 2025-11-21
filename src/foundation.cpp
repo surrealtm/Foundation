@@ -39,7 +39,7 @@ b8 foundation_do_assertion_fail(const char *assertion_text, const char *format, 
     printf("Expression: '%s'\n\n", assertion_text);
     
 #if FOUNDATION_DEVELOPER
-    Stack_Trace trace = os_get_stack_trace(Default_Allocator, 1);
+    Stack_Trace trace = os_get_stack_trace(Default_Allocator, 0);
     
     printf("Stack Trace:\n");
     

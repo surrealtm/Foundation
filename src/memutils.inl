@@ -590,7 +590,7 @@ T *Linked_List<T>::push() {
 template<typename T>
 T Linked_List<T>::pop() {
     assert(this->count > 0);
-    T value = this->tail->value;
+    T value = this->tail->data;
     this->remove_node(this->tail);
     return value;
 }

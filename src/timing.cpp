@@ -1,6 +1,4 @@
-#if FOUNDATION_TELEMETRY_TRACY
-
-#elif FOUNDATION_TELEMETRY
+#if FOUNDATION_TELEMETRY_BUILTIN
 
 # include "timing.h"
 # include "memutils.h"
@@ -681,7 +679,7 @@ void tmPrintToConsole(Timing_Output_Mode mode, Timing_Output_Sorting sorting) {
 }
 
 Timing_Data tmData(Timing_Output_Sorting sorting) {
-    Timing_Data data = { 0 };
+    Timing_Data data = { };
 
     //
     // Prepare the exported data.
@@ -757,5 +755,10 @@ void tmFreeData(Timing_Data *data) {
     data->summary = null;
     data->summary_count = 0;
 }
+
+#elif FOUNDATION_TELEMETRY_TRACY
+
+# define TRACY_ENABLE
+# include "tracy/TracyClient.cpp"
 
 #endif

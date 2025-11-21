@@ -362,7 +362,7 @@ void Binary_Writer::write(const void *data, s64 size) {
 
 	s64 data_offset = 0;
 	while(size > 0) {
-		s64 batch_size = min(this->buffer_size - this->buffer_position, size);
+		s64 batch_size = MIN(this->buffer_size - this->buffer_position, size);
 		memcpy(&this->buffer[this->buffer_position], &((u8 *) data)[data_offset], batch_size);
 		this->buffer_position += batch_size;
 		data_offset += batch_size;

@@ -90,6 +90,12 @@ Thread create_thread(Thread_Entry_Point procedure, void *user_pointer, b8 start_
 #elif FOUNDATION_LINUX
     Thread_Linux_State *state = (Thread_Linux_State *) thread.platform_data;
     state->setup = false;
+    
+#if __clang_major__ >= 20
+# pragma clang diagnostic push
+# pragma clang diagnostic ignored "-Wcast-function-type-mismatch"
+#endif
+
     if(pthread_create(&state->id, null, (void *(*)(void*)) procedure, user_pointer) == 0 &&
        pthread_mutex_init(&state->mutex, null) == 0 &&
        pthread_cond_init(&state->signal, null) == 0) {
@@ -98,6 +104,11 @@ Thread create_thread(Thread_Entry_Point procedure, void *user_pointer, b8 start_
     } else {
         thread.state = THREAD_STATE_Terminated;
     }
+
+#if __clang_major__ >= 20
+# pragma clang diagnostic pop
+#endif
+
 #endif
 
     if(start_as_suspended) suspend_thread(&thread); // This is a bit ugly, but the pthread library does not have built-in support for this.

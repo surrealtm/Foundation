@@ -260,7 +260,7 @@ u64 os_get_committed_region_size(void *base) {
 }
 
 void *os_reserve_memory(u64 reserved_size) {
-    void *pointer = mmap(null, reserved_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+    void *pointer = mmap(null, reserved_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     if(pointer == MAP_FAILED) {
         foundation_error("Failed to reserve %" PRIu64 " bytes of memory.", reserved_size);
@@ -293,6 +293,7 @@ void os_decommit_memory(void *base, u64 decommit_size) {
     assert(base != null);
     assert(decommit_size != null);
 
+    madvise(base, decommit_size, MADV_DONTNEED);
     int result = mprotect(base, decommit_size, PROT_NONE);
 
     if(result != 0) {
@@ -478,6 +479,14 @@ s64 os_search_path_for_directory_slash_reverse(string file_path) {
     }
 
     return -1;
+}
+
+string os_concatenate_file_paths(Allocator *allocator, string lhs, string rhs) {
+    string result = { lhs.count + rhs.count + 1, (u8 *) allocator->allocate(lhs.count + rhs.count + 1) };
+    memcpy(&result.data[0], lhs.data, lhs.count);
+    result.data[lhs.count] = '/';
+    memcpy(&result.data[lhs.count + 1], rhs.data, rhs.count);
+    return result;
 }
 
 

@@ -114,7 +114,7 @@ void *heap_allocate(void * /*data = null */, u64 size) {
     // ourselves. We do that by simply allocating a bigger block, and writing the
     // size at the first few bytes of the returned block. Not super elegant, but
     // better than the alternatives.
-    u64 extra_size = align_to(sizeof(u64), 16, u64); // Stuff like SIMD sometimes requires 16-byte alignment...
+    u64 extra_size = ALIGN_TO(sizeof(u64), 16, u64); // Stuff like SIMD sometimes requires 16-byte alignment...
     pointer = malloc(extra_size + size);
     if(!pointer) {
         foundation_error("A call to malloc failed for the requested size of '%lld'.", size);
@@ -138,7 +138,7 @@ void heap_deallocate(void * /*data = null */, void *pointer) {
     // We gave the user code an adjusted pointer, not what malloc actually returned to
     // us. Free however requires that exact pointer malloc returned, so we need to
     // readjust.
-    u64 extra_size = align_to(sizeof(u64), 16, u64);
+    u64 extra_size = ALIGN_TO(sizeof(u64), 16, u64);
     pointer = (void *) ((u64) pointer - extra_size);
     free(pointer);
 #else
@@ -153,7 +153,7 @@ void *heap_reallocate(void * /*data = null */, void *old_pointer, u64 new_size) 
     // We gave the user code an adjusted pointer, not what malloc actually returned to
     // us. Free however requires that exact pointer malloc returned, so we need to
     // readjust.
-    u64 extra_size = align_to(sizeof(u64), 16, u64);
+    u64 extra_size = ALIGN_TO(sizeof(u64), 16, u64);
     old_pointer = (void *) ((u64) old_pointer - extra_size);
     new_pointer = realloc(old_pointer, new_size + extra_size);
     if(!new_pointer) {
@@ -175,7 +175,7 @@ u64 heap_query_allocation_size(void * /*data = null */, void *pointer) {
     u64 size;
 
 #if FOUNDATION_ALLOCATOR_STATISTICS
-    u64 extra_size = align_to(sizeof(u64), 16, u64);
+    u64 extra_size = ALIGN_TO(sizeof(u64), 16, u64);
     u64 *_u64 = (u64 *) ((u64) pointer - extra_size);
     size = *_u64;
 #else
@@ -197,8 +197,8 @@ void Memory_Arena::create(u64 reserved, u64 requested_commit_size, b8 executable
 
     if((this->base = os_reserve_memory(reserved)) != null) {
         this->page_size   = os_get_page_size();
-        this->commit_size = requested_commit_size ? align_to(requested_commit_size, this->page_size, u64) : this->page_size * 3;
-        this->reserved    = align_to(reserved, this->page_size, u64);
+        this->commit_size = requested_commit_size ? ALIGN_TO(requested_commit_size, this->page_size, u64) : this->page_size * 3;
+        this->reserved    = ALIGN_TO(reserved, this->page_size, u64);
         this->committed   = 0;
         this->size        = 0;
         this->executable  = executable;
@@ -215,6 +215,7 @@ void Memory_Arena::create(u64 reserved, u64 requested_commit_size, b8 executable
 void Memory_Arena::destroy() {
     assert(this->base != null); // An arena can only be destroyed once. The caller needs to ensure it has not been cleaned up yet.
     assert(this->reserved != 0);
+    os_decommit_memory(this->base, this->reserved);
     os_free_memory(this->base, this->reserved);
     this->base        = null;
     this->size        = 0;
@@ -230,7 +231,7 @@ void Memory_Arena::reset() {
 }
 
 u64 Memory_Arena::ensure_alignment(u64 alignment) {
-    u64 padding = align_to(this->size, alignment, u64) - this->size;
+    u64 padding = ALIGN_TO(this->size, alignment, u64) - this->size;
     this->push(padding);
     return padding;
 }
@@ -239,7 +240,7 @@ void *Memory_Arena::push(u64 size) {
     assert(this->base != null); // Make sure the arena is set up properly.
 
     if(this->size + size > this->committed) {
-        u64 commit_size = align_to(size, this->commit_size, u64);
+        u64 commit_size = MIN(ALIGN_TO(size, this->commit_size, u64), this->reserved - this->committed);
         assert(commit_size >= size);
 
         if(this->committed + commit_size <= this->reserved) {
@@ -384,7 +385,7 @@ void Memory_Pool::update_block_status(Memory_Pool::Block_Header *header, u64 sta
 s64 Memory_Pool::get_bin_index_for_size(u64 aligned_size_in_bytes) {
     // The size is aligned to 16 bytes, so we cannot get smaller sizes than that... Therefore
     // the smallest bin should be for allocations of size 16.
-    u64 transformed_size_in_bytes = min(aligned_size_in_bytes >> 4, (1 << BIN_COUNT) - 1);
+    u64 transformed_size_in_bytes = MIN(aligned_size_in_bytes >> 4, (1 << BIN_COUNT) - 1);
     return os_highest_bit_set(transformed_size_in_bytes);
 }
 
