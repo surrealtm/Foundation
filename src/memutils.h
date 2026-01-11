@@ -260,6 +260,7 @@ struct Resizable_Array {
     void reserve(s64 count);
     void reserve_exact(s64 count);
     void add(T const &data);
+    void add_all(const Resizable_Array<T> &src);
     void insert(s64 index, T const &data);
 	void remove(s64 index);
 	void remove_range(s64 first_to_remove, s64 last_to_remove);

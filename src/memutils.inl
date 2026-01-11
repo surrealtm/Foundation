@@ -72,10 +72,13 @@ void Resizable_Array<T>::clear_without_deallocation() {
 template<typename T>
 void Resizable_Array<T>::reserve(s64 count) {
     assert(count >= 0);
+   
+    s64 least_capacity = this->count + count;
+
     if(this->allocated == 0) this->allocated = Resizable_Array::INITIAL_SIZE;
-    s64 least_size = this->allocated + count;
-    while(this->allocated < least_size) this->allocated *= 2;
-    if(count > 0) this->maybe_grow(true);    
+    while(this->allocated < least_capacity) this->allocated *= 2;
+
+    if(count > 0) this->maybe_grow(true);
 }
 
 template<typename T>
@@ -90,6 +93,14 @@ void Resizable_Array<T>::add(T const &data) {
     this->maybe_grow();
     this->data[this->count] = data;
     ++this->count;
+}
+
+template<typename T>
+void Resizable_Array<T>::add_all(const Resizable_Array<T> &src) {
+    this->reserve(src.count);
+    for(s64 i = 0; i < src.count; ++i) {
+        this->add(src.data[i]);
+    }
 }
 
 template<typename T>
@@ -590,7 +601,7 @@ T *Linked_List<T>::push() {
 template<typename T>
 T Linked_List<T>::pop() {
     assert(this->count > 0);
-    T value = this->tail->value;
+    T value = this->tail->data;
     this->remove_node(this->tail);
     return value;
 }

@@ -268,7 +268,7 @@ void Probed_Hash_Table<K, V>::resize(s64 bucket_count) {
     this->bucket_mask  = this->bucket_count - 1; // Mask all lower bits so that we can map hash values to the bucket count.
     this->buckets      = (Entry *) this->allocator->allocate(this->bucket_count * sizeof(Entry));
     memset(this->buckets, 0, this->bucket_count * sizeof(Entry));
-    
+
 #if FOUNDATION_DEVELOPER
     this->stats = Hash_Table_Stats();
 #endif    
@@ -357,6 +357,8 @@ V *Probed_Hash_Table<K, V>::push(K const &k) {
 
 template<typename K, typename V>
 V *Probed_Hash_Table<K, V>::query(K const &k) {
+    if(this->count == 0) return null;
+
     u64 hash           = this->hash(k);
     u64 preferred_slot = hash & this->bucket_mask;
     u64 current_slot   = preferred_slot;

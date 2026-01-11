@@ -5,7 +5,7 @@
 
 /*
  * Many APIs in this code base prefer a custom string type over the built-in c-string
- * data type. This custom string type stores the length explicitely instead of using
+ * data type. This custom string type stores the length explicitly instead of using
  * an implicit null terminator, which has various benefits:
  *   1. We don't ever need to watch out for a null-terminator, we know the length
         of the string, improving SIMD operations.
@@ -67,7 +67,7 @@ void copy_cstring(char *dst, s64 dst_count, const char *src, s64 src_count);
 
 /* ------------------------------------------------- Strings ------------------------------------------------- */
 
-string operator "" _s(const char *literal, size_t size);
+string operator ""_s(const char *literal, size_t size);
 string strltr(char *literal); // Build a string from a string literal
 string strltr(const char *literal); // Build a string from a string literal
 string string_view(u8 *data, s64 count);

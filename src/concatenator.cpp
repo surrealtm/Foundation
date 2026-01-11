@@ -46,7 +46,7 @@ void Concatenator::add(const void *bytes, u64 count) {
     while(offset < count) {
         if(this->last->count == this->last->capacity) this->append_block();
         
-        s64 batch = min(count - offset, this->last->capacity - this->last->count);
+        s64 batch = MIN(count - offset, this->last->capacity - this->last->count);
         memcpy(&((u8 *) this->last->data)[this->last->count], &((u8 *) bytes)[offset], batch);
         this->last->count += batch;
         offset += batch;
@@ -67,7 +67,7 @@ void Concatenator::add_unchecked(const void *bytes, u64 count) {
 void *Concatenator::reserve(u64 count, u8 alignment) {
     assert(count <= this->block_size);
     
-    s64 required_padding = padding_to(this->total_count, alignment, s64);
+    s64 required_padding = PADDING_TO(this->total_count, alignment, s64);
     
     void *ptr;
     
@@ -161,7 +161,7 @@ void Concatenator::clear_range(u64 offset, u64 count) {
     while(modified_bytes < count) {
         u64 position_in_block;
         Block *block = this->find_block_for_offset(offset, &position_in_block);
-        u64 batch_size = min(count - modified_bytes, block->count - position_in_block);
+        u64 batch_size = MIN(count - modified_bytes, block->count - position_in_block);
 
         memset(&block->data[position_in_block], 0, batch_size);
         modified_bytes += batch_size;
@@ -176,7 +176,7 @@ void Concatenator::modify(u64 offset, const void *bytes, u64 count) {
     while(modified_bytes < count) {
         u64 position_in_block;
         Block *block = this->find_block_for_offset(offset + modified_bytes, &position_in_block);
-        u64 batch_size = min(count - modified_bytes, block->count - position_in_block);
+        u64 batch_size = MIN(count - modified_bytes, block->count - position_in_block);
         
         memcpy(&block->data[position_in_block], &((char *) bytes)[modified_bytes], batch_size);
         modified_bytes += batch_size;

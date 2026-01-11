@@ -162,7 +162,7 @@ void copy_cstring(char *dst, const char *src, s64 src_count) {
 }
 
 void copy_cstring(char *dst, s64 dst_count, const char *src, s64 src_count) {
-    strncpy(dst, src, min(dst_count, src_count));
+    strncpy(dst, src, MIN(dst_count, src_count));
 }
 
 
@@ -170,7 +170,7 @@ void copy_cstring(char *dst, s64 dst_count, const char *src, s64 src_count) {
 
 /* -------------------------------------------------- String -------------------------------------------------- */
 
-string operator "" _s(const char *literal, size_t size) {
+string operator""_s(const char *literal, size_t size) {
     return { static_cast<s64>(size), (u8 *) literal };
 }
 
@@ -886,7 +886,7 @@ void String_Builder::append_string(const char *s) {
     s64 length = cstring_length(s);
 
     while(length > 0) {
-        s64 batch = min(BLOCK_SIZE, length);
+        s64 batch = MIN(BLOCK_SIZE, length);
         u8 *pointer = this->grow(batch);
         memcpy(pointer, s, batch);
         length -= batch;
@@ -898,7 +898,7 @@ void String_Builder::append_string(char *s) {
     s64 length = cstring_length(s);
 
     while(length > 0) {
-        s64 batch = min(BLOCK_SIZE, length);
+        s64 batch = MIN(BLOCK_SIZE, length);
         u8 *pointer = this->grow(batch);
         memcpy(pointer, s, batch);
         length -= batch;
@@ -908,7 +908,7 @@ void String_Builder::append_string(char *s) {
 
 void String_Builder::append_string(string s) {
     while(s.count > 0) {
-        s64 batch = min(BLOCK_SIZE, s.count);
+        s64 batch = MIN(BLOCK_SIZE, s.count);
         u8 *pointer = this->grow(batch);
         memcpy(pointer, s.data, batch);
         s.count -= batch;

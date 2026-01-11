@@ -122,15 +122,15 @@ static_assert(sizeof(f32) == 4 && sizeof(f64) == 8, "Invalid size for f32 / f64.
 # include <assert.h>
 #endif
 
-#define align_to(value, alignment, type) (alignment > 0 ? (type) (ceil((f64) (value) / (f64) (alignment)) * (alignment)) : value)
-#define padding_to(value, alignment, type) (alignment > 0 ? (type) (align_to((value), (alignment), type) - (value)) : 0)
+#define ALIGN_TO(value, alignment, type) (alignment > 0 ? (type) (ceil((f64) (value) / (f64) (alignment)) * (alignment)) : value)
+#define PADDING_TO(value, alignment, type) (alignment > 0 ? (type) (ALIGN_TO((value), (alignment), type) - (value)) : 0)
 
-#define min(lhs, rhs) ((lhs) < (rhs) ? (lhs) : (rhs))
-#define max(lhs, rhs) ((lhs) > (rhs) ? (lhs) : (rhs))
+#define MIN(lhs, rhs) ((lhs) < (rhs) ? (lhs) : (rhs))
+#define MAX(lhs, rhs) ((lhs) > (rhs) ? (lhs) : (rhs))
 
-#define sign(value) ((value) > 0 ? 1 : ((value) < 0 ? -1 : 0))
+#define SIGN(value) ((value) > 0 ? 1 : ((value) < 0 ? -1 : 0))
 
-#define clamp(value, min, max) (((value) < (min)) ? (min) : ((value) > (max) ? (max) : value))
+#define CLAMP(value, min, max) (((value) < (min)) ? (min) : ((value) > (max) ? (max) : value))
 
 #define BITWISE(T)                                                      \
     inline T  operator| (T a, T b)  { return (T)((int) a | (int) b); }; \
